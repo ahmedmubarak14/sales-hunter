@@ -858,6 +858,63 @@
       return { label: k, count: sources[k].won, total: sources[k].total, decided: sources[k].decided };
     }).sort(function (a, b) { return b.count - a.count; });
 
+    // Month-over-month comparison (this month vs last)
+    var thisKey = monthKey(NOW);
+    var lastKey = monthKey(new Date(NOW.getFullYear(), NOW.getMonth() - 1, 1));
+    function aggMonth(key) {
+      var wonM = all.filter(function (l) { return l.stage === 'won' && monthKey(wonDate(l)) === key; });
+      return {
+        leads: all.filter(function (l) { return monthKey(l.createdAt) === key; }).length,
+        won: wonM.length,
+        revenue: wonM.reduce(function (a, l) { return a + l.amountNet; }, 0),
+        commission: wonM.reduce(function (a, l) { return a + commissionOf(l); }, 0)
+      };
+    }
+    var mThis = aggMonth(thisKey), mLast = aggMonth(lastKey);
+    function momDelta(cur, prev) {
+      if (!prev && !cur) return '<span class="mom-flat">—</span>';
+      if (!prev) return '<span class="mom-up">new</span>';
+      var ch = (cur - prev) / prev;
+      var cls = ch >= 0 ? 'mom-up' : 'mom-down';
+      return '<span class="' + cls + '">' + (ch >= 0 ? '▲' : '▼') + ' ' + Math.abs(Math.round(ch * 100)) + '%</span>';
+    }
+    var momRows = [
+      ['Leads submitted', fmtNum(mThis.leads), fmtNum(mLast.leads), momDelta(mThis.leads, mLast.leads)],
+      ['New Zid stores (won)', fmtNum(mThis.won), fmtNum(mLast.won), momDelta(mThis.won, mLast.won)],
+      ['Revenue closed', fmtMoneyC(mThis.revenue), fmtMoneyC(mLast.revenue), momDelta(mThis.revenue, mLast.revenue)],
+      ['Commission unlocked', fmtMoneyC(mThis.commission), fmtMoneyC(mLast.commission), momDelta(mThis.commission, mLast.commission)]
+    ];
+
+    // Top packages sold (won deals by Zid plan — ordered tiers)
+    var planAgg = {};
+    PLANS.forEach(function (p) { planAgg[p.name] = { count: 0, revenue: 0 }; });
+    all.forEach(function (l) {
+      if (l.stage === 'won' && l.plan && planAgg[l.plan]) {
+        planAgg[l.plan].count += 1;
+        planAgg[l.plan].revenue += l.amountNet;
+      }
+    });
+    var planRevTotal = PLANS.reduce(function (a, p) { return a + planAgg[p.name].revenue; }, 0) || 1;
+    var PLAN_CLS = { Launch: 'f2', Growth: 'f4', Professional: 'f6' };
+
+    // Category performance of won stores
+    var catAgg = {};
+    all.forEach(function (l) {
+      if (l.stage !== 'won') return;
+      if (!catAgg[l.industry]) catAgg[l.industry] = { count: 0, revenue: 0 };
+      catAgg[l.industry].count += 1;
+      catAgg[l.industry].revenue += l.amountNet;
+    });
+    var catRows = Object.keys(catAgg).map(function (k) {
+      return { label: k, count: catAgg[k].count, revenue: catAgg[k].revenue };
+    }).sort(function (a, b) { return b.revenue - a.revenue; }).slice(0, 6);
+
+    // Weighted forecast from the open pipeline (stage probability x value)
+    var STAGE_WEIGHTS = { new: 0.1, prospect: 0.2, qualified: 0.35, sql: 0.5, commit: 0.75, reengage: 0.05 };
+    var forecast = all.reduce(function (a, l) {
+      return isOpen(l) ? a + l.amountNet * (STAGE_WEIGHTS[l.stage] || 0) : a;
+    }, 0);
+
     // Coaching: enough leads, weak conversion
     var lb = leaderboardData().rows;
     var avgConv = s.conversion;
@@ -871,12 +928,41 @@
       '<div class="kpis">' +
         tile('Active hunters', fmtNum(participants), 'of ' + EMPLOYEES.length + ' enrolled') +
         tile('Total leads', fmtNum(s.total), fmtNum(s.open) + ' currently open') +
-        tile('Closed won', fmtNum(s.won), s.avgCycleDays ? s.avgCycleDays + ' days avg. cycle' : '') +
+        tile('New Zid stores', fmtNum(s.won), (s.avgCycleDays ? s.avgCycleDays + ' days avg. cycle' : 'closed-won merchants')) +
         tile('Program conversion', fmtPct(s.conversion), 'closed won ÷ all submitted') +
-        tile('Revenue closed', fmtMoneyC(s.revenueNet), 'excl. VAT') +
+        tile('Revenue closed', fmtMoneyC(s.revenueNet), s.won ? fmtMoneyC(s.revenueNet / s.won) + ' avg per store · excl. VAT' : 'excl. VAT') +
         tile('Pipeline value', fmtMoneyC(s.pipelineValue), 'open deals, excl. VAT') +
         tile('Commission owed + paid', fmtMoneyC(s.commission), fmtMoneyC(s.commissionPaid) + ' already paid') +
-        tile('Revenue per SAR of commission', 'SAR 5.0', 'commission is a fixed 20% of net') +
+        tile('Forecast from pipeline', fmtMoneyC(forecast), 'open deals × stage probability') +
+      '</div>' +
+
+      '<div class="grid-2">' +
+        '<section class="card">' +
+          '<div class="card-head"><div><h3>This month vs last month</h3>' +
+          '<p class="sub">' + NOW.toLocaleString('en', { month: 'long' }) + ' month-to-date (day ' + NOW.getDate() + ') vs full ' + new Date(NOW.getFullYear(), NOW.getMonth() - 1, 1).toLocaleString('en', { month: 'long' }) + '</p></div></div>' +
+          '<div class="tbl-wrap"><table class="mini">' +
+            '<thead><tr><th>Metric</th><th class="num">This month</th><th class="num">Last month</th><th class="num">Change</th></tr></thead>' +
+            '<tbody>' + momRows.map(function (r) {
+              return '<tr><td>' + r[0] + '</td><td class="num"><b>' + r[1] + '</b></td><td class="num">' + r[2] + '</td><td class="num">' + r[3] + '</td></tr>';
+            }).join('') + '</tbody>' +
+          '</table></div>' +
+        '</section>' +
+        '<section class="card">' +
+          '<div class="card-head"><div><h3>Top packages sold</h3><p class="sub">Closed-won deals by Zid plan · share of revenue</p></div></div>' +
+          '<div class="legend">' + PLANS.map(function (p) {
+            return '<span class="lg"><i class="sw ' + PLAN_CLS[p.name] + '"></i>' + esc(p.name) + '</span>';
+          }).join('') + '</div>' +
+          stackedBarSVG(PLANS.map(function (p) {
+            return { label: 'Zid ' + p.name, count: planAgg[p.name].revenue, cls: PLAN_CLS[p.name] };
+          }), { money: true, aria: 'Revenue share by package' }) +
+          '<div class="tbl-wrap"><table class="mini">' +
+            '<thead><tr><th>Package</th><th class="num">Stores</th><th class="num">Revenue</th><th class="num">Share</th></tr></thead>' +
+            '<tbody>' + PLANS.map(function (p) {
+              var a = planAgg[p.name];
+              return '<tr><td>Zid ' + esc(p.name) + '</td><td class="num">' + fmtNum(a.count) + '</td><td class="num"><b>' + fmtMoneyC(a.revenue) + '</b></td><td class="num">' + fmtPct(a.revenue / planRevTotal, 0) + '</td></tr>';
+            }).join('') + '</tbody>' +
+          '</table></div>' +
+        '</section>' +
       '</div>' +
 
       '<div class="grid-2">' +
@@ -924,6 +1010,30 @@
           svg: hbarsSVG(reasonsLost.slice(0, 6), { aria: 'Program lost reasons', cls: 'critical' }),
           table: { head: ['Reason', 'Leads'], rows: reasonsLost.map(function (x) { return [x.label, fmtNum(x.count)]; }) }
         }) +
+      '</div>' +
+
+      '<div class="grid-2">' +
+        '<section class="card">' +
+          '<div class="card-head"><div><h3>Where the wins come from</h3><p class="sub">Closed-won stores by category</p></div></div>' +
+          '<div class="tbl-wrap"><table class="mini">' +
+            '<thead><tr><th>Category</th><th class="num">Stores</th><th class="num">Revenue</th><th class="num">Avg deal</th></tr></thead>' +
+            '<tbody>' + (catRows.length ? catRows.map(function (c) {
+              return '<tr><td>' + esc(c.label) + '</td><td class="num">' + fmtNum(c.count) + '</td><td class="num"><b>' + fmtMoneyC(c.revenue) + '</b></td><td class="num">' + fmtMoneyC(c.revenue / c.count) + '</td></tr>';
+            }).join('') : '<tr><td colspan="4"><div class="empty">No closed-won stores yet.</div></td></tr>') + '</tbody>' +
+          '</table></div>' +
+        '</section>' +
+        '<section class="card">' +
+          '<div class="card-head"><div><h3>Commission payout status</h3><p class="sub">For finance — where every riyal of commission stands</p></div></div>' +
+          '<div class="tbl-wrap"><table class="mini">' +
+            '<thead><tr><th>Status</th><th class="num">Amount</th></tr></thead>' +
+            '<tbody>' +
+              '<tr><td><span class="status-chip pending">Pending approval</span></td><td class="num"><b>' + fmtMoney(s.commissionPending) + '</b></td></tr>' +
+              '<tr><td><span class="status-chip approved">Approved — next payroll</span></td><td class="num"><b>' + fmtMoney(s.commissionApproved) + '</b></td></tr>' +
+              '<tr><td><span class="status-chip paid">Paid to date</span></td><td class="num"><b>' + fmtMoney(s.commissionPaid) + '</b></td></tr>' +
+              '<tr><td>Total commission (20% of net)</td><td class="num"><b>' + fmtMoney(s.commission) + '</b></td></tr>' +
+            '</tbody>' +
+          '</table></div>' +
+        '</section>' +
       '</div>' +
 
       '<div class="grid-2">' +

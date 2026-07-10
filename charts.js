@@ -302,17 +302,19 @@ function hbarsSVG(items, opts) { // items: [{label, count}]
 }
 
 /* Single horizontal stacked bar for outcome split (part-to-whole) */
-function stackedBarSVG(segments) { // [{label, count, cls}]
+function stackedBarSVG(segments, opts) { // [{label, count, cls}]
+  opts = opts || {};
   var total = segments.reduce(function (a, s) { return a + s.count; }, 0) || 1;
   var W = 640, H = 64, barH = 22, y = 8;
-  var out = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="viz" role="img" aria-label="Outcome split">';
+  var out = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="viz" role="img" aria-label="' + esc(opts.aria || 'Outcome split') + '">';
   var nonZero = segments.filter(function (s) { return s.count > 0; });
   var x = 0;
   nonZero.forEach(function (s, i) {
     var w = (s.count / total) * W;
+    var valTxt = opts.money ? fmtMoney(s.count) : fmtNum(s.count) + ' leads';
     // 2px surface gap between segments; only the outer ends are rounded
     out += '<path d="' + hbarPath(x + 1, y, Math.max(w - 2, 2), barH, i === 0, i === nonZero.length - 1) + '" class="' + s.cls + '" ' +
-      'data-tip="<b>' + esc(s.label) + '</b><br>' + fmtNum(s.count) + ' leads (' + fmtPct(s.count / total, 0) + ')"></path>';
+      'data-tip="<b>' + esc(s.label) + '</b><br>' + valTxt + ' (' + fmtPct(s.count / total, 0) + ')"></path>';
     if (w > 56) {
       out += '<text x="' + (x + w / 2) + '" y="' + (y + barH + 22) + '" text-anchor="middle" class="ax">' + fmtPct(s.count / total, 0) + '</text>';
     }
