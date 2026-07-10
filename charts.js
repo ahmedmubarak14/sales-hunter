@@ -20,16 +20,35 @@ function fmtPct(x, dp) { return (x * 100).toFixed(dp === undefined ? 1 : dp) + '
 function fmtDate(d) { return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); }
 function fmtNum(n) { return Math.round(n).toLocaleString('en-US'); }
 
-/* Clean axis ticks: 0..max rounded to a friendly step */
-function niceTicks(maxVal, count) {
+/* Clean axis ticks: 0..max rounded to a friendly step.
+   intOnly forces whole-number steps (count axes), so gridline labels
+   are never rounded into lying positions. */
+function niceTicks(maxVal, count, intOnly) {
   if (maxVal <= 0) maxVal = 1;
   var rough = maxVal / count;
   var mag = Math.pow(10, Math.floor(Math.log10(rough)));
   var step = [1, 2, 2.5, 5, 10].map(function (m) { return m * mag; })
     .find(function (s) { return s >= rough; }) || 10 * mag;
+  if (intOnly) step = Math.max(1, Math.round(step));
   var ticks = [];
   for (var v = 0; v <= maxVal + step * 0.999; v += step) ticks.push(v);
   return ticks;
+}
+
+/* Horizontal bar path: rounded only on the requested ends (data end
+   rounded, baseline end square — per the mark spec). */
+function hbarPath(x, y, w, h, roundLeft, roundRight) {
+  var r = Math.min(4, w / 2, h / 2);
+  var tl = roundLeft ? r : 0, tr = roundRight ? r : 0;
+  return 'M' + (x + tl) + ' ' + y +
+    ' H' + (x + w - tr) +
+    (tr ? ' Q' + (x + w) + ' ' + y + ' ' + (x + w) + ' ' + (y + tr) : '') +
+    ' V' + (y + h - tr) +
+    (tr ? ' Q' + (x + w) + ' ' + (y + h) + ' ' + (x + w - tr) + ' ' + (y + h) : '') +
+    ' H' + (x + tl) +
+    (tl ? ' Q' + x + ' ' + (y + h) + ' ' + x + ' ' + (y + h - tl) : '') +
+    ' V' + (y + tl) +
+    (tl ? ' Q' + x + ' ' + y + ' ' + (x + tl) + ' ' + y : '') + ' Z';
 }
 
 /* ---- Shared tooltip ---- */
@@ -115,7 +134,7 @@ function wireCardToggles(root) {
 /* Funnel: horizontal bars on the ordinal ramp, count at bar end,
    stage-to-stage conversion between rows. */
 function funnelSVG(rows) { // rows: [{stage, count}]
-  var W = 640, rowH = 44, gap = 14, labelW = 172, valueW = 88;
+  var W = 640, rowH = 44, gap = 14, labelW = 172, valueW = 88, barH = 22;
   var H = rows.length * (rowH + gap) - gap + 8;
   var max = Math.max.apply(null, rows.map(function (r) { return r.count; }).concat([1]));
   var plotW = W - labelW - valueW;
@@ -124,13 +143,13 @@ function funnelSVG(rows) { // rows: [{stage, count}]
     var y = i * (rowH + gap) + 4;
     var w = Math.max(4, (r.count / max) * plotW);
     var pct = i === 0 ? null : (rows[i - 1].count ? r.count / rows[i - 1].count : 0);
-    out += '<text x="' + (labelW - 10) + '" y="' + (y + rowH / 2 + 4) + '" text-anchor="end" class="ax strong">' + esc(r.stage) + '</text>';
-    out += '<rect x="' + labelW + '" y="' + y + '" width="' + w + '" height="' + (rowH - 16) + '" rx="4" class="f' + (i + 1) + '" ' +
+    out += '<text x="' + (labelW - 10) + '" y="' + (y + barH / 2 + 4) + '" text-anchor="end" class="ax strong">' + esc(r.stage) + '</text>';
+    out += '<path d="' + hbarPath(labelW, y, w, barH, false, true) + '" class="f' + (i + 1) + '" ' +
       'data-tip="<b>' + esc(r.stage) + '</b><br>' + fmtNum(r.count) + ' leads reached' +
-      (pct !== null ? '<br>' + fmtPct(pct, 0) + ' of previous stage' : '') + '"></rect>';
-    out += '<text x="' + (labelW + w + 8) + '" y="' + (y + (rowH - 16) / 2 + 4) + '" class="val">' + fmtNum(r.count) + '</text>';
+      (pct !== null ? '<br>' + fmtPct(pct, 0) + ' of previous stage' : '') + '"></path>';
+    out += '<text x="' + (labelW + w + 8) + '" y="' + (y + barH / 2 + 4) + '" class="val">' + fmtNum(r.count) + '</text>';
     if (pct !== null) {
-      out += '<text x="' + (labelW - 10) + '" y="' + (y + rowH / 2 + 18) + '" text-anchor="end" class="ax dim">' + fmtPct(pct, 0) + ' →</text>';
+      out += '<text x="' + (labelW - 10) + '" y="' + (y + barH / 2 + 18) + '" text-anchor="end" class="ax dim">' + fmtPct(pct, 0) + ' →</text>';
     }
   });
   return out + '</svg>';
@@ -142,7 +161,7 @@ function columnsSVG(labels, values, opts) {
   var W = 640, H = 230, padL = 46, padB = 26, padT = 12, padR = 8;
   var plotW = W - padL - padR, plotH = H - padT - padB;
   var max = Math.max.apply(null, values.concat([1]));
-  var ticks = niceTicks(max, 4);
+  var ticks = niceTicks(max, 4, !opts.money);
   max = ticks[ticks.length - 1];
   var n = labels.length;
   var slot = plotW / n;
@@ -155,11 +174,14 @@ function columnsSVG(labels, values, opts) {
   });
   values.forEach(function (v, i) {
     var h = (v / max) * plotH;
+    if (v > 0 && h < 3) h = 3; // clamp before y so tiny values stay visible
     var x = padL + i * slot + (slot - bw) / 2;
     var y = padT + plotH - h;
-    out += '<path d="M' + x + ' ' + (padT + plotH) + ' V' + (y + 4) + ' Q' + x + ' ' + y + ' ' + (x + 4) + ' ' + y +
-      ' H' + (x + bw - 4) + ' Q' + (x + bw) + ' ' + y + ' ' + (x + bw) + ' ' + (y + 4) + ' V' + (padT + plotH) + ' Z" class="s1" ' +
-      'data-tip="<b>' + esc(labels[i]) + '</b><br>' + (opts.money ? fmtMoney(v) : fmtNum(v) + (opts.unit ? ' ' + opts.unit : '')) + '"></path>';
+    if (v > 0) {
+      out += '<path d="M' + x + ' ' + (padT + plotH) + ' V' + Math.min(y + 4, padT + plotH) + ' Q' + x + ' ' + y + ' ' + (x + 4) + ' ' + y +
+        ' H' + (x + bw - 4) + ' Q' + (x + bw) + ' ' + y + ' ' + (x + bw) + ' ' + Math.min(y + 4, padT + plotH) + ' V' + (padT + plotH) + ' Z" class="s1" ' +
+        'data-tip="<b>' + esc(labels[i]) + '</b><br>' + (opts.money ? fmtMoney(v) : fmtNum(v) + (opts.unit ? ' ' + opts.unit : '')) + '"></path>';
+    }
     out += '<text x="' + (padL + i * slot + slot / 2) + '" y="' + (H - 8) + '" text-anchor="middle" class="ax">' + esc(labels[i]) + '</text>';
   });
   return out + '</svg>';
@@ -168,7 +190,7 @@ function columnsSVG(labels, values, opts) {
 /* Grouped columns, two series (legend rendered by chartCard) */
 function groupedColumnsSVG(labels, seriesA, seriesB, opts) {
   opts = opts || {};
-  var W = 640, H = 230, padL = 52, padB = 26, padT = 12, padR = 8;
+  var W = opts.W || 640, H = 230, padL = 52, padB = 26, padT = 12, padR = 8;
   var plotW = W - padL - padR, plotH = H - padT - padB;
   var max = Math.max.apply(null, seriesA.concat(seriesB, [1]));
   var ticks = niceTicks(max, 4);
@@ -182,9 +204,10 @@ function groupedColumnsSVG(labels, seriesA, seriesB, opts) {
     out += '<text x="' + (padL - 6) + '" y="' + (y + 3.5) + '" text-anchor="end" class="ax">' + fmtMoneyC(t).replace('SAR ', '') + '</text>';
   });
   function col(v, x, cls, label, name) {
-    var h = (v / max) * plotH, y = padT + plotH - h;
-    if (h < 4) h = Math.max(h, v > 0 ? 3 : 0);
+    var h = (v / max) * plotH;
+    if (v > 0 && h < 3) h = 3; // clamp BEFORE y so tiny commissions stay visible
     if (!h) return '';
+    var y = padT + plotH - h;
     return '<path d="M' + x + ' ' + (padT + plotH) + ' V' + Math.min(y + 4, padT + plotH) + ' Q' + x + ' ' + y + ' ' + (x + 4) + ' ' + y +
       ' H' + (x + bw - 4) + ' Q' + (x + bw) + ' ' + y + ' ' + (x + bw) + ' ' + Math.min(y + 4, padT + plotH) + ' V' + (padT + plotH) + ' Z" class="' + cls + '" ' +
       'data-tip="<b>' + esc(label) + '</b><br>' + esc(name) + ': ' + fmtMoney(v) + '"></path>';
@@ -198,12 +221,15 @@ function groupedColumnsSVG(labels, seriesA, seriesB, opts) {
   return out + '</svg>';
 }
 
-/* Line with area wash, end dot + end label, hover bands */
+/* Line with area wash, end dot + end label, hover bands.
+   Values may contain null (= no data that period): the line breaks
+   into segments and the tooltip says so, instead of faking a 0. */
 function lineSVG(labels, values, opts) {
   opts = opts || {};
   var W = 640, H = 220, padL = 46, padB = 26, padT = 14, padR = 46;
   var plotW = W - padL - padR, plotH = H - padT - padB;
-  var max = Math.max.apply(null, values.concat([opts.maxHint || 1]));
+  var present = values.filter(function (v) { return v !== null && v !== undefined; });
+  var max = Math.max.apply(null, present.concat([opts.maxHint || 1]));
   var ticks = niceTicks(max, 3);
   max = ticks[ticks.length - 1];
   var n = labels.length;
@@ -215,22 +241,39 @@ function lineSVG(labels, values, opts) {
     out += '<line x1="' + padL + '" y1="' + y + '" x2="' + (W - padR) + '" y2="' + y + '" class="grid"></line>';
     out += '<text x="' + (padL - 6) + '" y="' + (y + 3.5) + '" text-anchor="end" class="ax">' + (opts.pct ? Math.round(t * 100) + '%' : fmtNum(t)) + '</text>';
   });
-  var pts = values.map(function (v, i) { return px(i) + ',' + py(v); });
-  out += '<path d="M' + pts.join(' L') + ' L' + px(n - 1) + ',' + (padT + plotH) + ' L' + px(0) + ',' + (padT + plotH) + ' Z" class="s1-wash"></path>';
-  out += '<path d="M' + pts.join(' L') + '" class="s1-line"></path>';
+  // split into contiguous segments around nulls
+  var segs = [], cur = [];
+  values.forEach(function (v, i) {
+    if (v === null || v === undefined) { if (cur.length) { segs.push(cur); cur = []; } }
+    else cur.push(i);
+  });
+  if (cur.length) segs.push(cur);
+  segs.forEach(function (seg) {
+    var pts = seg.map(function (i) { return px(i) + ',' + py(values[i]); });
+    if (seg.length > 1) {
+      out += '<path d="M' + pts.join(' L') + ' L' + px(seg[seg.length - 1]) + ',' + (padT + plotH) + ' L' + px(seg[0]) + ',' + (padT + plotH) + ' Z" class="s1-wash"></path>';
+      out += '<path d="M' + pts.join(' L') + '" class="s1-line"></path>';
+    } else {
+      out += '<circle cx="' + px(seg[0]) + '" cy="' + py(values[seg[0]]) + '" r="3.5" class="s1-dot"></circle>';
+    }
+  });
   labels.forEach(function (lb, i) {
     if (n <= 12 || i % 2 === 0) {
       out += '<text x="' + px(i) + '" y="' + (H - 8) + '" text-anchor="middle" class="ax">' + esc(lb) + '</text>';
     }
-    // invisible hover band + hover dot
+    var isNull = values[i] === null || values[i] === undefined;
     var bandW = plotW / Math.max(n - 1, 1);
     out += '<g class="hoverpt"><rect x="' + (px(i) - bandW / 2) + '" y="' + padT + '" width="' + bandW + '" height="' + plotH + '" fill="transparent" ' +
-      'data-tip="<b>' + esc(lb) + '</b><br>' + (opts.pct ? fmtPct(values[i]) : fmtNum(values[i])) + (opts.unit ? ' ' + opts.unit : '') + '"></rect>' +
-      '<circle cx="' + px(i) + '" cy="' + py(values[i]) + '" r="4.5" class="s1-dot ringed"></circle></g>';
+      'data-tip="<b>' + esc(lb) + '</b><br>' + (isNull ? esc(opts.nullLabel || 'No data') : (opts.pct ? fmtPct(values[i]) : fmtNum(values[i])) + (opts.unit ? ' ' + opts.unit : '')) + '"></rect>' +
+      (isNull ? '' : '<circle cx="' + px(i) + '" cy="' + py(values[i]) + '" r="4.5" class="s1-dot ringed"></circle>') + '</g>';
   });
-  // persistent end dot + label
-  out += '<circle cx="' + px(n - 1) + '" cy="' + py(values[n - 1]) + '" r="4.5" class="s1-dot ringed always"></circle>';
-  out += '<text x="' + (px(n - 1) + 9) + '" y="' + (py(values[n - 1]) + 4) + '" class="val">' + (opts.pct ? fmtPct(values[n - 1], 0) : fmtNum(values[n - 1])) + '</text>';
+  // persistent dot + label on the last real value
+  var lastIdx = -1;
+  for (var i = n - 1; i >= 0; i--) { if (values[i] !== null && values[i] !== undefined) { lastIdx = i; break; } }
+  if (lastIdx >= 0) {
+    out += '<circle cx="' + px(lastIdx) + '" cy="' + py(values[lastIdx]) + '" r="4.5" class="s1-dot ringed always"></circle>';
+    out += '<text x="' + (px(lastIdx) + 9) + '" y="' + (py(values[lastIdx]) + 4) + '" class="val">' + (opts.pct ? fmtPct(values[lastIdx], 0) : fmtNum(values[lastIdx])) + '</text>';
+  }
   return out + '</svg>';
 }
 
@@ -250,8 +293,8 @@ function hbarsSVG(items, opts) { // items: [{label, count}]
     var y = i * (rowH + gap);
     var w = Math.max(3, (it.count / max) * plotW);
     out += '<text x="' + (labelW - 10) + '" y="' + (y + rowH / 2 + 4) + '" text-anchor="end" class="ax strong">' + esc(it.label) + '</text>';
-    out += '<rect x="' + labelW + '" y="' + (y + 5) + '" width="' + w + '" height="' + (rowH - 10) + '" rx="4" class="' + (opts.cls || 's1') + '" ' +
-      'data-tip="<b>' + esc(it.label) + '</b><br>' + fmtNum(it.count) + ' leads (' + fmtPct(total ? it.count / total : 0, 0) + ')"></rect>';
+    out += '<path d="' + hbarPath(labelW, y + 5, w, rowH - 10, false, true) + '" class="' + (opts.cls || 's1') + '" ' +
+      'data-tip="<b>' + esc(it.label) + '</b><br>' + fmtNum(it.count) + ' leads (' + fmtPct(total ? it.count / total : 0, 0) + ')"></path>';
     out += '<text x="' + (labelW + w + 8) + '" y="' + (y + rowH / 2 + 4) + '" class="val">' + fmtNum(it.count) +
       ' <tspan class="dim-t">· ' + fmtPct(total ? it.count / total : 0, 0) + '</tspan></text>';
   });
@@ -263,13 +306,13 @@ function stackedBarSVG(segments) { // [{label, count, cls}]
   var total = segments.reduce(function (a, s) { return a + s.count; }, 0) || 1;
   var W = 640, H = 64, barH = 22, y = 8;
   var out = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="viz" role="img" aria-label="Outcome split">';
+  var nonZero = segments.filter(function (s) { return s.count > 0; });
   var x = 0;
-  segments.forEach(function (s) {
-    if (!s.count) return;
+  nonZero.forEach(function (s, i) {
     var w = (s.count / total) * W;
-    // 2px surface gap between segments via stroke on surface color handled by CSS gap class
-    out += '<rect x="' + (x + 1) + '" y="' + y + '" width="' + Math.max(w - 2, 2) + '" height="' + barH + '" rx="4" class="' + s.cls + '" ' +
-      'data-tip="<b>' + esc(s.label) + '</b><br>' + fmtNum(s.count) + ' leads (' + fmtPct(s.count / total, 0) + ')"></rect>';
+    // 2px surface gap between segments; only the outer ends are rounded
+    out += '<path d="' + hbarPath(x + 1, y, Math.max(w - 2, 2), barH, i === 0, i === nonZero.length - 1) + '" class="' + s.cls + '" ' +
+      'data-tip="<b>' + esc(s.label) + '</b><br>' + fmtNum(s.count) + ' leads (' + fmtPct(s.count / total, 0) + ')"></path>';
     if (w > 56) {
       out += '<text x="' + (x + w / 2) + '" y="' + (y + barH + 22) + '" text-anchor="middle" class="ax">' + fmtPct(s.count / total, 0) + '</text>';
     }

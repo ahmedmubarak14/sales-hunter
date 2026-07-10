@@ -174,7 +174,7 @@
       '<span class="who"><b>' + esc(MANAGER.name) + '</b><span>' + esc(MANAGER.title) + ' — manager view</span></span>' +
       '<span class="go">→</span></button>';
 
-    var ps = statsFor(LEADS); // program-wide, for the hero stats
+    var ps = statsFor(allLeads()); // program-wide, for the hero stats
     app.innerHTML =
       '<div class="login-wrap">' +
         '<div class="login-left"><div class="login-card">' +
@@ -276,12 +276,12 @@
       return leads.filter(function (l) { return monthKey(l.createdAt) === m.key; }).length;
     });
 
-    // win rate of decided leads per month (decided = won/lost/unqualified closed that month)
+    // win rate of decided leads per month; null = nothing decided that month
     var winRate = months.map(function (m) {
       var decided = leads.filter(function (l) {
         var cd = closedDate(l); return cd && monthKey(cd) === m.key;
       });
-      if (!decided.length) return 0;
+      if (!decided.length) return null;
       return decided.filter(function (l) { return l.stage === 'won'; }).length / decided.length;
     });
 
@@ -399,8 +399,8 @@
         }) +
         chartCard({
           title: 'Win rate of decided leads', subtitle: 'Won ÷ (won + lost + unqualified) closed in each month',
-          svg: lineSVG(months.map(function (m) { return m.label; }), winRate, { pct: true, maxHint: 0.5, aria: 'Win rate trend' }),
-          table: { head: ['Month', 'Win rate'], rows: months.map(function (m, i) { return [m.label, fmtPct(winRate[i], 0)]; }) }
+          svg: lineSVG(months.map(function (m) { return m.label; }), winRate, { pct: true, maxHint: 0.5, aria: 'Win rate trend', nullLabel: 'No leads decided this month' }),
+          table: { head: ['Month', 'Win rate'], rows: months.map(function (m, i) { return [m.label, winRate[i] === null ? '—' : fmtPct(winRate[i], 0)]; }) }
         }) +
       '</div>' +
 
@@ -435,7 +435,7 @@
       });
       var rows = leads.map(function (l) {
         var comm = l.stage === 'won' ? '<span class="money-pos">' + fmtMoneyC(commissionOf(l)) + '</span>'
-          : isOpen(l) ? '<span class="cell-sub">' + fmtMoneyC(l.amountNet * COMMISSION_RATE) + ' potential</span>' : '—';
+          : (isOpen(l) && l.amountNet) ? '<span class="cell-sub">' + fmtMoneyC(l.amountNet * COMMISSION_RATE) + ' potential</span>' : '—';
         return '<tr class="rowlink" data-lead="' + l.id + '" tabindex="0">' +
           '<td><b>' + esc(l.company) + '</b><span class="cell-sub">' + esc(l.contact) + ' · ' + esc(l.city) + '</span></td>' +
           '<td>' + esc(l.industry) + '</td>' +
@@ -443,7 +443,7 @@
           '<td>' + stagePill(l.stage) + '</td>' +
           '<td>' + esc(l.salesOwner) + '</td>' +
           '<td>' + fmtDate(lastActivity(l)) + '</td>' +
-          '<td class="num">' + fmtMoneyC(l.amountNet) +
+          '<td class="num">' + (l.amountNet ? fmtMoneyC(l.amountNet) : '<span class="cell-sub">to be scoped</span>') +
             (l.plan ? '<span class="cell-sub">' + esc(l.plan) + (l.years === 2 ? ' · 2 yr' : '') + '</span>' : '') + '</td>' +
           '<td class="num">' + comm + '</td>' +
         '</tr>';
@@ -537,20 +537,21 @@
           (lead.plan ? '<dt>Package</dt><dd>Zid ' + esc(lead.plan) + (lead.years === 2 ? ' · 2 years' : ' · 1 year') + '</dd>' : '') +
           '<dt>Source</dt><dd>' + esc(lead.source) + '</dd>' +
           '<dt>Submitted</dt><dd>' + fmtDate(lead.createdAt) + '</dd>' +
-          '<dt>Value (excl. VAT)</dt><dd>' + fmtMoney(lead.amountNet) + '</dd>' +
-          '<dt>Value (incl. VAT)</dt><dd>' + fmtMoney(grossOf(lead)) + '</dd>' +
+          (lead.amountNet
+            ? '<dt>Value (excl. VAT)</dt><dd>' + fmtMoney(lead.amountNet) + '</dd>' +
+              '<dt>Value (incl. VAT)</dt><dd>' + fmtMoney(grossOf(lead)) + '</dd>'
+            : '<dt>Value</dt><dd>To be scoped by sales</dd>') +
           commissionRow + reasonRow +
         '</dl>' +
         '<h3 class="eyebrow">Activity timeline</h3>' +
         '<ul class="timeline">' + timeline + '</ul>' +
       '</div></div>');
     document.body.appendChild(root);
-    function close() { root.remove(); }
+    function close() { root.remove(); document.removeEventListener('keydown', onKey); }
+    function onKey(e) { if (e.key === 'Escape') close(); }
     root.querySelector('.drawer-backdrop').addEventListener('click', close);
     root.querySelector('#drawer-close').addEventListener('click', close);
-    document.addEventListener('keydown', function esc1(e) {
-      if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc1); }
-    });
+    document.addEventListener('keydown', onKey);
   }
 
   /* ---- Submit lead ---- */
@@ -592,14 +593,16 @@
       if (!company || !contact) { toast('Company and contact person are required.'); return; }
       var planPrice = parseInt(document.getElementById('f-plan').value, 10);
       var plan = PLANS.find(function (p) { return p.price === planPrice; });
-      var now = new Date();
+      // Anchor to the demo's frozen "today" so the lead lands inside every
+      // monthly chart window (the whole dataset lives at NOW).
+      var now = new Date(NOW.getTime());
       var leads = LS.get('leads', []);
       leads.unshift({
         id: 'L-N' + (1000 + leads.length + 1),
         hunterId: user.id,
         company: company,
         contact: contact,
-        plan: plan ? plan.name : 'Growth',
+        plan: plan ? plan.name : null,   // "Not sure" stays honest: no package
         years: 1,
         industry: document.getElementById('f-industry').value,
         city: document.getElementById('f-city').value,
@@ -607,7 +610,7 @@
         createdAt: now.toISOString(),
         stage: 'new',
         events: [{ stage: 'new', date: now.toISOString() }],
-        amountNet: plan ? plan.price : PLANS[1].price,
+        amountNet: plan ? plan.price : 0, // 0 = sales will scope it
         lostReason: null, unqualReason: null,
         salesOwner: 'Unassigned'
       });
@@ -687,7 +690,7 @@
         title: 'Revenue you generated vs. commission earned', subtitle: 'By month the deal closed won · both excl. VAT',
         legend: [{ cls: 's1', label: 'Revenue generated' }, { cls: 's2', label: 'Your commission (20%)' }],
         svg: groupedColumnsSVG(months.map(function (m) { return m.label; }), revByMonth, commByMonth,
-          { nameA: 'Revenue generated', nameB: 'Your commission', aria: 'Revenue vs commission' }),
+          { nameA: 'Revenue generated', nameB: 'Your commission', aria: 'Revenue vs commission', W: 1080 }),
         table: { head: ['Month', 'Revenue (SAR)', 'Commission (SAR)'], rows: months.map(function (m, i) { return [m.label, fmtNum(revByMonth[i]), fmtNum(commByMonth[i])]; }) }
       }) +
 
@@ -842,15 +845,17 @@
       return { label: d, count: depts[d].leads, won: depts[d].won, revenue: depts[d].revenue };
     }).sort(function (a, b) { return b.revenue - a.revenue; });
 
-    // Source performance (win rate by source, min 5 decided)
+    // Source performance — win rate over DECIDED leads only (same
+    // definition as everywhere else), hidden below 3 decided.
     var sources = {};
     all.forEach(function (l) {
-      if (!sources[l.source]) sources[l.source] = { total: 0, won: 0 };
+      if (!sources[l.source]) sources[l.source] = { total: 0, won: 0, decided: 0 };
       sources[l.source].total += 1;
+      if (closedDate(l)) sources[l.source].decided += 1;
       if (l.stage === 'won') sources[l.source].won += 1;
     });
     var srcRows = Object.keys(sources).map(function (k) {
-      return { label: k, count: sources[k].won, total: sources[k].total };
+      return { label: k, count: sources[k].won, total: sources[k].total, decided: sources[k].decided };
     }).sort(function (a, b) { return b.count - a.count; });
 
     // Coaching: enough leads, weak conversion
@@ -906,11 +911,11 @@
 
       '<div class="grid-2">' +
         '<section class="card">' +
-          '<div class="card-head"><div><h3>Lead source performance</h3><p class="sub">Wins by how the hunter knows the lead</p></div></div>' +
+          '<div class="card-head"><div><h3>Lead source performance</h3><p class="sub">Wins by how the hunter knows the lead · win rate of decided leads</p></div></div>' +
           '<div class="tbl-wrap"><table class="mini">' +
             '<thead><tr><th>Source</th><th class="num">Leads</th><th class="num">Won</th><th class="num">Win rate</th></tr></thead>' +
             '<tbody>' + srcRows.map(function (r) {
-              return '<tr><td>' + esc(r.label) + '</td><td class="num">' + fmtNum(r.total) + '</td><td class="num">' + fmtNum(r.count) + '</td><td class="num">' + fmtPct(r.total ? r.count / r.total : 0, 0) + '</td></tr>';
+              return '<tr><td>' + esc(r.label) + '</td><td class="num">' + fmtNum(r.total) + '</td><td class="num">' + fmtNum(r.count) + '</td><td class="num">' + (r.decided >= 3 ? fmtPct(r.count / r.decided, 0) : '—') + '</td></tr>';
             }).join('') + '</tbody>' +
           '</table></div>' +
         '</section>' +
@@ -957,7 +962,7 @@
     content.innerHTML =
       '<div class="card" style="max-width:760px">' +
         '<div style="display:flex; align-items:center; gap:14px; margin-bottom:18px">' +
-          '<span class="avatar" style="width:46px;height:46px;font-size:16px">' + esc(initials(user.name)) + '</span>' +
+          '<span class="avatar" style="width:46px;height:46px;flex:none;font-size:16px">' + esc(initials(user.name)) + '</span>' +
           '<div><h2>' + esc(user.name) + '</h2><p class="sub">' + esc(user.title) + ' · ' + esc(user.dept) + ' · manager: ' + esc(MANAGER.name) + '</p></div>' +
         '</div>' +
         '<form id="profile-form">' +

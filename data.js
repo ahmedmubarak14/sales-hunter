@@ -322,6 +322,7 @@ function shiftLeadEnd(lead, targetEnd) {
     .sort(function (a, b) { return b.events[b.events.length - 1].date - a.events[a.events.length - 1].date; });
   if (e1Wins[0]) shiftLeadEnd(e1Wins[0], new Date(NOW.getTime() - 6 * DAY));   // pending approval, this month
   if (e1Wins[1]) shiftLeadEnd(e1Wins[1], new Date(NOW.getTime() - 33 * DAY));  // approved, last month
+  LEADS.sort(function (a, b) { return b.createdAt - a.createdAt; });           // restore newest-first order
 })();
 
 /* Month helpers for trend charts (last 12 months incl. current) */
