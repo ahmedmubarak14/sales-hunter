@@ -90,6 +90,13 @@ var EMPLOYEES = [
 ];
 
 var MANAGER = { id: 'mgr', name: 'Abdullah Al-Rashid', dept: 'Sales', title: 'Sales Director', email: 'abdullah.r@company.com' };
+var FINANCE = { id: 'fin', name: 'Maha Al-Otaibi', dept: 'Finance', title: 'Finance Operations', email: 'maha.o@company.com' };
+
+/* Default payout details per employee (profile edits override these) */
+EMPLOYEES.forEach(function (e, i) {
+  e.bank = BANKS[i % BANKS.length];
+  e.iban = 'SA' + '0380000060801016' + String(801674 - i * 37); // SA + 22 digits, deterministic
+});
 
 /* ---- Deterministic PRNG (mulberry32) ---- */
 function mulberry32(seed) {

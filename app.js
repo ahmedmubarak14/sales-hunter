@@ -21,9 +21,22 @@
   function currentUser() {
     var id = LS.get('user', null);
     if (id === 'mgr') return MANAGER;
+    if (id === 'fin') return FINANCE;
     return EMPLOYEES.find(function (e) { return e.id === id; }) || null;
   }
   function isManager() { return LS.get('user', null) === 'mgr'; }
+  function roleOf() {
+    var id = LS.get('user', null);
+    return id === 'mgr' ? 'mgr' : id === 'fin' ? 'fin' : 'emp';
+  }
+  function homeOf(role) { return role === 'mgr' ? '/manager' : role === 'fin' ? '/payouts' : '/dashboard'; }
+
+  /* Payout details: saved profile overrides the employee defaults */
+  function payoutDetailsOf(emp) {
+    var saved = LS.get('profile.' + emp.id, {});
+    return { bank: saved.bank || emp.bank, iban: saved.iban || emp.iban };
+  }
+  function maskIban(iban) { return iban ? 'SA·· ···· ' + iban.slice(-4) : '—'; }
 
   /* Leads submitted through the demo form (persisted locally) */
   function customLeads() {
@@ -144,20 +157,17 @@
     '/leaderboard':{ title: 'Leaderboard',        icon: 'trophy',  render: viewLeaderboard, who: 'all' },
     '/stores':     { title: 'Top Zid Stores',     icon: 'store',   render: viewTopStores, who: 'all' },
     '/manager':    { title: 'Program Overview',   icon: 'manager', render: viewManager,   who: 'mgr' },
+    '/payouts':    { title: 'Commission Payouts', icon: 'money',   render: viewPayouts,   who: 'fin' },
     '/profile':    { title: 'My Profile',         icon: 'person',  render: viewProfile,   who: 'emp' }
   };
 
   function route() {
     var h = location.hash.replace(/^#/, '') || '/';
     if (!currentUser()) { renderLogin(); return; }
-    if (!ROUTES[h]) {
-      h = isManager() ? '/manager' : '/dashboard';
-      location.hash = '#' + h;
-      return;
-    }
+    var home = homeOf(roleOf());
+    if (!ROUTES[h]) { location.hash = '#' + home; return; }
     var r = ROUTES[h];
-    if (r.who === 'mgr' && !isManager()) { location.hash = '#/dashboard'; return; }
-    if (r.who === 'emp' && isManager()) { location.hash = '#/manager'; return; }
+    if (r.who !== 'all' && r.who !== roleOf()) { location.hash = '#' + home; return; }
     renderShell(h, r);
   }
 
@@ -172,6 +182,10 @@
     personas += '<button class="persona" data-login="mgr">' +
       '<span class="avatar" style="background: var(--ink); color: var(--ground)">' + esc(initials(MANAGER.name)) + '</span>' +
       '<span class="who"><b>' + esc(MANAGER.name) + '</b><span>' + esc(MANAGER.title) + ' — manager view</span></span>' +
+      '<span class="go">→</span></button>';
+    personas += '<button class="persona" data-login="fin">' +
+      '<span class="avatar" style="background: var(--ink); color: var(--ground)">' + esc(initials(FINANCE.name)) + '</span>' +
+      '<span class="who"><b>' + esc(FINANCE.name) + '</b><span>' + esc(FINANCE.title) + ' — finance view</span></span>' +
       '<span class="go">→</span></button>';
 
     var ps = statsFor(allLeads()); // program-wide, for the hero stats
@@ -202,7 +216,7 @@
     app.querySelectorAll('[data-login]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         LS.set('user', btn.getAttribute('data-login'));
-        location.hash = btn.getAttribute('data-login') === 'mgr' ? '#/manager' : '#/dashboard';
+        location.hash = '#' + homeOf(roleOf());
         route();
       });
     });
@@ -213,8 +227,7 @@
     var user = currentUser();
     var nav = Object.keys(ROUTES).filter(function (p) {
       var who = ROUTES[p].who;
-      if (who === 'all') return true;
-      return isManager() ? who === 'mgr' : who === 'emp';
+      return who === 'all' || who === roleOf();
     }).map(function (p) {
       return '<a href="#' + p + '" class="' + (p === path ? 'active' : '') + '">' + ICONS[ROUTES[p].icon] + esc(ROUTES[p].title) + '</a>';
     }).join('');
@@ -909,6 +922,24 @@
       return { label: k, count: catAgg[k].count, revenue: catAgg[k].revenue };
     }).sort(function (a, b) { return b.revenue - a.revenue; }).slice(0, 6);
 
+    // Sales rep performance on hunter leads
+    var STAGE_SHORT = { new: 'New', prospect: 'Prospect', qualified: 'Qualified', sql: 'SQL', commit: 'Commit', reengage: 'Re-engage' };
+    var reps = {};
+    all.forEach(function (l) {
+      if (!reps[l.salesOwner]) reps[l.salesOwner] = { leads: 0, won: 0, lost: 0, unq: 0, open: 0, revenue: 0, stages: {} };
+      var r = reps[l.salesOwner];
+      r.leads += 1;
+      if (l.stage === 'won') { r.won += 1; r.revenue += l.amountNet; }
+      else if (l.stage === 'lost') r.lost += 1;
+      else if (l.stage === 'unqualified') r.unq += 1;
+      else { r.open += 1; r.stages[l.stage] = (r.stages[l.stage] || 0) + 1; }
+    });
+    var repRows = Object.keys(reps).map(function (name) {
+      var r = reps[name];
+      var decided = r.won + r.lost + r.unq;
+      return { name: name, r: r, winRate: decided >= 3 ? r.won / decided : null };
+    }).sort(function (a, b) { return b.r.revenue - a.r.revenue; });
+
     // Weighted forecast from the open pipeline (stage probability x value)
     var STAGE_WEIGHTS = { new: 0.1, prospect: 0.2, qualified: 0.35, sql: 0.5, commit: 0.75, reengage: 0.05 };
     var forecast = all.reduce(function (a, l) {
@@ -1026,6 +1057,30 @@
         }) +
       '</div>' +
 
+      '<section class="card">' +
+        '<div class="card-head"><div><h3>Sales rep performance on hunter leads</h3>' +
+        '<p class="sub">How each rep handles the leads hunters bring — win rate is over decided leads (won + lost + unqualified)</p></div></div>' +
+        '<div class="tbl-wrap"><table>' +
+          '<thead><tr><th>Sales rep</th><th class="num">Hunter leads</th><th class="num">Won</th><th class="num">Lost</th><th class="num">Unqualified</th><th class="num">Win rate</th><th class="num">Revenue won</th><th>Open pipeline now</th></tr></thead>' +
+          '<tbody>' + repRows.map(function (row) {
+            var r = row.r;
+            var stageBits = Object.keys(r.stages).map(function (sid) {
+              return r.stages[sid] + ' ' + (STAGE_SHORT[sid] || sid);
+            }).join(' · ');
+            return '<tr>' +
+              '<td><b>' + esc(row.name) + '</b></td>' +
+              '<td class="num">' + fmtNum(r.leads) + '</td>' +
+              '<td class="num"><b>' + fmtNum(r.won) + '</b></td>' +
+              '<td class="num">' + fmtNum(r.lost) + '</td>' +
+              '<td class="num">' + fmtNum(r.unq) + '</td>' +
+              '<td class="num">' + (row.winRate === null ? '—' : fmtPct(row.winRate, 0)) + '</td>' +
+              '<td class="num"><b>' + (r.revenue ? fmtMoneyC(r.revenue) : '—') + '</b></td>' +
+              '<td>' + (r.open ? '<b>' + fmtNum(r.open) + '</b><span class="cell-sub">' + esc(stageBits) + '</span>' : '—') + '</td>' +
+            '</tr>';
+          }).join('') + '</tbody>' +
+        '</table></div>' +
+      '</section>' +
+
       '<div class="grid-2">' +
         chartCard({
           title: 'Revenue closed by month', subtitle: 'Closed-won subscription value, excl. VAT',
@@ -1107,13 +1162,106 @@
       '</section>';
   }
 
+  /* ---- Finance: commission payouts ---- */
+  function viewPayouts(content) {
+    var statusFilter = 'all';
+    var all = allLeads();
+    var s = statsFor(all);
+    var wonLeads = all.filter(function (l) { return l.stage === 'won'; })
+      .sort(function (a, b) { return wonDate(b) - wonDate(a); });
+
+    function rowsFor() {
+      return wonLeads.filter(function (l) {
+        return statusFilter === 'all' || commissionStatus(l) === statusFilter;
+      });
+    }
+
+    function renderTable() {
+      var rows = rowsFor().map(function (l) {
+        var hunter = EMPLOYEES.find(function (e) { return e.id === l.hunterId; });
+        var pay = hunter ? payoutDetailsOf(hunter) : { bank: '—', iban: '' };
+        var cs = commissionStatus(l);
+        return '<tr>' +
+          '<td><b>' + esc(hunter ? hunter.name : 'Unknown') + '</b><span class="cell-sub">' + esc(hunter ? hunter.dept : '') + '</span></td>' +
+          '<td><b>' + esc(l.company) + '</b><span class="cell-sub">deal ' + esc(l.id) + ' · <a href="#" class="hs-link" data-deal="' + esc(l.id) + '">open in HubSpot ↗</a></span></td>' +
+          '<td>' + fmtDate(wonDate(l)) + '</td>' +
+          '<td>' + esc(l.salesOwner) + '</td>' +
+          '<td class="num">' + fmtMoney(l.amountNet) + '</td>' +
+          '<td class="num"><b class="money-pos">' + fmtMoney(commissionOf(l)) + '</b></td>' +
+          '<td><span class="status-chip ' + cs + '">' + (cs === 'paid' ? 'Paid' : cs === 'approved' ? 'Approved' : 'Pending approval') + '</span></td>' +
+          '<td>' + esc(pay.bank) + '<span class="cell-sub">' + esc(maskIban(pay.iban)) + '</span></td>' +
+        '</tr>';
+      }).join('');
+      document.getElementById('payout-table').innerHTML =
+        '<div class="tbl-wrap"><table>' +
+          '<thead><tr><th>Hunter</th><th>Deal</th><th>Closed won</th><th>Closed by (sales rep)</th><th class="num">Value (excl. VAT)</th><th class="num">Commission (20%)</th><th>Status</th><th>Payout account</th></tr></thead>' +
+          '<tbody>' + (rows || '<tr><td colspan="8"><div class="empty">No payouts match this filter.</div></td></tr>') + '</tbody>' +
+        '</table></div>';
+      document.querySelectorAll('.hs-link').forEach(function (a) {
+        a.addEventListener('click', function (e) {
+          e.preventDefault();
+          toast('In production this opens deal ' + a.getAttribute('data-deal') + ' in HubSpot.');
+        });
+      });
+    }
+
+    content.innerHTML =
+      '<div class="kpis">' +
+        tile('Pending approval', fmtMoneyC(s.commissionPending), 'needs finance review') +
+        tile('Approved — next payroll', fmtMoneyC(s.commissionApproved), 'ready to pay') +
+        tile('Paid to date', fmtMoneyC(s.commissionPaid), '') +
+        tile('Total commission', fmtMoneyC(s.commission), '20% of ' + fmtMoneyC(s.revenueNet) + ' net revenue') +
+      '</div>' +
+      '<div class="filter-row">' +
+        '<div class="seg" id="status-seg">' + [['all', 'All'], ['pending', 'Pending'], ['approved', 'Approved'], ['paid', 'Paid']].map(function (x, i) {
+          return '<button data-seg="' + x[0] + '" class="' + (i === 0 ? 'active' : '') + '">' + x[1] + '</button>';
+        }).join('') + '</div>' +
+        '<div class="spacer"></div>' +
+        '<button class="btn secondary" id="dl-payouts">Export payout run (CSV)</button>' +
+      '</div>' +
+      '<div class="card" id="payout-table"></div>' +
+      '<p class="sub" style="text-align:center">Payout accounts come from each hunter’s profile. IBANs are shown masked; in production the full IBAN is revealed to finance only at payout time, with access logged.</p>';
+
+    document.querySelectorAll('#status-seg button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        document.querySelectorAll('#status-seg button').forEach(function (x) { x.classList.remove('active'); });
+        b.classList.add('active');
+        statusFilter = b.getAttribute('data-seg');
+        renderTable();
+      });
+    });
+    document.getElementById('dl-payouts').addEventListener('click', function () {
+      var lines = ['Hunter,Department,Deal ID,Company,Closed Won,Sales Rep,Value (SAR excl. VAT),Commission (SAR),Status,Bank,IBAN (masked)'];
+      rowsFor().forEach(function (l) {
+        var hunter = EMPLOYEES.find(function (e) { return e.id === l.hunterId; });
+        var pay = hunter ? payoutDetailsOf(hunter) : { bank: '', iban: '' };
+        lines.push([
+          '"' + (hunter ? hunter.name : 'Unknown').replace(/"/g, '""') + '"',
+          hunter ? hunter.dept : '', l.id,
+          '"' + l.company.replace(/"/g, '""') + '"',
+          fmtDate(wonDate(l)), '"' + l.salesOwner + '"',
+          l.amountNet, commissionOf(l), commissionStatus(l),
+          '"' + pay.bank + '"', maskIban(pay.iban)
+        ].join(','));
+      });
+      var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'sales-hunter-payout-run.csv';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast('Payout run exported.');
+    });
+    renderTable();
+  }
+
   /* ---- Profile ---- */
   function viewProfile(content, user) {
     var saved = LS.get('profile.' + user.id, {});
     var p = Object.assign({
       name: user.name, dept: user.dept, title: user.title,
       companyEmail: user.email, personalEmail: '', phone: user.phone || '',
-      bank: BANKS[0], iban: '', payMethod: 'Bank transfer (payroll)', nationalId: ''
+      bank: user.bank || BANKS[0], iban: user.iban || '', payMethod: 'Bank transfer (payroll)', nationalId: ''
     }, saved);
 
     function field(id, label, type, value, hint, attrs) {
