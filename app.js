@@ -1287,7 +1287,10 @@
           '<td>' + esc(l.salesOwner) + '</td>' +
           '<td class="num">' + fmtMoney(l.amountNet) + '</td>' +
           '<td class="num"><b class="money-pos">' + fmtMoney(commissionOf(l)) + '</b></td>' +
-          '<td><span class="status-chip ' + cs + '">' + (cs === 'paid' ? 'Paid' : cs === 'approved' ? 'Approved' : 'Pending approval') + '</span></td>' +
+          '<td><select class="status-select" data-deal="' + esc(l.id) + '" aria-label="Payment status for deal ' + esc(l.id) + '">' +
+            [['pending', 'Pending approval'], ['approved', 'Approved'], ['paid', 'Paid']].map(function (o) {
+              return '<option value="' + o[0] + '"' + (o[0] === cs ? ' selected' : '') + '>' + o[1] + '</option>';
+            }).join('') + '</select></td>' +
           '<td>' + esc(pay.bank) + '<span class="cell-sub">' + esc(maskIban(pay.iban)) + '</span></td>' +
         '</tr>';
       }).join('');
@@ -1308,22 +1311,37 @@
           openHunterDrawer(a.getAttribute('data-hunter'));
         });
       });
+      document.querySelectorAll('.status-select').forEach(function (sel) {
+        sel.addEventListener('change', function () {
+          var dealId = sel.getAttribute('data-deal');
+          var overrides = LS.get('paystatus', {});
+          overrides[dealId] = sel.value;
+          LS.set('paystatus', overrides);
+          COMMISSION_STATUS_OVERRIDES[dealId] = sel.value;
+          toast('Deal ' + dealId + ' marked “' + sel.options[sel.selectedIndex].text + '” — the hunter sees this instantly.');
+          renderTiles();
+          renderTable();
+        });
+      });
     }
 
-    var owedTotal = s.commissionPending + s.commissionApproved;
-    var huntersOwed = EMPLOYEES.filter(function (e) {
-      var es = statsFor(leadsOf(e.id));
-      return es.commissionPending + es.commissionApproved > 0;
-    }).length;
-
-    content.innerHTML =
-      '<div class="kpis">' +
+    function renderTiles() {
+      var s = statsFor(allLeads());
+      var owedTotal = s.commissionPending + s.commissionApproved;
+      var huntersOwed = EMPLOYEES.filter(function (e) {
+        var es = statsFor(leadsOf(e.id));
+        return es.commissionPending + es.commissionApproved > 0;
+      }).length;
+      document.getElementById('payout-tiles').innerHTML =
         tile('Still to pay', '<span class="money-pos">' + fmtMoneyC(owedTotal) + '</span>',
           fmtMoneyC(s.commissionPending) + ' pending review · ' + fmtMoneyC(s.commissionApproved) + ' approved') +
         tile('Paid to date', fmtMoneyC(s.commissionPaid), '') +
         tile('Hunters awaiting payout', fmtNum(huntersOwed), 'see Hunter Profiles for accounts') +
-        tile('Total commission', fmtMoneyC(s.commission), '20% of ' + fmtMoneyC(s.revenueNet) + ' net revenue') +
-      '</div>' +
+        tile('Total commission', fmtMoneyC(s.commission), '20% of ' + fmtMoneyC(s.revenueNet) + ' net revenue');
+    }
+
+    content.innerHTML =
+      '<div class="kpis" id="payout-tiles"></div>' +
       '<div class="filter-row">' +
         '<div class="seg" id="status-seg">' + [['all', 'All'], ['pending', 'Pending'], ['approved', 'Approved'], ['paid', 'Paid']].map(function (x, i) {
           return '<button data-seg="' + x[0] + '" class="' + (i === 0 ? 'active' : '') + '">' + x[1] + '</button>';
@@ -1364,6 +1382,7 @@
       URL.revokeObjectURL(a.href);
       toast('Payout run exported.');
     });
+    renderTiles();
     renderTable();
   }
 
@@ -1440,6 +1459,7 @@
   }
 
   /* ---------------- Boot ---------------- */
+  Object.assign(COMMISSION_STATUS_OVERRIDES, LS.get('paystatus', {}));
   applyTheme();
   window.addEventListener('hashchange', route);
   route();

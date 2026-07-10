@@ -348,6 +348,11 @@ td .cell-sub { display: block; color: var(--muted); font-size: 11.5px; }
 .status-chip.approved { background: color-mix(in srgb, var(--s1) 14%, transparent); color: var(--s1); }
 .status-chip.pending { background: color-mix(in srgb, var(--warning) 20%, transparent); color: var(--ink-2); }
 
+.status-select {
+  width: auto; padding: 5px 9px; font-size: 12px; font-weight: 600;
+  border-radius: 8px; color: var(--ink);
+}
+
 /* ---- Filter row ---- */
 .filter-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .filter-row .spacer { flex: 1; }

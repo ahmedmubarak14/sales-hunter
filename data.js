@@ -258,9 +258,12 @@ function commissionOf(lead) { // 20% of subscription value excl. VAT
 }
 function grossOf(lead) { return Math.round(lead.amountNet * (1 + VAT_RATE)); }
 
-// Commission payout status is driven by how long ago the deal closed.
+// Commission payout status: finance can override it (persisted by the
+// app); otherwise it is derived from how long ago the deal closed.
+var COMMISSION_STATUS_OVERRIDES = {};
 function commissionStatus(lead) {
   if (lead.stage !== 'won') return null;
+  if (COMMISSION_STATUS_OVERRIDES[lead.id]) return COMMISSION_STATUS_OVERRIDES[lead.id];
   var age = (NOW - wonDate(lead)) / DAY;
   if (age > 60) return 'paid';
   if (age > 25) return 'approved';
