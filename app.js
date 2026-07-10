@@ -158,8 +158,14 @@
     '/stores':     { title: 'Top Zid Stores',     icon: 'store',   render: viewTopStores, who: 'all' },
     '/manager':    { title: 'Program Overview',   icon: 'manager', render: viewManager,   who: 'mgr' },
     '/payouts':    { title: 'Commission Payouts', icon: 'money',   render: viewPayouts,   who: 'fin' },
+    '/hunters':    { title: 'Hunter Profiles',    icon: 'person',  render: viewHunters,   who: 'fin' },
     '/profile':    { title: 'My Profile',         icon: 'person',  render: viewProfile,   who: 'emp' }
   };
+
+  // Finance sees ONLY its own views; everyone else gets role + shared views
+  function canAccess(who, role) {
+    return role === 'fin' ? who === 'fin' : (who === 'all' || who === role);
+  }
 
   function route() {
     var h = location.hash.replace(/^#/, '') || '/';
@@ -167,7 +173,7 @@
     var home = homeOf(roleOf());
     if (!ROUTES[h]) { location.hash = '#' + home; return; }
     var r = ROUTES[h];
-    if (r.who !== 'all' && r.who !== roleOf()) { location.hash = '#' + home; return; }
+    if (!canAccess(r.who, roleOf())) { location.hash = '#' + home; return; }
     renderShell(h, r);
   }
 
@@ -226,8 +232,7 @@
   function renderShell(path, r) {
     var user = currentUser();
     var nav = Object.keys(ROUTES).filter(function (p) {
-      var who = ROUTES[p].who;
-      return who === 'all' || who === roleOf();
+      return canAccess(ROUTES[p].who, roleOf());
     }).map(function (p) {
       return '<a href="#' + p + '" class="' + (p === path ? 'active' : '') + '">' + ICONS[ROUTES[p].icon] + esc(ROUTES[p].title) + '</a>';
     }).join('');
@@ -1162,6 +1167,98 @@
       '</section>';
   }
 
+  /* ---- Finance: hunter profile drawer (full payout details) ---- */
+  function fmtIbanFull(iban) {
+    return iban ? iban.replace(/(.{4})/g, '$1 ').trim() : 'Not provided yet';
+  }
+  function openHunterDrawer(empId) {
+    var emp = EMPLOYEES.find(function (e) { return e.id === empId; });
+    if (!emp) return;
+    var saved = LS.get('profile.' + emp.id, {});
+    var pay = payoutDetailsOf(emp);
+    var s = statsFor(leadsOf(emp.id));
+    var old = document.getElementById('drawer-root');
+    if (old) old.remove();
+
+    var root = el('<div id="drawer-root">' +
+      '<div class="drawer-backdrop"></div>' +
+      '<div class="drawer" role="dialog" aria-label="Hunter profile">' +
+        '<div class="d-head"><div style="display:flex; align-items:center; gap:11px">' +
+          '<span class="avatar" style="width:42px;height:42px;flex:none;font-size:15px">' + esc(initials(emp.name)) + '</span>' +
+          '<div><h2>' + esc(emp.name) + '</h2>' +
+          '<p class="sub">' + esc(emp.title) + ' · ' + esc(emp.dept) + ' · Hunter ID ' + hunterCode(emp) + '</p></div></div>' +
+        '<button class="icon-btn" id="drawer-close" aria-label="Close">✕</button></div>' +
+
+        '<h3 class="eyebrow" style="margin-top:14px">Contact</h3>' +
+        '<dl class="d-kv">' +
+          '<dt>Company email</dt><dd>' + esc(saved.companyEmail || emp.email) + '</dd>' +
+          '<dt>Mobile</dt><dd>' + esc(saved.phone || emp.phone || '—') + '</dd>' +
+          (saved.personalEmail ? '<dt>Personal email</dt><dd>' + esc(saved.personalEmail) + '</dd>' : '') +
+        '</dl>' +
+
+        '<h3 class="eyebrow">Payout account</h3>' +
+        '<dl class="d-kv">' +
+          '<dt>Bank</dt><dd>' + esc(pay.bank) + '</dd>' +
+          '<dt>IBAN</dt><dd style="font-variant-numeric:tabular-nums">' + esc(fmtIbanFull(pay.iban)) + '</dd>' +
+          '<dt>Payout method</dt><dd>' + esc(saved.payMethod || 'Bank transfer (payroll)') + '</dd>' +
+          (saved.nationalId ? '<dt>National ID / Iqama</dt><dd>' + esc(saved.nationalId) + '</dd>' : '') +
+        '</dl>' +
+        '<span class="hs-chip">🔒 Full IBAN visible to finance only — every view is access-logged in production</span>' +
+
+        '<h3 class="eyebrow" style="margin-top:16px">Commission summary</h3>' +
+        '<dl class="d-kv">' +
+          '<dt>Deals won</dt><dd>' + fmtNum(s.won) + '</dd>' +
+          '<dt>Still to pay</dt><dd><b class="money-pos">' + fmtMoney(s.commissionPending + s.commissionApproved) + '</b></dd>' +
+          '<dt>Paid to date</dt><dd>' + fmtMoney(s.commissionPaid) + '</dd>' +
+          '<dt>Lifetime commission</dt><dd>' + fmtMoney(s.commission) + '</dd>' +
+        '</dl>' +
+      '</div></div>');
+    document.body.appendChild(root);
+    function close() { root.remove(); document.removeEventListener('keydown', onKey); }
+    function onKey(e) { if (e.key === 'Escape') close(); }
+    root.querySelector('.drawer-backdrop').addEventListener('click', close);
+    root.querySelector('#drawer-close').addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+  }
+
+  /* ---- Finance: hunter directory ---- */
+  function viewHunters(content) {
+    var rows = EMPLOYEES.map(function (e) {
+      var s = statsFor(leadsOf(e.id));
+      var pay = payoutDetailsOf(e);
+      return { e: e, s: s, pay: pay };
+    }).sort(function (a, b) {
+      return (b.s.commissionPending + b.s.commissionApproved) - (a.s.commissionPending + a.s.commissionApproved);
+    });
+
+    content.innerHTML =
+      '<section class="card">' +
+        '<div class="card-head"><div><h3>Hunter profiles</h3>' +
+        '<p class="sub">Click a hunter to see full profile and payout account details</p></div></div>' +
+        '<div class="tbl-wrap"><table>' +
+          '<thead><tr><th>Hunter</th><th>Contact</th><th class="num">Deals won</th><th class="num">Still to pay</th><th class="num">Paid to date</th><th>Bank</th><th>IBAN</th></tr></thead>' +
+          '<tbody>' + rows.map(function (r) {
+            var owed = r.s.commissionPending + r.s.commissionApproved;
+            return '<tr class="rowlink" data-hunter="' + r.e.id + '" tabindex="0">' +
+              '<td><b>' + esc(r.e.name) + '</b><span class="cell-sub">' + esc(r.e.title) + ' · ' + esc(r.e.dept) + '</span></td>' +
+              '<td>' + esc(r.e.email) + '<span class="cell-sub">' + esc(r.e.phone || '') + '</span></td>' +
+              '<td class="num">' + fmtNum(r.s.won) + '</td>' +
+              '<td class="num">' + (owed ? '<b class="money-pos">' + fmtMoney(owed) + '</b>' : '—') + '</td>' +
+              '<td class="num">' + (r.s.commissionPaid ? fmtMoney(r.s.commissionPaid) : '—') + '</td>' +
+              '<td>' + esc(r.pay.bank) + '</td>' +
+              '<td>' + esc(maskIban(r.pay.iban)) + '</td>' +
+            '</tr>';
+          }).join('') + '</tbody>' +
+        '</table></div>' +
+      '</section>';
+
+    content.querySelectorAll('[data-hunter]').forEach(function (tr) {
+      function open() { openHunterDrawer(tr.getAttribute('data-hunter')); }
+      tr.addEventListener('click', open);
+      tr.addEventListener('keydown', function (e) { if (e.key === 'Enter') open(); });
+    });
+  }
+
   /* ---- Finance: commission payouts ---- */
   function viewPayouts(content) {
     var statusFilter = 'all';
@@ -1182,7 +1279,9 @@
         var pay = hunter ? payoutDetailsOf(hunter) : { bank: '—', iban: '' };
         var cs = commissionStatus(l);
         return '<tr>' +
-          '<td><b>' + esc(hunter ? hunter.name : 'Unknown') + '</b><span class="cell-sub">' + esc(hunter ? hunter.dept : '') + '</span></td>' +
+          '<td>' + (hunter
+            ? '<a href="#" class="hunter-link" data-hunter="' + hunter.id + '"><b>' + esc(hunter.name) + '</b></a><span class="cell-sub">' + esc(hunter.dept) + '</span>'
+            : '<b>Unknown</b>') + '</td>' +
           '<td><b>' + esc(l.company) + '</b><span class="cell-sub">deal ' + esc(l.id) + ' · <a href="#" class="hs-link" data-deal="' + esc(l.id) + '">open in HubSpot ↗</a></span></td>' +
           '<td>' + fmtDate(wonDate(l)) + '</td>' +
           '<td>' + esc(l.salesOwner) + '</td>' +
@@ -1203,13 +1302,26 @@
           toast('In production this opens deal ' + a.getAttribute('data-deal') + ' in HubSpot.');
         });
       });
+      document.querySelectorAll('.hunter-link').forEach(function (a) {
+        a.addEventListener('click', function (e) {
+          e.preventDefault();
+          openHunterDrawer(a.getAttribute('data-hunter'));
+        });
+      });
     }
+
+    var owedTotal = s.commissionPending + s.commissionApproved;
+    var huntersOwed = EMPLOYEES.filter(function (e) {
+      var es = statsFor(leadsOf(e.id));
+      return es.commissionPending + es.commissionApproved > 0;
+    }).length;
 
     content.innerHTML =
       '<div class="kpis">' +
-        tile('Pending approval', fmtMoneyC(s.commissionPending), 'needs finance review') +
-        tile('Approved — next payroll', fmtMoneyC(s.commissionApproved), 'ready to pay') +
+        tile('Still to pay', '<span class="money-pos">' + fmtMoneyC(owedTotal) + '</span>',
+          fmtMoneyC(s.commissionPending) + ' pending review · ' + fmtMoneyC(s.commissionApproved) + ' approved') +
         tile('Paid to date', fmtMoneyC(s.commissionPaid), '') +
+        tile('Hunters awaiting payout', fmtNum(huntersOwed), 'see Hunter Profiles for accounts') +
         tile('Total commission', fmtMoneyC(s.commission), '20% of ' + fmtMoneyC(s.revenueNet) + ' net revenue') +
       '</div>' +
       '<div class="filter-row">' +
