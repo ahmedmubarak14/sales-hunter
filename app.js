@@ -923,6 +923,21 @@
 
     var reasonsLost = Object.keys(s.lostReasons).map(function (k) { return { label: k, count: s.lostReasons[k] }; })
       .sort(function (a, b) { return b.count - a.count; });
+    var reasonsUnq = Object.keys(s.unqualReasons).map(function (k) { return { label: k, count: s.unqualReasons[k] }; })
+      .sort(function (a, b) { return b.count - a.count; });
+
+    // Live pipeline board: current count + value sitting in each stage
+    var stageValue = {};
+    STAGES.forEach(function (st) { stageValue[st.id] = 0; });
+    all.forEach(function (l) { stageValue[l.stage] += l.amountNet; });
+    var stageNowRows = STAGES.map(function (st) {
+      var count = s.byStage[st.id];
+      var val;
+      if (st.group === 'open') val = fmtMoneyC(stageValue[st.id]);
+      else if (st.group === 'won') val = '<b class="money-pos">' + fmtMoneyC(stageValue[st.id]) + '</b>';
+      else val = '—';
+      return '<tr><td>' + stagePill(st.id) + '</td><td class="num"><b>' + fmtNum(count) + '</b></td><td class="num">' + val + '</td></tr>';
+    }).join('');
 
     content.innerHTML =
       '<div class="kpis">' +
@@ -971,6 +986,39 @@
           svg: funnelSVG(s.funnel),
           table: { head: ['Stage', 'Leads reached'], rows: s.funnel.map(function (f) { return [f.stage, fmtNum(f.count)]; }) }
         }) +
+        '<section class="card">' +
+          '<div class="card-head"><div><h3>Deals by stage right now</h3>' +
+          '<p class="sub">Live count in each pipeline stage — mirrors the HubSpot board</p></div></div>' +
+          '<div class="tbl-wrap"><table class="mini">' +
+            '<thead><tr><th>Stage</th><th class="num">Deals</th><th class="num">Value (excl. VAT)</th></tr></thead>' +
+            '<tbody>' + stageNowRows + '</tbody>' +
+          '</table></div>' +
+        '</section>' +
+      '</div>' +
+
+      '<div class="grid-2">' +
+        '<section class="card">' +
+          '<div class="card-head"><div><h3>Outcome split</h3><p class="sub">All ' + fmtNum(s.total) + ' leads to date</p></div></div>' +
+          '<div class="legend">' +
+            '<span class="lg"><i class="sw good"></i>Won</span><span class="lg"><i class="sw critical"></i>Lost</span>' +
+            '<span class="lg"><i class="sw gray"></i>Unqualified</span><span class="lg"><i class="sw s1"></i>Still open</span>' +
+          '</div>' +
+          stackedBarSVG([
+            { label: 'Closed won', count: s.won, cls: 'good' },
+            { label: 'Closed lost', count: s.lost, cls: 'critical' },
+            { label: 'Unqualified', count: s.unqualified, cls: 'gray' },
+            { label: 'Still open', count: s.open, cls: 's1' }
+          ]) +
+          '<div class="tbl-wrap"><table class="mini">' +
+            '<thead><tr><th>Outcome</th><th class="num">Leads</th><th class="num">Amount</th></tr></thead>' +
+            '<tbody>' +
+              '<tr><td>Closed won</td><td class="num"><b>' + fmtNum(s.won) + '</b></td><td class="num"><b class="money-pos">' + fmtMoneyC(s.revenueNet) + '</b> revenue</td></tr>' +
+              '<tr><td>Still open</td><td class="num"><b>' + fmtNum(s.open) + '</b></td><td class="num">' + fmtMoneyC(s.pipelineValue) + ' in play</td></tr>' +
+              '<tr><td>Closed lost</td><td class="num"><b>' + fmtNum(s.lost) + '</b></td><td class="num">—</td></tr>' +
+              '<tr><td>Unqualified</td><td class="num"><b>' + fmtNum(s.unqualified) + '</b></td><td class="num">—</td></tr>' +
+            '</tbody>' +
+          '</table></div>' +
+        '</section>' +
         chartCard({
           title: 'Leads submitted by month', subtitle: 'Program-wide, last 12 months',
           svg: columnsSVG(months.map(function (m) { return m.label; }), byMonth, { aria: 'Program leads by month' }),
@@ -1013,6 +1061,11 @@
       '</div>' +
 
       '<div class="grid-2">' +
+        chartCard({
+          title: 'Why leads were unqualified', subtitle: 'Program-wide (' + fmtNum(s.unqualified) + ' unqualified leads)',
+          svg: hbarsSVG(reasonsUnq.slice(0, 6), { aria: 'Program unqualified reasons', cls: 'gray' }),
+          table: { head: ['Reason', 'Leads'], rows: reasonsUnq.map(function (x) { return [x.label, fmtNum(x.count)]; }) }
+        }) +
         '<section class="card">' +
           '<div class="card-head"><div><h3>Where the wins come from</h3><p class="sub">Closed-won stores by category</p></div></div>' +
           '<div class="tbl-wrap"><table class="mini">' +
@@ -1022,6 +1075,9 @@
             }).join('') : '<tr><td colspan="4"><div class="empty">No closed-won stores yet.</div></td></tr>') + '</tbody>' +
           '</table></div>' +
         '</section>' +
+      '</div>' +
+
+      '<div class="grid-2">' +
         '<section class="card">' +
           '<div class="card-head"><div><h3>Commission payout status</h3><p class="sub">For finance — where every riyal of commission stands</p></div></div>' +
           '<div class="tbl-wrap"><table class="mini">' +
@@ -1034,9 +1090,6 @@
             '</tbody>' +
           '</table></div>' +
         '</section>' +
-      '</div>' +
-
-      '<div class="grid-2">' +
         '<section class="card">' +
           '<div class="card-head"><div><h3>Hunters who may need coaching</h3>' +
           '<p class="sub">8+ leads with conversion well below the program average of ' + fmtPct(avgConv, 0) + '</p></div></div>' +
@@ -1046,11 +1099,12 @@
               '<span class="why">' + fmtPct(r.s.conversion, 0) + ' conversion<br>' + fmtNum(r.s.unqualified) + ' unqualified</span></div>';
           }).join('') : '<div class="empty">Nobody flagged — every active hunter is near or above the average.</div>') +
         '</section>' +
-        '<section class="card">' +
-          '<div class="card-head"><div><h3>Leaderboard</h3><p class="sub">Full ranking is on the Leaderboard page</p></div>' +
-          '<a class="ghost-btn" href="#/leaderboard" style="text-decoration:none">Open</a></div>' +
-        '</section>' +
-      '</div>';
+      '</div>' +
+
+      '<section class="card">' +
+        '<div class="card-head"><div><h3>Leaderboard</h3><p class="sub">Full ranking is on the Leaderboard page</p></div>' +
+        '<a class="ghost-btn" href="#/leaderboard" style="text-decoration:none">Open</a></div>' +
+      '</section>';
   }
 
   /* ---- Profile ---- */
