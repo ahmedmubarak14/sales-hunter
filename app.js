@@ -31,6 +31,20 @@
   }
   function homeOf(role) { return role === 'mgr' ? '/manager' : role === 'fin' ? '/payouts' : '/dashboard'; }
 
+  /* Payslips uploaded by finance, keyed by deal id (demo: stored locally) */
+  function getSlips() { return LS.get('payslips', {}); }
+  function saveSlip(dealId, slip) {
+    var slips = getSlips();
+    slips[dealId] = slip;
+    try { localStorage.setItem('sh.payslips', JSON.stringify(slips)); return true; }
+    catch (e) { return false; } // storage quota exceeded
+  }
+  function slipLink(dealId, cls) {
+    var slip = getSlips()[dealId];
+    if (!slip) return '';
+    return '<a class="' + (cls || '') + '" href="' + slip.dataUrl + '" download="' + esc(slip.name) + '">Payslip ↓</a>';
+  }
+
   /* Payout details: saved profile overrides the employee defaults */
   function payoutDetailsOf(emp) {
     var saved = LS.get('profile.' + emp.id, {});
@@ -682,7 +696,8 @@
         '<td>' + fmtDate(wonDate(l)) + '</td>' +
         '<td class="num">' + fmtMoney(l.amountNet) + '</td>' +
         '<td class="num"><b>' + fmtMoney(commissionOf(l)) + '</b></td>' +
-        '<td><span class="status-chip ' + cs + '">' + (cs === 'paid' ? 'Paid' : cs === 'approved' ? 'Approved' : 'Pending approval') + '</span></td>' +
+        '<td><span class="status-chip ' + cs + '">' + (cs === 'paid' ? 'Paid' : cs === 'approved' ? 'Approved' : 'Pending approval') + '</span>' +
+          (cs === 'paid' && getSlips()[l.id] ? '<span class="cell-sub">' + slipLink(l.id) + '</span>' : '') + '</td>' +
       '</tr>';
     }).join('');
 
@@ -1334,13 +1349,18 @@
             [['pending', 'Pending approval'], ['approved', 'Approved'], ['paid', 'Paid']].map(function (o) {
               return '<option value="' + o[0] + '"' + (o[0] === cs ? ' selected' : '') + '>' + o[1] + '</option>';
             }).join('') + '</select></td>' +
+          '<td>' + (cs === 'paid'
+            ? (getSlips()[l.id]
+                ? slipLink(l.id) + '<span class="cell-sub"><button class="linklike slip-up" data-deal="' + esc(l.id) + '">replace</button></span>'
+                : '<button class="ghost-btn slip-up" data-deal="' + esc(l.id) + '">Upload payslip</button>')
+            : '<span class="cell-sub">after payment</span>') + '</td>' +
           '<td>' + esc(pay.bank) + '<span class="cell-sub">' + esc(maskIban(pay.iban)) + '</span></td>' +
         '</tr>';
       }).join('');
       document.getElementById('payout-table').innerHTML =
         '<div class="tbl-wrap"><table>' +
-          '<thead><tr><th>Hunter</th><th>Deal</th><th>Closed won</th><th>Closed by (sales rep)</th><th class="num">Value (excl. VAT)</th><th class="num">Commission (20%)</th><th>Status</th><th>Payout account</th></tr></thead>' +
-          '<tbody>' + (rows || '<tr><td colspan="8"><div class="empty">No payouts match this filter.</div></td></tr>') + '</tbody>' +
+          '<thead><tr><th>Hunter</th><th>Deal</th><th>Closed won</th><th>Closed by (sales rep)</th><th class="num">Value (excl. VAT)</th><th class="num">Commission (20%)</th><th>Status</th><th>Payslip</th><th>Payout account</th></tr></thead>' +
+          '<tbody>' + (rows || '<tr><td colspan="9"><div class="empty">No payouts match this filter.</div></td></tr>') + '</tbody>' +
         '</table></div>';
       document.querySelectorAll('.hs-link').forEach(function (a) {
         a.addEventListener('click', function (e) {
@@ -1361,9 +1381,17 @@
           overrides[dealId] = sel.value;
           LS.set('paystatus', overrides);
           COMMISSION_STATUS_OVERRIDES[dealId] = sel.value;
-          toast('Deal ' + dealId + ' marked “' + sel.options[sel.selectedIndex].text + '” — the hunter sees this instantly.');
+          toast(sel.value === 'paid'
+            ? 'Deal ' + dealId + ' marked “Paid” — attach the payslip so the hunter has proof.'
+            : 'Deal ' + dealId + ' marked “' + sel.options[sel.selectedIndex].text + '” — the hunter sees this instantly.');
           renderTiles();
           renderTable();
+        });
+      });
+      document.querySelectorAll('.slip-up').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          pendingSlipDeal = btn.getAttribute('data-deal');
+          document.getElementById('slip-file').click();
         });
       });
     }
@@ -1393,7 +1421,27 @@
         '<button class="btn secondary" id="dl-payouts">Export payout run (CSV)</button>' +
       '</div>' +
       '<div class="card" id="payout-table"></div>' +
-      '<p class="sub" style="text-align:center">Payout accounts come from each hunter’s profile. IBANs are shown masked; in production the full IBAN is revealed to finance only at payout time, with access logged.</p>';
+      '<input type="file" id="slip-file" hidden accept="application/pdf,image/png,image/jpeg">' +
+      '<p class="sub" style="text-align:center">Payout accounts come from each hunter’s profile. IBANs are shown masked; in production the full IBAN is revealed to finance only at payout time, with access logged. Payslips are visible to the hunter and finance only.</p>';
+
+    var pendingSlipDeal = null;
+    document.getElementById('slip-file').addEventListener('change', function () {
+      var f = this.files[0];
+      this.value = '';
+      if (!f || !pendingSlipDeal) return;
+      if (f.size > 1.5 * 1024 * 1024) { toast('Keep payslips under 1.5 MB in the demo.'); return; }
+      var deal = pendingSlipDeal;
+      var reader = new FileReader();
+      reader.onload = function () {
+        if (saveSlip(deal, { name: f.name, dataUrl: reader.result, uploadedAt: new Date().toISOString() })) {
+          toast('Payslip attached to deal ' + deal + ' — the hunter can download it now.');
+          renderTable();
+        } else {
+          toast('Could not store the file — browser storage is full.');
+        }
+      };
+      reader.readAsDataURL(f);
+    });
 
     document.querySelectorAll('#status-seg button').forEach(function (b) {
       b.addEventListener('click', function () {
