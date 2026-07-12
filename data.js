@@ -59,18 +59,52 @@ var PLANS = [
   { name: 'Professional', price: 20000 }
 ];
 
-/* Top-performing Zid store per category (mock showcase for pitching) */
-var TOP_STORES = [
-  { category: 'Fashion & Apparel',  store: 'Lamsa Boutique',      city: 'Riyadh',  ordersMo: 4236, growth: 0.38, blurb: 'Instagram seller that moved to Zid and tripled repeat purchases with its own app.' },
-  { category: 'Food & Beverage',    store: 'Bin Saif Roastery',   city: 'Jeddah',  ordersMo: 3105, growth: 0.52, blurb: 'Subscription coffee boxes now drive half of monthly revenue.' },
-  { category: 'Beauty & Care',      store: 'Nara Beauty',         city: 'Riyadh',  ordersMo: 2870, growth: 0.44, blurb: 'Launched on Zid in Ramadan season and hit 10K orders in six months.' },
-  { category: 'Electronics',        store: 'Volt Store',          city: 'Khobar',  ordersMo: 1922, growth: 0.27, blurb: 'Uses Zid shipping integrations to deliver same-day in the Eastern Province.' },
-  { category: 'Home & Furniture',   store: 'Dar Alwan',           city: 'Dammam',  ordersMo: 1490, growth: 0.31, blurb: 'Bulky-item logistics handled end-to-end through Zid partners.' },
-  { category: 'Health & Sports',    store: 'Enduro KSA',          city: 'Riyadh',  ordersMo: 1218, growth: 0.35, blurb: 'Grew from a gym counter to nationwide supplements delivery.' },
-  { category: 'Gifts & Flowers',    store: 'Ward & Co.',          city: 'Jeddah',  ordersMo: 987,  growth: 0.41, blurb: 'Same-day gifting with scheduled delivery slots at checkout.' },
-  { category: 'Grocery',            store: 'Baqalah Plus',        city: 'Madinah', ordersMo: 2540, growth: 0.22, blurb: 'Neighborhood mini-market turned quick-commerce operation.' },
-  { category: 'Books & Stationery', store: 'Warraq',              city: 'Riyadh',  ordersMo: 640,  growth: 0.18, blurb: 'Niche Arabic titles with nationwide reach and pre-orders.' },
-  { category: 'Pets',               store: 'Mishmish Pets',       city: 'Jeddah',  ordersMo: 512,  growth: 0.29, blurb: 'Recurring pet-food subscriptions keep customers for years.' }
+/* Top-performing Zid stores by category (mock showcase for pitching).
+   First store in each list is the category leader. */
+var STORE_SHOWCASE = [
+  { category: 'Fashion & Apparel', stores: [
+    { name: 'Lamsa Boutique', city: 'Riyadh', ordersMo: 4236, growth: 0.38, blurb: 'Instagram seller that moved to Zid and tripled repeat purchases with its own app.' },
+    { name: 'Thoub & Co.', city: 'Jeddah', ordersMo: 2380, growth: 0.26, blurb: 'Made-to-measure thoubs with a 4-day promise, powered by Zid shipping rules.' },
+    { name: 'Mishkah Abayas', city: 'Dammam', ordersMo: 1140, growth: 0.21, blurb: 'Moved from WhatsApp orders to a full storefront in one week.' }
+  ]},
+  { category: 'Food & Beverage', stores: [
+    { name: 'Bin Saif Roastery', city: 'Jeddah', ordersMo: 3105, growth: 0.52, blurb: 'Subscription coffee boxes now drive half of monthly revenue.' },
+    { name: 'Halawiyat Noura', city: 'Makkah', ordersMo: 1870, growth: 0.33, blurb: 'Seasonal sweets with pre-order windows for Eid and Ramadan.' },
+    { name: 'Tamr House', city: 'Madinah', ordersMo: 1420, growth: 0.24, blurb: 'Premium dates exported to the Gulf through Zid’s shipping partners.' }
+  ]},
+  { category: 'Beauty & Care', stores: [
+    { name: 'Nara Beauty', city: 'Riyadh', ordersMo: 2870, growth: 0.44, blurb: 'Launched on Zid in Ramadan season and hit 10K orders in six months.' },
+    { name: 'Oud & Co.', city: 'Jeddah', ordersMo: 1560, growth: 0.29, blurb: 'Niche fragrance house with bundle builders at checkout.' },
+    { name: 'Sahara Skin', city: 'Khobar', ordersMo: 830, growth: 0.22, blurb: 'Clean-beauty brand running loyalty points through Zid apps.' }
+  ]},
+  { category: 'Electronics', stores: [
+    { name: 'Volt Store', city: 'Khobar', ordersMo: 1922, growth: 0.27, blurb: 'Uses Zid shipping integrations to deliver same-day in the Eastern Province.' },
+    { name: 'Gadget Hub KSA', city: 'Riyadh', ordersMo: 1310, growth: 0.19, blurb: 'Accessories retailer with installment payments enabled.' }
+  ]},
+  { category: 'Home & Furniture', stores: [
+    { name: 'Dar Alwan', city: 'Dammam', ordersMo: 1490, growth: 0.31, blurb: 'Bulky-item logistics handled end-to-end through Zid partners.' },
+    { name: 'Majlis Studio', city: 'Riyadh', ordersMo: 960, growth: 0.25, blurb: 'Custom majlis seating with a 3D preview before ordering.' }
+  ]},
+  { category: 'Health & Sports', stores: [
+    { name: 'Enduro KSA', city: 'Riyadh', ordersMo: 1218, growth: 0.35, blurb: 'Grew from a gym counter to nationwide supplements delivery.' },
+    { name: 'Yalla Fit', city: 'Jeddah', ordersMo: 720, growth: 0.28, blurb: 'Home-gym gear with subscription coaching add-ons.' }
+  ]},
+  { category: 'Gifts & Flowers', stores: [
+    { name: 'Ward & Co.', city: 'Jeddah', ordersMo: 987, growth: 0.41, blurb: 'Same-day gifting with scheduled delivery slots at checkout.' },
+    { name: 'Hadiya Box', city: 'Riyadh', ordersMo: 640, growth: 0.30, blurb: 'Curated gift boxes for corporate clients and weddings.' }
+  ]},
+  { category: 'Grocery', stores: [
+    { name: 'Baqalah Plus', city: 'Madinah', ordersMo: 2540, growth: 0.22, blurb: 'Neighborhood mini-market turned quick-commerce operation.' },
+    { name: 'Souq Al Hay', city: 'Abha', ordersMo: 1120, growth: 0.17, blurb: 'Fresh produce with morning delivery windows.' }
+  ]},
+  { category: 'Books & Stationery', stores: [
+    { name: 'Warraq', city: 'Riyadh', ordersMo: 640, growth: 0.18, blurb: 'Niche Arabic titles with nationwide reach and pre-orders.' },
+    { name: 'Qalam Studio', city: 'Jeddah', ordersMo: 380, growth: 0.15, blurb: 'Stationery and art supplies for schools and studios.' }
+  ]},
+  { category: 'Pets', stores: [
+    { name: 'Mishmish Pets', city: 'Jeddah', ordersMo: 512, growth: 0.29, blurb: 'Recurring pet-food subscriptions keep customers for years.' },
+    { name: 'Paws Riyadh', city: 'Riyadh', ordersMo: 310, growth: 0.23, blurb: 'Grooming bookings and supplies in one storefront.' }
+  ]}
 ];
 var SALES_OWNERS = ['Fahad Al-Otaibi', 'Sara Al-Zahrani', 'Mohammed Iqbal', 'Lama Al-Harbi'];
 var BANKS = ['Al Rajhi Bank', 'Saudi National Bank', 'Riyad Bank', 'Alinma Bank', 'SAB', 'Bank Albilad', 'Arab National Bank'];

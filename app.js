@@ -792,7 +792,7 @@
       '</section>';
   }
 
-  /* ---- Top Zid stores by category ---- */
+  /* ---- Top Zid stores: categories first, drill into each ---- */
   function viewTopStores(content, user) {
     var myLeads = isManager() ? [] : leadsOf(user.id);
     var mineByCat = {};
@@ -808,30 +808,73 @@
       catWin[l.industry].decided += 1;
       if (l.stage === 'won') catWin[l.industry].won += 1;
     });
+    function winRateOf(cat) {
+      return catWin[cat] && catWin[cat].decided >= 3 ? catWin[cat].won / catWin[cat].decided : null;
+    }
 
-    content.innerHTML =
-      '<div class="card" style="display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; align-items:center">' +
-        '<div><h2>The stores winning on Zid right now</h2>' +
-        '<p class="sub">One top performer per category — use them as proof points when you pitch a merchant. “Stores like yours do this on Zid.”</p></div>' +
-      '</div>' +
-      '<div class="store-grid">' +
-      TOP_STORES.map(function (t) {
-        var wr = catWin[t.category] && catWin[t.category].decided >= 3
-          ? catWin[t.category].won / catWin[t.category].decided : null;
-        var mine = mineByCat[t.category] || 0;
-        return '<section class="card store-card">' +
-          '<div class="s-cat"><span class="cat-chip">' + esc(t.category) + '</span>' +
-          (wr !== null ? '<span class="s-city" title="Program-wide win rate of decided leads in this category">' + fmtPct(wr, 0) + ' win rate</span>' : '') + '</div>' +
-          '<div><h3>' + esc(t.store) + '</h3><span class="s-city">' + esc(t.city) + '</span></div>' +
-          '<div class="s-metrics">' +
-            '<div class="s-metric"><b>' + fmtNum(t.ordersMo) + '</b><span>orders / month</span></div>' +
-            '<div class="s-metric"><b class="money-pos">+' + Math.round(t.growth * 100) + '%</b><span>growth this year</span></div>' +
-          '</div>' +
-          '<p class="s-blurb">' + esc(t.blurb) + '</p>' +
-          (mine ? '<span class="s-mine">You have ' + mine + (mine === 1 ? ' lead' : ' leads') + ' in this category</span>' : '') +
-        '</section>';
-      }).join('') +
-      '</div>';
+    function renderCategories() {
+      content.innerHTML =
+        '<div class="card" style="display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; align-items:center">' +
+          '<div><h2>The stores winning on Zid right now</h2>' +
+          '<p class="sub">Pick a category to see its top performers — proof points for your pitch: “stores like yours do this on Zid.”</p></div>' +
+        '</div>' +
+        '<div class="store-grid">' +
+        STORE_SHOWCASE.map(function (c, i) {
+          var wr = winRateOf(c.category);
+          var mine = mineByCat[c.category] || 0;
+          var leader = c.stores[0];
+          return '<button class="card store-card cat-card" data-cat="' + i + '">' +
+            '<div class="s-cat"><span class="cat-chip">' + esc(c.category) + '</span>' +
+            (wr !== null ? '<span class="s-city" title="Program-wide win rate of decided leads in this category">' + fmtPct(wr, 0) + ' win rate</span>' : '') + '</div>' +
+            '<div><h3>№1 · ' + esc(leader.name) + '</h3><span class="s-city">' + esc(leader.city) + ' · ' + fmtNum(leader.ordersMo) + ' orders / month</span></div>' +
+            '<p class="s-blurb">' + c.stores.length + ' top ' + (c.stores.length === 1 ? 'store' : 'stores') + ' to use in your pitch' +
+              (mine ? ' · <span class="s-mine">you have ' + mine + (mine === 1 ? ' lead' : ' leads') + ' here</span>' : '') + '</p>' +
+            '<span class="s-open">Browse category →</span>' +
+          '</button>';
+        }).join('') +
+        '</div>';
+      content.querySelectorAll('[data-cat]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          renderCategory(STORE_SHOWCASE[parseInt(btn.getAttribute('data-cat'), 10)]);
+          window.scrollTo(0, 0);
+        });
+      });
+    }
+
+    function renderCategory(c) {
+      var wr = winRateOf(c.category);
+      var mine = mineByCat[c.category] || 0;
+      content.innerHTML =
+        '<div class="filter-row">' +
+          '<button class="ghost-btn" id="back-cats">← All categories</button>' +
+        '</div>' +
+        '<div class="card" style="display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; align-items:center">' +
+          '<div><h2>' + esc(c.category) + '</h2>' +
+          '<p class="sub">Top Zid stores in this category' +
+            (wr !== null ? ' · hunter leads here close won ' + fmtPct(wr, 0) + ' of the time' : '') +
+            (mine ? ' · you have ' + mine + (mine === 1 ? ' lead' : ' leads') + ' in this category' : '') + '</p></div>' +
+        '</div>' +
+        '<div class="store-grid">' +
+        c.stores.map(function (t, i) {
+          return '<section class="card store-card">' +
+            '<div class="s-cat"><span class="rank-badge ' + (i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : '') + '">' + (i + 1) + '</span>' +
+            '<span class="s-city">' + esc(t.city) + '</span></div>' +
+            '<div><h3>' + esc(t.name) + '</h3></div>' +
+            '<div class="s-metrics">' +
+              '<div class="s-metric"><b>' + fmtNum(t.ordersMo) + '</b><span>orders / month</span></div>' +
+              '<div class="s-metric"><b class="money-pos">+' + Math.round(t.growth * 100) + '%</b><span>growth this year</span></div>' +
+            '</div>' +
+            '<p class="s-blurb">' + esc(t.blurb) + '</p>' +
+          '</section>';
+        }).join('') +
+        '</div>';
+      document.getElementById('back-cats').addEventListener('click', function () {
+        renderCategories();
+        window.scrollTo(0, 0);
+      });
+    }
+
+    renderCategories();
   }
 
   /* ---- Manager dashboard ---- */
