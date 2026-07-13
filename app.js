@@ -525,7 +525,7 @@
         var comm = l.stage === 'won' ? '<span class="money-pos">' + fmtMoneyC(commissionOf(l)) + '</span>'
           : (isOpen(l) && l.amountNet) ? '<span class="cell-sub">' + t('potential', { v: fmtMoneyC(l.amountNet * COMMISSION_RATE) }) + '</span>' : '—';
         return '<tr class="rowlink" data-lead="' + l.id + '" tabindex="0">' +
-          '<td><b>' + esc(l.company) + '</b><span class="cell-sub">' + esc(l.contact) + ' · ' + esc(trCity(l.city)) + '</span></td>' +
+          '<td><b>' + esc(l.company) + '</b><span class="cell-sub">' + [l.contact, trCity(l.city)].filter(Boolean).map(esc).join(' · ') + '</span></td>' +
           '<td>' + esc(trCat(l.industry)) + '</td>' +
           '<td>' + fmtDate(l.createdAt) + '</td>' +
           '<td>' + stagePill(l.stage) + '</td>' +
@@ -616,14 +616,18 @@
       '<div class="drawer-backdrop"></div>' +
       '<div class="drawer" role="dialog" aria-label="Lead detail">' +
         '<div class="d-head"><div><h2>' + esc(lead.company) + '</h2>' +
-        '<p class="sub">' + esc(lead.contact) + ' · ' + esc(trCat(lead.industry)) + ' · ' + esc(trCity(lead.city)) + '</p></div>' +
+        '<p class="sub">' + [lead.contact, trCat(lead.industry), trCity(lead.city)].filter(Boolean).map(esc).join(' · ') + '</p></div>' +
         '<button class="icon-btn" id="drawer-close" aria-label="Close">✕</button></div>' +
         '<span class="hs-chip">' + t('synced', { id: esc(lead.id) }) + '</span>' +
         '<dl class="d-kv">' +
           '<dt>' + t('stage') + '</dt><dd>' + stagePill(lead.stage) + '</dd>' +
           '<dt>' + t('dealOwner') + '</dt><dd>' + (lead.salesOwner === 'Unassigned' ? t('unassigned') : esc(lead.salesOwner)) + '</dd>' +
           (lead.plan ? '<dt>' + t('packageLbl') + '</dt><dd>' + t('zidPlan', { name: esc(trPlan(lead.plan)) }) + (lead.years === 2 ? t('yearTwo') : t('yearOne')) + '</dd>' : '') +
-          '<dt>' + t('source') + '</dt><dd>' + esc(trSource(lead.source)) + '</dd>' +
+          (lead.source ? '<dt>' + t('source') + '</dt><dd>' + esc(trSource(lead.source)) + '</dd>' : '') +
+          (lead.platform ? '<dt>' + t('platform') + '</dt><dd>' + esc(lead.platform) + '</dd>' : '') +
+          (lead.storeUrl ? '<dt>' + t('currentStore') + '</dt><dd><a href="' + esc(lead.storeUrl) + '" target="_blank" rel="noopener">' + esc(lead.storeUrl) + '</a></dd>' : '') +
+          (lead.contactEmail ? '<dt>' + t('merchantEmail') + '</dt><dd>' + esc(lead.contactEmail) + '</dd>' : '') +
+          (lead.phone ? '<dt>' + t('mobile') + '</dt><dd>' + esc(lead.phone) + '</dd>' : '') +
           '<dt>' + t('submitted') + '</dt><dd>' + fmtDate(lead.createdAt) + '</dd>' +
           (lead.amountNet
             ? '<dt>' + t('valueExVat') + '</dt><dd>' + fmtMoney(lead.amountNet) + '</dd>' +
@@ -631,6 +635,7 @@
             : '<dt>' + t('valueLbl') + '</dt><dd>' + t('scopedBySales') + '</dd>') +
           commissionRow + reasonRow +
         '</dl>' +
+        (lead.notes ? '<h3 class="eyebrow">' + t('hunterNotes') + '</h3><p class="sub" style="margin:6px 0 12px">' + esc(lead.notes) + '</p>' : '') +
         '<h3 class="eyebrow">' + t('timeline') + '</h3>' +
         '<ul class="timeline">' + timeline + '</ul>' +
       '</div></div>');
@@ -642,30 +647,35 @@
     document.addEventListener('keydown', onKey);
   }
 
-  /* ---- Submit lead ---- */
+  /* ---- Submit lead (mirrors the real referral form) ---- */
   function viewSubmit(content, user) {
+    var radios = PLATFORMS.map(function (p, i) {
+      return '<label class="radio-row"><input type="radio" name="f-platform" value="' + esc(p) + '"' + (i === -1 ? ' checked' : '') + '><span>' + esc(p) + '</span></label>';
+    }).join('');
+
     content.innerHTML =
       '<div class="card" style="max-width:720px">' +
         '<h2>' + t('submitTitle') + '</h2>' +
         '<p class="sub">' + t('submitSub') + '</p>' +
         '<form id="lead-form" style="margin-top:16px">' +
           '<div class="form-grid">' +
-            '<div><label class="f-label" for="f-company">' + t('merchantName') + '</label><input type="text" id="f-company" required placeholder="Lulwa Boutique"></div>' +
-            '<div><label class="f-label" for="f-industry">' + t('storeCat') + '</label><select id="f-industry">' +
-              INDUSTRIES.map(function (i) { return '<option value="' + esc(i) + '">' + esc(trCat(i)) + '</option>'; }).join('') + '</select></div>' +
-            '<div><label class="f-label" for="f-contact">' + t('contactPerson') + '</label><input type="text" id="f-contact" required placeholder="' + t('fullNamePh') + '"></div>' +
-            '<div><label class="f-label" for="f-phone">' + t('contactPhone') + '</label><input type="tel" id="f-phone" placeholder="+966 5X XXX XXXX"></div>' +
-            '<div><label class="f-label" for="f-email">' + t('contactEmail') + '</label><input type="email" id="f-email" placeholder="name@store.com"></div>' +
-            '<div><label class="f-label" for="f-city">' + t('city') + '</label><select id="f-city">' +
-              CITIES.map(function (c) { return '<option value="' + esc(c) + '">' + esc(trCity(c)) + '</option>'; }).join('') + '</select></div>' +
-            '<div><label class="f-label" for="f-source">' + t('howKnow') + '</label><select id="f-source">' +
-              SOURCES.map(function (s) { return '<option value="' + esc(s) + '">' + esc(trSource(s)) + '</option>'; }).join('') + '</select></div>' +
-            '<div><label class="f-label" for="f-plan">' + t('likelyPackage') + '</label><select id="f-plan">' +
-              '<option value="">' + t('notSure') + '</option>' +
-              PLANS.map(function (p) { return '<option value="' + p.price + '">' + t('zidPlan', { name: esc(trPlan(p.name)) }) + ' — ' + t('perYear', { v: fmtMoney(p.price) }) + '</option>'; }).join('') + '</select>' +
-              '<p class="f-hint">' + t('commissionHint', { rate: ratePct() }) + '</p></div>' +
-            '<div class="full"><label class="f-label" for="f-notes">' + t('whyGood') + '</label>' +
-              '<textarea id="f-notes" rows="3" placeholder="' + t('notesPh') + '"></textarea></div>' +
+            '<div><label class="f-label" for="f-company">' + t('merchantNameLbl') + '</label><input type="text" id="f-company" required></div>' +
+            '<div><label class="f-label" for="f-email">' + t('merchantEmail') + '</label><input type="email" id="f-email" placeholder="name@store.com"></div>' +
+            '<div><label class="f-label" for="f-phone">' + t('phoneReq') + '</label><input type="tel" id="f-phone" required placeholder="+966 5X XXX XXXX"></div>' +
+            '<div><label class="f-label" for="f-industry">' + t('industryLbl') + '</label>' +
+              '<input type="text" id="f-industry" list="industry-list" placeholder="' + t('industryPh') + '">' +
+              '<datalist id="industry-list">' + INDUSTRIES.map(function (i) { return '<option value="' + esc(i) + '">' + esc(trCat(i)) + '</option>'; }).join('') + '</datalist></div>' +
+            '<div class="full"><span class="f-label">' + t('platformLbl') + '</span>' +
+              '<div class="radio-list" id="f-platform-group">' + radios + '</div></div>' +
+            '<div class="full"><label class="f-label" for="f-store">' + t('storeLink') + '</label>' +
+              '<input type="url" id="f-store" placeholder="https://">' +
+              '<p class="f-hint">' + t('storeLinkHint') + '</p></div>' +
+            '<div class="full"><label class="f-label" for="f-notes">' + t('extraNotes') + '</label>' +
+              '<textarea id="f-notes" rows="3"></textarea>' +
+              '<p class="f-hint">' + t('extraNotesHint') + '</p></div>' +
+            '<div class="full"><label class="f-label" for="f-owner">' + t('leadOwnerEmail') + '</label>' +
+              '<input type="email" id="f-owner" value="' + esc(user.email || '') + '" readonly>' +
+              '<p class="f-hint">' + t('ownerAutoHint') + '</p></div>' +
           '</div>' +
           '<div style="margin-top:16px; display:flex; gap:10px; align-items:center">' +
             '<button type="submit" class="btn">' + t('submitBtn') + '</button>' +
@@ -677,10 +687,10 @@
     document.getElementById('lead-form').addEventListener('submit', function (e) {
       e.preventDefault();
       var company = document.getElementById('f-company').value.trim();
-      var contact = document.getElementById('f-contact').value.trim();
-      if (!company || !contact) { toast(t('requiredErr')); return; }
-      var planPrice = parseInt(document.getElementById('f-plan').value, 10);
-      var plan = PLANS.find(function (p) { return p.price === planPrice; });
+      var phone = document.getElementById('f-phone').value.trim();
+      var platformEl = document.querySelector('input[name="f-platform"]:checked');
+      if (!company || !phone || !platformEl) { toast(t('submitReqErr')); return; }
+      var industry = document.getElementById('f-industry').value.trim();
       // Anchor to the demo's frozen "today" so the lead lands inside every
       // monthly chart window (the whole dataset lives at NOW).
       var now = new Date(NOW.getTime());
@@ -689,16 +699,22 @@
         id: 'L-N' + (1000 + leads.length + 1),
         hunterId: user.id,
         company: company,
-        contact: contact,
-        plan: plan ? plan.name : null,   // "Not sure" stays honest: no package
+        contact: '',
+        contactEmail: document.getElementById('f-email').value.trim(),
+        phone: phone,
+        platform: platformEl.value,
+        storeUrl: document.getElementById('f-store').value.trim(),
+        notes: document.getElementById('f-notes').value.trim(),
+        ownerEmail: document.getElementById('f-owner').value.trim(),
+        plan: null,
         years: 1,
-        industry: document.getElementById('f-industry').value,
-        city: document.getElementById('f-city').value,
-        source: document.getElementById('f-source').value,
+        industry: industry || INDUSTRIES[0],
+        city: '',
+        source: null,
         createdAt: now.toISOString(),
         stage: 'new',
         events: [{ stage: 'new', date: now.toISOString() }],
-        amountNet: plan ? plan.price : 0, // 0 = sales will scope it
+        amountNet: 0, // sales will scope the package
         lostReason: null, unqualReason: null,
         salesOwner: 'Unassigned'
       });
@@ -1154,6 +1170,7 @@
     // definition as everywhere else), hidden below 3 decided.
     var sources = {};
     all.forEach(function (l) {
+      if (!l.source) return; // portal submissions carry no source field
       if (!sources[l.source]) sources[l.source] = { total: 0, won: 0, decided: 0 };
       sources[l.source].total += 1;
       if (closedDate(l)) sources[l.source].decided += 1;

@@ -52,6 +52,9 @@ var SOURCES = ['Personal network', 'Instagram / TikTok seller', 'Event / bazaar'
 var INDUSTRIES = ['Fashion & Apparel', 'Food & Beverage', 'Beauty & Care', 'Electronics', 'Home & Furniture', 'Health & Sports', 'Gifts & Flowers', 'Grocery', 'Books & Stationery', 'Pets'];
 var CITIES = ['Riyadh', 'Jeddah', 'Dammam', 'Makkah', 'Madinah', 'Khobar', 'Tabuk', 'Abha'];
 
+/* Platforms a merchant might currently be on (mirrors the real form) */
+var PLATFORMS = ['Zid', 'Salla', 'Shopify', 'WooCommerce', 'Magento', 'OpenCart', 'Custom', 'Others', 'None'];
+
 /* Zid subscription packages (SAR / year, excl. VAT) */
 var PLANS = [
   { name: 'Launch', price: 990 },
