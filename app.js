@@ -18,18 +18,44 @@
     set: function (k, v) { try { localStorage.setItem('sh.' + k, JSON.stringify(v)); } catch (e) {} }
   };
 
+  /* ---- Users & roles: hunter (emp) / management (mgr) / finance (fin).
+     Base users come from data.js; Management can add users and change
+     roles — stored as overrides + custom records. ---- */
+  var ROLE_NAMES = { emp: 'Hunter', mgr: 'Management', fin: 'Finance' };
+  function baseUsers() {
+    return EMPLOYEES.map(function (e) { return Object.assign({ role: 'emp' }, e); })
+      .concat([Object.assign({ role: 'mgr' }, MANAGER), Object.assign({ role: 'fin' }, FINANCE)]);
+  }
+  function usersAll() {
+    var custom = LS.get('users', []);
+    var over = LS.get('userOverrides', {});
+    return baseUsers().concat(custom).map(function (u) {
+      return Object.assign({ active: true }, u, over[u.id] || {});
+    });
+  }
   function currentUser() {
     var id = LS.get('user', null);
-    if (id === 'mgr') return MANAGER;
-    if (id === 'fin') return FINANCE;
-    return EMPLOYEES.find(function (e) { return e.id === id; }) || null;
+    if (!id) return null;
+    var u = usersAll().find(function (x) { return x.id === id; });
+    return u && u.active ? u : null;
   }
-  function isManager() { return LS.get('user', null) === 'mgr'; }
-  function roleOf() {
-    var id = LS.get('user', null);
-    return id === 'mgr' ? 'mgr' : id === 'fin' ? 'fin' : 'emp';
-  }
+  function roleOf() { return (currentUser() || {}).role || 'emp'; }
+  function isManager() { return roleOf() === 'mgr'; }
   function homeOf(role) { return role === 'mgr' ? '/manager' : role === 'fin' ? '/payouts' : '/dashboard'; }
+
+  /* Dynamic program settings (Management can change these) */
+  var settings = LS.get('settings', {});
+  if (settings.commissionRate) COMMISSION_RATE = settings.commissionRate;
+  if (settings.vatRate) VAT_RATE = settings.vatRate;
+  function ratePct() { return Math.round(COMMISSION_RATE * 100) + '%'; }
+  function vatPct() { return Math.round(VAT_RATE * 100) + '%'; }
+
+  /* Audit log for sensitive actions (backoffice) */
+  function audit(action) {
+    var log = LS.get('audit', []);
+    log.unshift({ at: new Date().toISOString(), who: (currentUser() || {}).name || 'Unknown', action: action });
+    LS.set('audit', log.slice(0, 50));
+  }
 
   /* Payslips uploaded by finance, keyed by deal id (demo: stored locally) */
   function getSlips() { return LS.get('payslips', {}); }
@@ -113,6 +139,8 @@
     person: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-3.6 4.5-5 8-5s6.5 1.4 8 5"/></svg>',
     manager: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10m5.5 10V4m5.5 16v-8m5 8V7"/></svg>',
     store: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10 5.5 4h13L20 10M4 10v9a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-9M4 10h16M9.5 20v-6h5v6"/></svg>',
+    team: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1.2-3 3.7-4.5 6.5-4.5s5.3 1.5 6.5 4.5M16 4.8a3.5 3.5 0 0 1 0 6.4M17.5 15.7c2 .6 3.4 1.9 4 4.3"/></svg>',
+    gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/></svg>',
     sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
     logout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3M15 8l4 4-4 4M19 12H9"/></svg>'
   };
@@ -158,6 +186,7 @@
     return { current: cur, next: next, progress: Math.max(0, Math.min(1, progress)) };
   }
   function hunterCode(emp) {
+    if (emp.code) return emp.code;
     var idx = EMPLOYEES.findIndex(function (e) { return e.id === emp.id; });
     return String(8681849160 + (idx < 0 ? 99 : idx));
   }
@@ -168,9 +197,11 @@
     '/leads':      { title: 'My Leads',           icon: 'leads',   render: viewLeads,     who: 'emp' },
     '/submit':     { title: 'Submit a Lead',      icon: 'plus',    render: viewSubmit,    who: 'emp' },
     '/commission': { title: 'Commission',         icon: 'money',   render: viewCommission,who: 'emp' },
-    '/leaderboard':{ title: 'Leaderboard',        icon: 'trophy',  render: viewLeaderboard, who: 'all' },
     '/stores':     { title: 'Top Zid Stores',     icon: 'store',   render: viewTopStores, who: 'all' },
     '/manager':    { title: 'Program Overview',   icon: 'manager', render: viewManager,   who: 'mgr' },
+    '/performance':{ title: 'Hunter Performance', icon: 'trophy',  render: viewPerformance, who: 'mgr' },
+    '/team':       { title: 'Team & Access',      icon: 'team',    render: viewTeam,      who: 'mgr' },
+    '/settings':   { title: 'Program Settings',   icon: 'gear',    render: viewSettings,  who: 'mgr' },
     '/payouts':    { title: 'Commission Payouts', icon: 'money',   render: viewPayouts,   who: 'fin' },
     '/hunters':    { title: 'Hunter Profiles',    icon: 'person',  render: viewHunters,   who: 'fin' },
     '/profile':    { title: 'My Profile',         icon: 'person',  render: viewProfile,   who: 'emp' }
@@ -193,20 +224,18 @@
 
   /* ---------------- Login ---------------- */
   function renderLogin() {
-    var personas = EMPLOYEES.slice(0, 5).map(function (e) {
-      return '<button class="persona" data-login="' + e.id + '">' +
-        '<span class="avatar">' + esc(initials(e.name)) + '</span>' +
-        '<span class="who"><b>' + esc(e.name) + '</b><span>' + esc(e.title) + ' · ' + esc(e.dept) + '</span></span>' +
+    var users = usersAll().filter(function (u) { return u.active; });
+    // hunters first (a handful), then management & finance
+    var hunters = users.filter(function (u) { return u.role === 'emp'; });
+    var staff = users.filter(function (u) { return u.role !== 'emp'; });
+    var list = hunters.slice(0, 5).concat(hunters.slice(5).filter(function (u) { return String(u.id).charAt(0) === 'u'; }), staff);
+    var personas = list.map(function (u) {
+      var dark = u.role !== 'emp' ? ' style="background: var(--ink); color: var(--ground)"' : '';
+      return '<button class="persona" data-login="' + esc(u.id) + '">' +
+        '<span class="avatar"' + dark + '>' + esc(initials(u.name)) + '</span>' +
+        '<span class="who"><b>' + esc(u.name) + '</b><span>' + esc(u.title || '') + ' · ' + esc(ROLE_NAMES[u.role]) + '</span></span>' +
         '<span class="go">→</span></button>';
     }).join('');
-    personas += '<button class="persona" data-login="mgr">' +
-      '<span class="avatar" style="background: var(--ink); color: var(--ground)">' + esc(initials(MANAGER.name)) + '</span>' +
-      '<span class="who"><b>' + esc(MANAGER.name) + '</b><span>' + esc(MANAGER.title) + ' — manager view</span></span>' +
-      '<span class="go">→</span></button>';
-    personas += '<button class="persona" data-login="fin">' +
-      '<span class="avatar" style="background: var(--ink); color: var(--ground)">' + esc(initials(FINANCE.name)) + '</span>' +
-      '<span class="who"><b>' + esc(FINANCE.name) + '</b><span>' + esc(FINANCE.title) + ' — finance view</span></span>' +
-      '<span class="go">→</span></button>';
 
     var ps = statsFor(allLeads()); // program-wide, for the hero stats
     app.innerHTML =
@@ -222,7 +251,7 @@
         '</div></div>' +
         '<div class="login-hero">' +
           HERO_RINGS +
-          '<h2>Spot a merchant.<br>Bring them to Zid.<br>Take 20% of the win.</h2>' +
+          '<h2>Spot a merchant.<br>Bring them to Zid.<br>Take ' + ratePct() + ' of the win.</h2>' +
           '<p>Every lead you submit goes straight to the sales pipeline. Watch it move stage by stage — and the moment it closes won, your commission is locked in.</p>' +
           '<div class="hero-stats">' +
             '<div class="hero-stat"><b>' + fmtMoneyC(ps.commission) + '</b><span>earned by hunters so far</span></div>' +
@@ -549,7 +578,7 @@
     if (lead.stage === 'won') {
       var cs = commissionStatus(lead);
       commissionRow =
-        '<dt>Commission (20%)</dt><dd class="money-pos">' + fmtMoney(commissionOf(lead)) +
+        '<dt>Commission (' + ratePct() + ')</dt><dd class="money-pos">' + fmtMoney(commissionOf(lead)) +
         ' <span class="status-chip ' + cs + '">' + (cs === 'paid' ? 'Paid' : cs === 'approved' ? 'Approved' : 'Pending approval') + '</span></dd>';
     }
     var reasonRow = '';
@@ -607,7 +636,7 @@
             '<div><label class="f-label" for="f-plan">Likely package</label><select id="f-plan">' +
               '<option value="">Not sure — sales will scope it</option>' +
               PLANS.map(function (p) { return '<option value="' + p.price + '">Zid ' + esc(p.name) + ' — ' + fmtMoney(p.price) + ' / yr</option>'; }).join('') + '</select>' +
-              '<p class="f-hint">Your commission is 20% of the final subscription value excl. VAT.</p></div>' +
+              '<p class="f-hint">Your commission is ' + ratePct() + ' of the final subscription value excl. VAT.</p></div>' +
             '<div class="full"><label class="f-label" for="f-notes">Why is this a good lead?</label>' +
               '<textarea id="f-notes" rows="3" placeholder="Context helps pre-sales qualify faster: what they sell, current channels (Instagram, WhatsApp…), timing, who decides."></textarea></div>' +
           '</div>' +
@@ -683,8 +712,8 @@
           '<p class="sub">Example: your latest won deal — ' + esc(example.company) + '</p></div></div>' +
           '<div class="math-steps">' +
             '<div class="math-step"><div class="m-label">Subscription incl. VAT</div><div class="m-value">' + fmtMoney(grossOf(example)) + '</div><div class="m-note">what the customer pays</div></div>' +
-            '<div class="math-step"><div class="m-label">Remove 15% VAT (÷ 1.15)</div><div class="m-value">' + fmtMoney(example.amountNet) + '</div><div class="m-note">net subscription value</div></div>' +
-            '<div class="math-step result"><div class="m-label">Your commission (× 20%)</div><div class="m-value">' + fmtMoney(commissionOf(example)) + '</div><div class="m-note">paid with next payroll after approval</div></div>' +
+            '<div class="math-step"><div class="m-label">Remove ' + vatPct() + ' VAT (÷ ' + (1 + VAT_RATE).toFixed(2) + ')</div><div class="m-value">' + fmtMoney(example.amountNet) + '</div><div class="m-note">net subscription value</div></div>' +
+            '<div class="math-step result"><div class="m-label">Your commission (× ' + ratePct() + ')</div><div class="m-value">' + fmtMoney(commissionOf(example)) + '</div><div class="m-note">paid with next payroll after approval</div></div>' +
           '</div>' +
         '</section>';
     }
@@ -721,7 +750,7 @@
 
       chartCard({
         title: 'Revenue you generated vs. commission earned', subtitle: 'By month the deal closed won · both excl. VAT',
-        legend: [{ cls: 's1', label: 'Revenue generated' }, { cls: 's2', label: 'Your commission (20%)' }],
+        legend: [{ cls: 's1', label: 'Revenue generated' }, { cls: 's2', label: 'Your commission (' + ratePct() + ')' }],
         svg: groupedColumnsSVG(months.map(function (m) { return m.label; }), revByMonth, commByMonth,
           { nameA: 'Revenue generated', nameB: 'Your commission', aria: 'Revenue vs commission', W: 1080 }),
         table: { head: ['Month', 'Revenue (SAR)', 'Commission (SAR)'], rows: months.map(function (m, i) { return [m.label, fmtNum(revByMonth[i]), fmtNum(commByMonth[i])]; }) }
@@ -775,23 +804,25 @@
     return { rows: rows, topThisMonthId: topThisMonth && topThisMonth.revThisMonth > 0 ? topThisMonth.emp.id : null };
   }
 
-  function viewLeaderboard(content, user) {
+  /* Management-only ranking (replaces the shared leaderboard — hunters
+     see only their own numbers, for privacy) */
+  function viewPerformance(content) {
     var data = leaderboardData();
     var rows = data.rows.sort(function (a, b) { return b.s.revenueNet - a.s.revenueNet; });
     var maxRev = Math.max.apply(null, rows.map(function (r) { return r.s.revenueNet; }).concat([1]));
 
     var body = rows.map(function (r, i) {
-      var isMe = !isManager() && r.emp.id === user.id;
       var rankCls = i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : '';
       var badges = badgesFor(r.emp.id, r.s, data.topThisMonthId);
-      return '<tr' + (isMe ? ' style="background: var(--brand-soft)"' : '') + '>' +
+      return '<tr>' +
         '<td><span class="rank-badge ' + rankCls + '">' + (i + 1) + '</span></td>' +
-        '<td><b>' + esc(r.emp.name) + (isMe ? ' · you' : '') + '</b><span class="cell-sub">' + esc(r.emp.dept) + '</span></td>' +
+        '<td><b>' + esc(r.emp.name) + '</b><span class="cell-sub">' + esc(r.emp.dept) + '</span></td>' +
         '<td class="num">' + fmtNum(r.s.total) + '</td>' +
         '<td class="num">' + fmtNum(r.s.won) + '</td>' +
         '<td class="num">' + fmtPct(r.s.conversion, 0) + '</td>' +
         '<td style="min-width:120px"><div class="progress-track"><div class="progress-fill" style="width:' + Math.round(r.s.revenueNet / maxRev * 100) + '%"></div></div></td>' +
         '<td class="num"><b>' + fmtMoneyC(r.s.revenueNet) + '</b></td>' +
+        '<td class="num">' + fmtMoneyC(r.s.commission) + '</td>' +
         '<td><div class="badges">' + badges.map(function (b) { return '<span class="badge-chip">' + esc(b) + '</span>'; }).join('') + '</div></td>' +
       '</tr>';
     }).join('');
@@ -799,12 +830,183 @@
     content.innerHTML =
       '<section class="card">' +
         '<div class="card-head"><div><h3>All-time ranking</h3>' +
-        '<p class="sub">Ranked by revenue generated (closed-won subscription value, excl. VAT)</p></div></div>' +
+        '<p class="sub">Ranked by revenue generated (closed-won, excl. VAT) — visible to management only; hunters see just their own numbers</p></div></div>' +
         '<div class="tbl-wrap"><table>' +
-          '<thead><tr><th></th><th>Hunter</th><th class="num">Leads</th><th class="num">Won</th><th class="num">Conversion</th><th>Revenue</th><th class="num"></th><th>Achievements</th></tr></thead>' +
+          '<thead><tr><th></th><th>Hunter</th><th class="num">Leads</th><th class="num">Won</th><th class="num">Conversion</th><th>Revenue</th><th class="num"></th><th class="num">Commission</th><th>Achievements</th></tr></thead>' +
           '<tbody>' + body + '</tbody>' +
         '</table></div>' +
       '</section>';
+  }
+
+  /* ---- Management backoffice: team & access ---- */
+  function viewTeam(content, user) {
+    function saveOverride(id, patch) {
+      var over = LS.get('userOverrides', {});
+      over[id] = Object.assign(over[id] || {}, patch);
+      LS.set('userOverrides', over);
+    }
+
+    function render() {
+      var users = usersAll();
+      var rows = users.map(function (u) {
+        var isSelf = u.id === user.id;
+        return '<tr>' +
+          '<td><b>' + esc(u.name) + (isSelf ? ' · you' : '') + '</b><span class="cell-sub">' + esc(u.title || '') + '</span></td>' +
+          '<td>' + esc(u.dept || '—') + '</td>' +
+          '<td>' + esc(u.email || '—') + '</td>' +
+          '<td>' + (isSelf
+            ? '<span class="cat-chip">' + ROLE_NAMES[u.role] + '</span>'
+            : '<select class="status-select role-select" data-user="' + esc(u.id) + '">' +
+                ['emp', 'mgr', 'fin'].map(function (r) {
+                  return '<option value="' + r + '"' + (r === u.role ? ' selected' : '') + '>' + ROLE_NAMES[r] + '</option>';
+                }).join('') + '</select>') + '</td>' +
+          '<td>' + (u.active
+            ? '<span class="status-chip paid">Active</span>'
+            : '<span class="status-chip pending">Disabled</span>') + '</td>' +
+          '<td>' + (isSelf ? '' : '<button class="ghost-btn toggle-active" data-user="' + esc(u.id) + '">' + (u.active ? 'Disable' : 'Enable') + '</button>') + '</td>' +
+        '</tr>';
+      }).join('');
+
+      content.innerHTML =
+        '<div class="filter-row">' +
+          '<div><h2>Team & access</h2><p class="sub">' + users.filter(function (u) { return u.active; }).length + ' active users · roles control what each person sees</p></div>' +
+          '<div class="spacer"></div>' +
+          '<button class="btn" id="add-user-btn">+ Add user</button>' +
+        '</div>' +
+        '<div class="card" id="add-user-card" hidden>' +
+          '<h3>Add a user</h3>' +
+          '<form id="add-user-form" style="margin-top:12px">' +
+            '<div class="form-grid">' +
+              '<div><label class="f-label" for="nu-name">Full name *</label><input type="text" id="nu-name" required></div>' +
+              '<div><label class="f-label" for="nu-email">Company email *</label><input type="email" id="nu-email" required placeholder="name@zid.sa"></div>' +
+              '<div><label class="f-label" for="nu-dept">Department</label><input type="text" id="nu-dept" placeholder="e.g. Marketing"></div>' +
+              '<div><label class="f-label" for="nu-title">Job title</label><input type="text" id="nu-title"></div>' +
+              '<div><label class="f-label" for="nu-role">Role *</label><select id="nu-role">' +
+                '<option value="emp">Hunter</option><option value="mgr">Management</option><option value="fin">Finance</option>' +
+              '</select><p class="f-hint">In production this sends an SSO invite instead of creating a login.</p></div>' +
+            '</div>' +
+            '<div style="margin-top:14px; display:flex; gap:10px">' +
+              '<button type="submit" class="btn">Create user</button>' +
+              '<button type="button" class="btn secondary" id="add-user-cancel">Cancel</button>' +
+            '</div>' +
+          '</form>' +
+        '</div>' +
+        '<section class="card">' +
+          '<div class="tbl-wrap"><table>' +
+            '<thead><tr><th>User</th><th>Department</th><th>Email</th><th>Role</th><th>Status</th><th></th></tr></thead>' +
+            '<tbody>' + rows + '</tbody>' +
+          '</table></div>' +
+        '</section>' +
+        '<p class="sub" style="text-align:center">You cannot change or disable your own account. Disabled users keep their history but can no longer sign in.</p>';
+
+      document.getElementById('add-user-btn').addEventListener('click', function () {
+        document.getElementById('add-user-card').hidden = false;
+      });
+      document.getElementById('add-user-cancel').addEventListener('click', function () {
+        document.getElementById('add-user-card').hidden = true;
+      });
+      document.getElementById('add-user-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var name = document.getElementById('nu-name').value.trim();
+        var email = document.getElementById('nu-email').value.trim();
+        if (!name || !email) return;
+        var custom = LS.get('users', []);
+        custom.push({
+          id: 'u' + (100 + custom.length),
+          name: name, email: email,
+          dept: document.getElementById('nu-dept').value.trim() || 'General',
+          title: document.getElementById('nu-title').value.trim() || ROLE_NAMES[document.getElementById('nu-role').value],
+          role: document.getElementById('nu-role').value,
+          code: String(8681849300 + custom.length)
+        });
+        LS.set('users', custom);
+        audit('Added user ' + name + ' (' + ROLE_NAMES[document.getElementById('nu-role').value] + ')');
+        toast(name + ' added — they now appear on the sign-in screen.');
+        render();
+      });
+      content.querySelectorAll('.role-select').forEach(function (sel) {
+        sel.addEventListener('change', function () {
+          var u = usersAll().find(function (x) { return x.id === sel.getAttribute('data-user'); });
+          saveOverride(sel.getAttribute('data-user'), { role: sel.value });
+          audit('Changed role of ' + (u ? u.name : sel.getAttribute('data-user')) + ' to ' + ROLE_NAMES[sel.value]);
+          toast('Role updated to ' + ROLE_NAMES[sel.value] + '.');
+          render();
+        });
+      });
+      content.querySelectorAll('.toggle-active').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var id = btn.getAttribute('data-user');
+          var u = usersAll().find(function (x) { return x.id === id; });
+          saveOverride(id, { active: !u.active });
+          audit((u.active ? 'Disabled ' : 'Enabled ') + u.name);
+          toast(u.name + (u.active ? ' disabled.' : ' enabled.'));
+          render();
+        });
+      });
+    }
+    render();
+  }
+
+  /* ---- Management backoffice: program settings + audit log ---- */
+  function viewSettings(content) {
+    var log = LS.get('audit', []);
+    content.innerHTML =
+      '<div class="grid-2">' +
+        '<section class="card">' +
+          '<div class="card-head"><div><h3>Commission rules</h3>' +
+          '<p class="sub">Changes apply instantly across every dashboard (demo)</p></div></div>' +
+          '<form id="settings-form"><div class="form-grid">' +
+            '<div><label class="f-label" for="set-rate">Hunter commission (% of net)</label>' +
+              '<input type="number" id="set-rate" min="1" max="50" step="0.5" value="' + (COMMISSION_RATE * 100) + '">' +
+              '<p class="f-hint">Currently ' + ratePct() + ' of subscription value excl. VAT</p></div>' +
+            '<div><label class="f-label" for="set-vat">VAT rate (%)</label>' +
+              '<input type="number" id="set-vat" min="0" max="30" step="1" value="' + (VAT_RATE * 100) + '">' +
+              '<p class="f-hint">KSA standard is 15% — deals with other VAT read it from HubSpot in production</p></div>' +
+          '</div>' +
+          '<div style="margin-top:14px"><button type="submit" class="btn">Save rules</button></div></form>' +
+        '</section>' +
+        '<section class="card">' +
+          '<div class="card-head"><div><h3>Demo controls</h3><p class="sub">For presentations</p></div></div>' +
+          '<p class="sub" style="margin-bottom:12px">Reset clears everything done in this browser — submitted leads, payment status changes, payslips, added users, and settings — back to the original mock data.</p>' +
+          '<button class="btn secondary" id="reset-demo">Reset demo data</button>' +
+        '</section>' +
+      '</div>' +
+      '<section class="card">' +
+        '<div class="card-head"><div><h3>Audit log</h3><p class="sub">Sensitive actions in this browser session — in production every payout, role change, and IBAN view lands here</p></div></div>' +
+        (log.length
+          ? '<div class="tbl-wrap"><table class="mini"><thead><tr><th>When</th><th>Who</th><th>Action</th></tr></thead><tbody>' +
+            log.map(function (e) {
+              return '<tr><td>' + fmtDate(new Date(e.at)) + '<span class="cell-sub">' + new Date(e.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + '</span></td>' +
+                '<td>' + esc(e.who) + '</td><td>' + esc(e.action) + '</td></tr>';
+            }).join('') + '</tbody></table></div>'
+          : '<div class="empty">Nothing yet — payment status changes, payslip uploads, and team edits will appear here.</div>') +
+      '</section>';
+
+    document.getElementById('settings-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var rate = parseFloat(document.getElementById('set-rate').value);
+      var vat = parseFloat(document.getElementById('set-vat').value);
+      if (isNaN(rate) || rate <= 0 || rate > 50 || isNaN(vat) || vat < 0 || vat > 30) {
+        toast('Enter a commission between 1–50% and VAT between 0–30%.');
+        return;
+      }
+      COMMISSION_RATE = rate / 100;
+      VAT_RATE = vat / 100;
+      LS.set('settings', { commissionRate: COMMISSION_RATE, vatRate: VAT_RATE });
+      audit('Set commission to ' + rate + '% and VAT to ' + vat + '%');
+      toast('Rules saved — commission is now ' + ratePct() + ' everywhere.');
+      route();
+    });
+    document.getElementById('reset-demo').addEventListener('click', function () {
+      ['leads', 'paystatus', 'payslips', 'users', 'userOverrides', 'settings', 'audit'].forEach(function (k) {
+        try { localStorage.removeItem('sh.' + k); } catch (e) {}
+      });
+      EMPLOYEES.forEach(function (emp) { try { localStorage.removeItem('sh.profile.' + emp.id); } catch (e) {} });
+      Object.keys(COMMISSION_STATUS_OVERRIDES).forEach(function (k) { delete COMMISSION_STATUS_OVERRIDES[k]; });
+      COMMISSION_RATE = 0.20; VAT_RATE = 0.15;
+      toast('Demo reset to original mock data.');
+      route();
+    });
   }
 
   /* ---- Top Zid stores: categories first, drill into each ---- */
@@ -1204,7 +1406,7 @@
               '<tr><td><span class="status-chip pending">Pending approval</span></td><td class="num"><b>' + fmtMoney(s.commissionPending) + '</b></td></tr>' +
               '<tr><td><span class="status-chip approved">Approved — next payroll</span></td><td class="num"><b>' + fmtMoney(s.commissionApproved) + '</b></td></tr>' +
               '<tr><td><span class="status-chip paid">Paid to date</span></td><td class="num"><b>' + fmtMoney(s.commissionPaid) + '</b></td></tr>' +
-              '<tr><td>Total commission (20% of net)</td><td class="num"><b>' + fmtMoney(s.commission) + '</b></td></tr>' +
+              '<tr><td>Total commission (' + ratePct() + ' of net)</td><td class="num"><b>' + fmtMoney(s.commission) + '</b></td></tr>' +
             '</tbody>' +
           '</table></div>' +
         '</section>' +
@@ -1220,8 +1422,8 @@
       '</div>' +
 
       '<section class="card">' +
-        '<div class="card-head"><div><h3>Leaderboard</h3><p class="sub">Full ranking is on the Leaderboard page</p></div>' +
-        '<a class="ghost-btn" href="#/leaderboard" style="text-decoration:none">Open</a></div>' +
+        '<div class="card-head"><div><h3>Hunter performance</h3><p class="sub">Full ranking, revenue and commission per hunter — management only</p></div>' +
+        '<a class="ghost-btn" href="#/performance" style="text-decoration:none">Open</a></div>' +
       '</section>';
   }
 
@@ -1359,7 +1561,7 @@
       }).join('');
       document.getElementById('payout-table').innerHTML =
         '<div class="tbl-wrap"><table>' +
-          '<thead><tr><th>Hunter</th><th>Deal</th><th>Closed won</th><th>Closed by (sales rep)</th><th class="num">Value (excl. VAT)</th><th class="num">Commission (20%)</th><th>Status</th><th>Payslip</th><th>Payout account</th></tr></thead>' +
+          '<thead><tr><th>Hunter</th><th>Deal</th><th>Closed won</th><th>Closed by (sales rep)</th><th class="num">Value (excl. VAT)</th><th class="num">Commission (' + ratePct() + ')</th><th>Status</th><th>Payslip</th><th>Payout account</th></tr></thead>' +
           '<tbody>' + (rows || '<tr><td colspan="9"><div class="empty">No payouts match this filter.</div></td></tr>') + '</tbody>' +
         '</table></div>';
       document.querySelectorAll('.hs-link').forEach(function (a) {
@@ -1381,6 +1583,7 @@
           overrides[dealId] = sel.value;
           LS.set('paystatus', overrides);
           COMMISSION_STATUS_OVERRIDES[dealId] = sel.value;
+          audit('Set payment status of deal ' + dealId + ' to ' + sel.value);
           toast(sel.value === 'paid'
             ? 'Deal ' + dealId + ' marked “Paid” — attach the payslip so the hunter has proof.'
             : 'Deal ' + dealId + ' marked “' + sel.options[sel.selectedIndex].text + '” — the hunter sees this instantly.');
@@ -1408,7 +1611,7 @@
           fmtMoneyC(s.commissionPending) + ' pending review · ' + fmtMoneyC(s.commissionApproved) + ' approved') +
         tile('Paid to date', fmtMoneyC(s.commissionPaid), '') +
         tile('Hunters awaiting payout', fmtNum(huntersOwed), 'see Hunter Profiles for accounts') +
-        tile('Total commission', fmtMoneyC(s.commission), '20% of ' + fmtMoneyC(s.revenueNet) + ' net revenue');
+        tile('Total commission', fmtMoneyC(s.commission), ratePct() + ' of ' + fmtMoneyC(s.revenueNet) + ' net revenue');
     }
 
     content.innerHTML =
@@ -1434,6 +1637,7 @@
       var reader = new FileReader();
       reader.onload = function () {
         if (saveSlip(deal, { name: f.name, dataUrl: reader.result, uploadedAt: new Date().toISOString() })) {
+          audit('Uploaded payslip “' + f.name + '” for deal ' + deal);
           toast('Payslip attached to deal ' + deal + ' — the hunter can download it now.');
           renderTable();
         } else {
