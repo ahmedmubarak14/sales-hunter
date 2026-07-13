@@ -10,14 +10,18 @@ function esc(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function fmtMoney(n) { return 'SAR ' + Math.round(n).toLocaleString('en-US'); }
+function curr(v) { return isAr() ? v + ' ر.س' : 'SAR ' + v; }
+function fmtMoney(n) { return curr(Math.round(n).toLocaleString('en-US')); }
 function fmtMoneyC(n) { // compact
-  if (Math.abs(n) >= 1e6) return 'SAR ' + (n / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M';
-  if (Math.abs(n) >= 1e3) return 'SAR ' + (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K';
-  return 'SAR ' + Math.round(n);
+  if (Math.abs(n) >= 1e6) return curr((n / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M');
+  if (Math.abs(n) >= 1e3) return curr((n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K');
+  return curr(Math.round(n));
 }
 function fmtPct(x, dp) { return (x * 100).toFixed(dp === undefined ? 1 : dp) + '%'; }
-function fmtDate(d) { return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); }
+function fmtDate(d) {
+  return d.toLocaleDateString(isAr() ? 'ar-SA-u-ca-gregory-nu-latn' : 'en-GB',
+    { day: 'numeric', month: 'short', year: 'numeric' });
+}
 function fmtNum(n) { return Math.round(n).toLocaleString('en-US'); }
 
 /* Clean axis ticks: 0..max rounded to a friendly step.
@@ -104,7 +108,7 @@ function chartCard(opts) {
     '<div class="card-head">' +
       '<div><h3>' + esc(opts.title) + '</h3>' +
       (opts.subtitle ? '<p class="sub">' + esc(opts.subtitle) + '</p>' : '') + '</div>' +
-      (opts.table ? '<button class="ghost-btn" data-toggle-table="' + id + '" aria-pressed="false">Data</button>' : '') +
+      (opts.table ? '<button class="ghost-btn" data-toggle-table="' + id + '" aria-pressed="false">' + t('dataBtn') + '</button>' : '') +
     '</div>' +
     legend +
     '<div class="chart-view">' + opts.svg + '</div>' +
@@ -122,7 +126,7 @@ function wireCardToggles(root) {
       table.hidden = !showTable;
       chart.hidden = showTable;
       btn.setAttribute('aria-pressed', String(showTable));
-      btn.textContent = showTable ? 'Chart' : 'Data';
+      btn.textContent = showTable ? t('chartBtn') : t('dataBtn');
     });
   });
 }
@@ -145,8 +149,8 @@ function funnelSVG(rows) { // rows: [{stage, count}]
     var pct = i === 0 ? null : (rows[i - 1].count ? r.count / rows[i - 1].count : 0);
     out += '<text x="' + (labelW - 10) + '" y="' + (y + barH / 2 + 4) + '" text-anchor="end" class="ax strong">' + esc(r.stage) + '</text>';
     out += '<path d="' + hbarPath(labelW, y, w, barH, false, true) + '" class="f' + (i + 1) + '" ' +
-      'data-tip="<b>' + esc(r.stage) + '</b><br>' + fmtNum(r.count) + ' leads reached' +
-      (pct !== null ? '<br>' + fmtPct(pct, 0) + ' of previous stage' : '') + '"></path>';
+      'data-tip="<b>' + esc(r.stage) + '</b><br>' + t('leadsReached', { n: fmtNum(r.count) }) +
+      (pct !== null ? '<br>' + t('ofPrevStage', { pct: fmtPct(pct, 0) }) : '') + '"></path>';
     out += '<text x="' + (labelW + w + 8) + '" y="' + (y + barH / 2 + 4) + '" class="val">' + fmtNum(r.count) + '</text>';
     if (pct !== null) {
       out += '<text x="' + (labelW - 10) + '" y="' + (y + barH / 2 + 18) + '" text-anchor="end" class="ax dim">' + fmtPct(pct, 0) + ' →</text>';
@@ -264,7 +268,7 @@ function lineSVG(labels, values, opts) {
     var isNull = values[i] === null || values[i] === undefined;
     var bandW = plotW / Math.max(n - 1, 1);
     out += '<g class="hoverpt"><rect x="' + (px(i) - bandW / 2) + '" y="' + padT + '" width="' + bandW + '" height="' + plotH + '" fill="transparent" ' +
-      'data-tip="<b>' + esc(lb) + '</b><br>' + (isNull ? esc(opts.nullLabel || 'No data') : (opts.pct ? fmtPct(values[i]) : fmtNum(values[i])) + (opts.unit ? ' ' + opts.unit : '')) + '"></rect>' +
+      'data-tip="<b>' + esc(lb) + '</b><br>' + (isNull ? esc(opts.nullLabel || t('noData')) : (opts.pct ? fmtPct(values[i]) : fmtNum(values[i])) + (opts.unit ? ' ' + opts.unit : '')) + '"></rect>' +
       (isNull ? '' : '<circle cx="' + px(i) + '" cy="' + py(values[i]) + '" r="4.5" class="s1-dot ringed"></circle>') + '</g>';
   });
   // persistent dot + label on the last real value
@@ -282,7 +286,7 @@ function hbarsSVG(items, opts) { // items: [{label, count}]
   opts = opts || {};
   var total = items.reduce(function (a, b) { return a + b.count; }, 0);
   if (!items.length) {
-    return '<div class="empty">No data yet — nothing in this category. That is good news.</div>';
+    return '<div class="empty">' + t('emptyReasons') + '</div>';
   }
   var W = 640, rowH = 30, gap = 10, labelW = 220, valueW = 96;
   var H = items.length * (rowH + gap) - gap + 4;
@@ -294,7 +298,7 @@ function hbarsSVG(items, opts) { // items: [{label, count}]
     var w = Math.max(3, (it.count / max) * plotW);
     out += '<text x="' + (labelW - 10) + '" y="' + (y + rowH / 2 + 4) + '" text-anchor="end" class="ax strong">' + esc(it.label) + '</text>';
     out += '<path d="' + hbarPath(labelW, y + 5, w, rowH - 10, false, true) + '" class="' + (opts.cls || 's1') + '" ' +
-      'data-tip="<b>' + esc(it.label) + '</b><br>' + fmtNum(it.count) + ' leads (' + fmtPct(total ? it.count / total : 0, 0) + ')"></path>';
+      'data-tip="<b>' + esc(it.label) + '</b><br>' + t('leadsPct', { n: fmtNum(it.count), pct: fmtPct(total ? it.count / total : 0, 0) }) + '"></path>';
     out += '<text x="' + (labelW + w + 8) + '" y="' + (y + rowH / 2 + 4) + '" class="val">' + fmtNum(it.count) +
       ' <tspan class="dim-t">· ' + fmtPct(total ? it.count / total : 0, 0) + '</tspan></text>';
   });
@@ -311,7 +315,7 @@ function stackedBarSVG(segments, opts) { // [{label, count, cls}]
   var x = 0;
   nonZero.forEach(function (s, i) {
     var w = (s.count / total) * W;
-    var valTxt = opts.money ? fmtMoney(s.count) : fmtNum(s.count) + ' leads';
+    var valTxt = opts.money ? fmtMoney(s.count) : fmtNum(s.count) + ' ' + t('leadsUnit');
     // 2px surface gap between segments; only the outer ends are rounded
     out += '<path d="' + hbarPath(x + 1, y, Math.max(w - 2, 2), barH, i === 0, i === nonZero.length - 1) + '" class="' + s.cls + '" ' +
       'data-tip="<b>' + esc(s.label) + '</b><br>' + valTxt + ' (' + fmtPct(s.count / total, 0) + ')"></path>';

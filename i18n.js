@@ -1,0 +1,496 @@
+/* ============================================================
+   Sales Hunter — i18n (English / العربية)
+   t(key, vars) for UI strings; tr* helpers translate data-level
+   labels (stages, reasons, categories…). LANG persists locally;
+   Arabic flips the document to RTL.
+   ============================================================ */
+
+var LANG = 'en';
+try { LANG = JSON.parse(localStorage.getItem('sh.lang')) || 'en'; } catch (e) {}
+function isAr() { return LANG === 'ar'; }
+function setLang(l) {
+  LANG = l;
+  try { localStorage.setItem('sh.lang', JSON.stringify(l)); } catch (e) {}
+  applyLang();
+}
+function applyLang() {
+  document.documentElement.lang = LANG;
+  document.documentElement.dir = isAr() ? 'rtl' : 'ltr';
+}
+
+function t(key, vars) {
+  var d = I18N[LANG] || I18N.en;
+  var s = d[key] !== undefined ? d[key] : I18N.en[key];
+  if (s === undefined) return key;
+  if (vars) Object.keys(vars).forEach(function (k) { s = s.split('{' + k + '}').join(vars[k]); });
+  return s;
+}
+function tr(map, s) { return isAr() && map[s] ? map[s] : s; }
+
+/* ---- Data-label translations ---- */
+var STAGE_AR = {
+  'New Lead': 'عميل جديد', 'Prospect': 'محتمل', 'Qualified (Pre-Sales)': 'مؤهل (ما قبل المبيعات)',
+  'SQL': 'مؤهل للمبيعات', 'Commit': 'التزام', 'Closed Won': 'صفقة ناجحة',
+  'Closed Lost': 'صفقة خاسرة', 'Unqualified': 'غير مؤهل', 'Re-engage': 'إعادة تواصل'
+};
+var REASON_AR = {
+  'Price too high': 'السعر مرتفع', 'Chose a competitor': 'اختار منافساً',
+  'No budget this year': 'لا ميزانية هذا العام', 'Project postponed': 'تأجل المشروع',
+  'Went silent / no response': 'توقف عن الرد', 'Signed shorter pilot elsewhere': 'وقّع تجربة أقصر مع جهة أخرى',
+  'Not an ICP fit': 'لا يطابق العميل المثالي', 'Company too small': 'الشركة صغيرة جداً',
+  'Already an existing customer': 'عميل حالي بالفعل', 'Duplicate lead': 'عميل مكرر',
+  'No real need identified': 'لا توجد حاجة حقيقية', 'Wrong contact person': 'جهة الاتصال غير صحيحة'
+};
+var SOURCE_AR = {
+  'Personal network': 'شبكة علاقات شخصية', 'Instagram / TikTok seller': 'بائع إنستقرام / تيك توك',
+  'Event / bazaar': 'فعالية / بازار', 'Merchant referral': 'إحالة تاجر',
+  'Family & friends': 'العائلة والأصدقاء', 'Referral link': 'رابط إحالة'
+};
+var CAT_AR = {
+  'Fashion & Apparel': 'الأزياء والملابس', 'Food & Beverage': 'الأغذية والمشروبات',
+  'Beauty & Care': 'الجمال والعناية', 'Electronics': 'الإلكترونيات',
+  'Home & Furniture': 'المنزل والأثاث', 'Health & Sports': 'الصحة والرياضة',
+  'Gifts & Flowers': 'الهدايا والزهور', 'Grocery': 'البقالة',
+  'Books & Stationery': 'الكتب والقرطاسية', 'Pets': 'الحيوانات الأليفة'
+};
+var PLAN_AR = { 'Launch': 'الانطلاقة', 'Growth': 'النمو', 'Professional': 'الاحترافية' };
+var BANK_AR = {
+  'Al Rajhi Bank': 'مصرف الراجحي', 'Saudi National Bank': 'البنك الأهلي السعودي',
+  'Riyad Bank': 'بنك الرياض', 'Alinma Bank': 'مصرف الإنماء', 'SAB': 'البنك السعودي الأول',
+  'Bank Albilad': 'بنك البلاد', 'Arab National Bank': 'البنك العربي الوطني'
+};
+var DEPT_AR = {
+  'Marketing': 'التسويق', 'Customer Success': 'نجاح العملاء', 'Finance': 'المالية',
+  'HR': 'الموارد البشرية', 'Operations': 'العمليات', 'IT': 'تقنية المعلومات',
+  'Sales': 'المبيعات', 'General': 'عام'
+};
+var CITY_AR = {
+  'Riyadh': 'الرياض', 'Jeddah': 'جدة', 'Dammam': 'الدمام', 'Makkah': 'مكة',
+  'Madinah': 'المدينة المنورة', 'Khobar': 'الخبر', 'Tabuk': 'تبوك', 'Abha': 'أبها'
+};
+var RANK_AR = {
+  'Rookie Hunter': 'صياد مبتدئ', 'Active Hunter': 'صياد نشط',
+  'Pro Hunter': 'صياد محترف', 'Elite Hunter': 'صياد نخبة'
+};
+var STORY_AR = {
+  new: 'تم استلام العميل المحتمل وإدخاله في خط المبيعات.',
+  prospect: 'بدأ فريق المبيعات التواصل والاستكشاف.',
+  qualified: 'تم التأهيل من فريق ما قبل المبيعات — فرصة حقيقية مؤكدة.',
+  sql: 'مؤهل للمبيعات: تم تحديد الميزانية وصاحب القرار.',
+  commit: 'التزام شفهي — العقد في المفاوضات النهائية.',
+  won: 'تم توقيع الصفقة. عمولتك مستحقة.',
+  lost: 'أُغلقت الصفقة كخاسرة.',
+  unqualified: 'صُنّف كغير مؤهل من فريق ما قبل المبيعات.',
+  reengage: 'مؤجل لإعادة التواصل — سيحاول فريق المبيعات في الربع القادم.'
+};
+function trStage(label) { return tr(STAGE_AR, label); }
+function trReason(s) { return tr(REASON_AR, s); }
+function trSource(s) { return tr(SOURCE_AR, s); }
+function trCat(s) { return tr(CAT_AR, s); }
+function trPlan(s) { return tr(PLAN_AR, s); }
+function trBank(s) { return tr(BANK_AR, s); }
+function trDept(s) { return tr(DEPT_AR, s); }
+function trCity(s) { return tr(CITY_AR, s); }
+function trRank(s) { return tr(RANK_AR, s); }
+
+/* ---- UI strings ---- */
+var I18N = {
+en: {
+  appName: 'Sales Hunter', byZid: 'by Zid · internal', tagline: 'Zid employee referral program',
+  demoPill: 'Demo · mock data',
+  footer: 'Sales Hunter — an internal Zid program · demo with mock data · HubSpot becomes the backend in production',
+  signIn: 'Sign in', signOut: 'Sign out',
+  signInSub: 'Pick an access to explore the demo. In production this is Zid single sign-on.',
+  loginNote: 'Demo build · mock data · HubSpot is the system of record in production',
+  accessHunter: 'Track your leads, pipeline and commission',
+  accessMgmt: 'Program overview, team & program settings',
+  accessFin: 'Payouts, payslips and hunter accounts',
+  loginAs: 'as {name} · {title}', addedByMgmt: 'Added by management',
+  heroTitle: 'Spot a merchant.<br>Bring them to Zid.<br>Take {rate} of the win.',
+  heroSub: 'Every lead you submit goes straight to the sales pipeline. Watch it move stage by stage — and the moment it closes won, your commission is locked in.',
+  heroEarned: 'earned by hunters so far', heroMerchants: 'merchants brought to Zid', heroClose: 'of leads close won',
+  heroBy: 'an internal program by',
+  navDashboard: 'My Dashboard', navLeads: 'My Leads', navSubmit: 'Submit a Lead', navCommission: 'Commission',
+  navStores: 'Top Zid Stores', navOverview: 'Program Overview', navPerformance: 'Hunter Performance',
+  navTeam: 'Team & Access', navSettings: 'Program Settings', navPayouts: 'Commission Payouts',
+  navHunters: 'Hunter Profiles', navProfile: 'My Profile',
+  roleHunter: 'Hunter', roleMgmt: 'Management', roleFin: 'Finance',
+  themeToggle: 'Toggle theme', langToggle: 'العربية',
+
+  welcomeBack: 'Welcome back, {name}', hunterId: 'Hunter ID {code}',
+  winsTo: '{n} wins to {rank}', winTo: '1 win to {rank}', topRank: 'Top rank reached',
+  totalLeads: 'Total leads', vsLastMonth: 'vs last month', activePipeline: 'Active pipeline',
+  potentialValue: '{v} potential value', closedWon: 'Closed won', closedLost: 'Closed lost',
+  unqualified: 'Unqualified', avgCycle: '{n} days avg. cycle', conversionRate: 'Conversion rate',
+  convSub: 'closed won ÷ all submitted', revenueGenerated: 'Revenue generated',
+  revSub: 'subscription value, excl. VAT', commissionEarned: 'Commission earned', notYetPaid: '{v} not yet paid',
+  hunterLevel: 'Hunter level', levelSub: 'Level up by closing deals',
+  nextRank: 'Next: <b>{rank}</b> at {n} closed-won deals', topRankNote: 'You hold the highest rank in the program.',
+  wonSoFar: 'deals won so far', moreToLevel: 'more to level up', chancesInPlay: 'chances in play',
+  sharpenAim: 'Sharpen your aim', sharpenSub: 'Reading your own numbers',
+  tipBestCat: 'Your {cat} leads convert best — {pct} of them close won. Hunt more of these.',
+  tipUnq: 'Your most common unqualified reason is “{reason}” — screen for this before submitting.',
+  tipNotes: 'Leads with notes on need and timing get qualified by pre-sales roughly twice as fast.',
+  tipStores: 'Check Top Zid Stores for success stories to use in your pitch.',
+  pipelineFunnel: 'Pipeline funnel', funnelSub: 'How far your leads travel — count that reached each stage',
+  whereOpen: 'Where your open leads are now', inPlay: '{n} leads currently in play',
+  noOpen: 'No open leads right now — submit a new one.',
+  outcomeSplit: 'Outcome split', allToDate: 'All {n} leads to date',
+  won: 'Won', lost: 'Lost', stillOpen: 'Still open',
+  leadsByMonth: 'Leads submitted by month', last12: 'Last 12 months',
+  winRateTitle: 'Win rate of decided leads', winRateSub: 'Won ÷ (won + lost + unqualified) closed in each month',
+  noDecided: 'No leads decided this month',
+  whyLost: 'Why leads were lost', whyLostSub: 'Closed-lost reasons from the CRM ({n} leads)',
+  whyUnq: 'Why leads were unqualified', whyUnqSub: 'Learn what a strong lead looks like ({n} leads)',
+  month: 'Month', leads: 'Leads', winRate: 'Win rate', stage: 'Stage', reached: 'Leads reached',
+  outcome: 'Outcome', amount: 'Amount', reason: 'Reason',
+
+  all: 'All', open: 'Open', searchPh: 'Search company, contact, owner…', submitLeadBtn: '+ Submit lead',
+  merchant: 'Merchant', category: 'Category', submitted: 'Submitted', dealOwner: 'Deal owner',
+  lastActivity: 'Last activity', valueExVat: 'Value (excl. VAT)', commissionCol: 'Commission',
+  noLeadsFilter: 'No leads match this filter.', potential: '{v} potential', toBeScoped: 'to be scoped',
+  twoYr: ' · 2 yr',
+
+  synced: '⟳ Synced from HubSpot · deal {id}', packageLbl: 'Package', source: 'Source',
+  valueIncVat: 'Value (incl. VAT)', valueLbl: 'Value', scopedBySales: 'To be scoped by sales',
+  commissionPct: 'Commission ({rate})', lostReason: 'Lost reason', unqReason: 'Unqualified reason',
+  timeline: 'Activity timeline', paid: 'Paid', approved: 'Approved', pendingApproval: 'Pending approval',
+  yearOne: ' · 1 year', yearTwo: ' · 2 years', close: 'Close',
+
+  submitTitle: 'Submit a new lead',
+  submitSub: 'Your merchant goes straight to the sales pipeline. In production this creates the contact and deal in HubSpot with you tagged as the hunter.',
+  merchantName: 'Merchant / store name *', storeCat: 'Store category *', contactPerson: 'Contact person *',
+  contactPhone: 'Contact phone', contactEmail: 'Contact email', city: 'City',
+  howKnow: 'How do you know this merchant? *', likelyPackage: 'Likely package',
+  notSure: 'Not sure — sales will scope it', perYear: '{v} / yr',
+  commissionHint: 'Your commission is {rate} of the final subscription value excl. VAT.',
+  whyGood: 'Why is this a good lead?',
+  notesPh: 'Context helps pre-sales qualify faster: what they sell, current channels (Instagram, WhatsApp…), timing, who decides.',
+  submitBtn: 'Submit lead', dupNote: 'Duplicates are checked against the CRM before the deal is created.',
+  requiredErr: 'Company and contact person are required.',
+  submittedToast: 'Lead submitted — it is now in the pipeline as “New Lead”.',
+  fullNamePh: 'Full name',
+
+  lifetimeCommission: 'Lifetime commission earned',
+  fromDeals: 'from {n} closed-won deals · {v} revenue generated for the company',
+  downloadCsv: 'Download statement (CSV)', thisMonth: 'This month', lastMonth: 'Last month',
+  awaitingFinance: 'awaiting finance review', approvedPayroll: 'Approved — next payroll', paidToDate: 'Paid to date',
+  howCalc: 'How your commission is calculated', calcExample: 'Example: your latest won deal — {name}',
+  subIncVat: 'Subscription incl. VAT', customerPays: 'what the customer pays',
+  removeVat: 'Remove {vat} VAT (÷ {div})', netValue: 'net subscription value',
+  yourCommission: 'Your commission (× {rate})', paidAfter: 'paid with next payroll after approval',
+  revVsComm: 'Revenue you generated vs. commission earned', revVsCommSub: 'By month the deal closed won · both excl. VAT',
+  revGenLegend: 'Revenue generated', yourCommLegend: 'Your commission ({rate})',
+  commHistory: 'Commission history', oneRowPerDeal: 'One row per closed-won deal',
+  deal: 'Deal', noWonYet: 'No closed-won deals yet — your first one unlocks this table.',
+  statementDl: 'Statement downloaded.', revenueSar: 'Revenue (SAR)', commissionSar: 'Commission (SAR)',
+
+  storesTitle: 'The stores winning on Zid right now',
+  storesSub: 'Pick a category to see its top performers — proof points for your pitch: “stores like yours do this on Zid.”',
+  catWinRate: '{pct} win rate', no1: '№1 · {name}', ordersMo: 'orders / month',
+  topStoresCount: '{n} top stores to use in your pitch', topStoreCount: '1 top store to use in your pitch',
+  youHaveLeads: 'you have {n} leads here', youHaveLead: 'you have 1 lead here',
+  browseCat: 'Browse category →', backCats: '← All categories',
+  catHeadSub: 'Top Zid stores in this category', catWinInline: ' · hunter leads here close won {pct} of the time',
+  catMineInline: ' · you have {n} lead(s) in this category', growthYear: 'growth this year',
+
+  activeHunters: 'Active hunters', ofEnrolled: 'of {n} enrolled', currentlyOpen: '{n} currently open',
+  newStores: 'New Zid stores', wonMerchants: 'closed-won merchants', programConv: 'Program conversion',
+  revenueClosed: 'Revenue closed', avgPerStore: '{v} avg per store · excl. VAT', exVat: 'excl. VAT',
+  pipelineValue: 'Pipeline value', openExVat: 'open deals, excl. VAT',
+  commOwedPaid: 'Commission owed + paid', alreadyPaid: '{v} already paid',
+  forecastTile: 'Forecast from pipeline', forecastSub: 'open deals × stage probability',
+  momTitle: 'This month vs last month', momSub: '{m1} month-to-date (day {d}) vs full {m2}',
+  metric: 'Metric', change: 'Change', momLeads: 'Leads submitted', momStores: 'New Zid stores (won)',
+  momRevenue: 'Revenue closed', momCommission: 'Commission unlocked', newDelta: 'new',
+  topPackages: 'Top packages sold', topPackagesSub: 'Closed-won deals by Zid plan · share of revenue',
+  packageCol: 'Package', stores: 'Stores', revenue: 'Revenue', share: 'Share', zidPlan: 'Zid {name}',
+  programFunnel: 'Program funnel', programFunnelSub: 'All hunter leads — count that reached each stage',
+  stageNow: 'Deals by stage right now', stageNowSub: 'Live count in each pipeline stage — mirrors the HubSpot board',
+  deals: 'Deals', afterPayment: 'after payment',
+  outcomeAllLeads: 'All {n} leads to date', revenueWord: 'revenue', inPlayWord: '{v} in play',
+  leadsByMonthProgram: 'Program-wide, last 12 months',
+  repPerf: 'Sales rep performance on hunter leads',
+  repPerfSub: 'How each rep handles the leads hunters bring — win rate is over decided leads (won + lost + unqualified)',
+  salesRep: 'Sales rep', hunterLeads: 'Hunter leads', revenueWon: 'Revenue won', openNow: 'Open pipeline now',
+  revByMonth: 'Revenue closed by month', revByMonthSub: 'Closed-won subscription value, excl. VAT',
+  deptComparison: 'Department comparison', deptSub: 'Which teams hunt best', department: 'Department',
+  sourcePerf: 'Lead source performance', sourceSub: 'Wins by how the hunter knows the lead · win rate of decided leads',
+  topLostReasons: 'Top closed-lost reasons', programWideLost: 'Program-wide ({n} lost leads)',
+  whyUnqProgram: 'Why leads were unqualified', programWideUnq: 'Program-wide ({n} unqualified leads)',
+  winsFrom: 'Where the wins come from', winsFromSub: 'Closed-won stores by category', avgDeal: 'Avg deal',
+  noWonStores: 'No closed-won stores yet.',
+  payoutStatus: 'Commission payout status', payoutStatusSub: 'For finance — where every riyal of commission stands',
+  status: 'Status', totalCommNet: 'Total commission ({rate} of net)',
+  coaching: 'Hunters who may need coaching',
+  coachingSub: '8+ leads with conversion well below the program average of {pct}',
+  coachConv: '{pct} conversion', coachUnq: '{n} unqualified',
+  nobodyFlagged: 'Nobody flagged — every active hunter is near or above the average.',
+  perfStrip: 'Hunter performance', perfStripSub: 'Full ranking, revenue and commission per hunter — management only',
+  openBtn: 'Open',
+
+  allTimeRanking: 'All-time ranking',
+  rankingSub: 'Ranked by revenue generated (closed-won, excl. VAT) — visible to management only; hunters see just their own numbers',
+  hunter: 'Hunter', conversion: 'Conversion', achievements: 'Achievements',
+  badgeFirst: '🏆 First sale', badgeWins: '🔥 5 wins', badge500k: '💎 SAR 500K generated',
+  badgeTop: '🚀 Top hunter this month', badgeSharp: '🎯 Sharp eye',
+
+  stillToPay: 'Still to pay', pendingApprovedSub: '{p} pending review · {a} approved',
+  huntersAwaiting: 'Hunters awaiting payout', seeProfiles: 'see Hunter Profiles for accounts',
+  totalCommission: 'Total commission', pctOfNet: '{rate} of {v} net revenue',
+  pending: 'Pending', exportRun: 'Export payout run (CSV)', closedBy: 'Closed by (sales rep)',
+  payslip: 'Payslip', payoutAccount: 'Payout account', openHubspot: 'open in HubSpot ↗',
+  uploadPayslip: 'Upload payslip', replace: 'replace', payslipDl: 'Payslip ↓',
+  noPayouts: 'No payouts match this filter.',
+  payoutNote: 'Payout accounts come from each hunter’s profile. IBANs are shown masked; in production the full IBAN is revealed to finance only at payout time, with access logged. Payslips are visible to the hunter and finance only.',
+  hsToast: 'In production this opens deal {id} in HubSpot.',
+  statusPaidToast: 'Deal {id} marked “Paid” — attach the payslip so the hunter has proof.',
+  statusToast: 'Deal {id} marked “{s}” — the hunter sees this instantly.',
+  slipTooBig: 'Keep payslips under 1.5 MB in the demo.',
+  slipToast: 'Payslip attached to deal {id} — the hunter can download it now.',
+  slipFail: 'Could not store the file — browser storage is full.', exportedToast: 'Payout run exported.',
+
+  hunterProfiles: 'Hunter profiles', hunterProfilesSub: 'Click a hunter to see full profile and payout account details',
+  contact: 'Contact', dealsWon: 'Deals won', bank: 'Bank',
+  fullIbanNote: '🔒 Full IBAN visible to finance only — every view is access-logged in production',
+  commissionSummary: 'Commission summary', lifetime: 'Lifetime commission', notProvided: 'Not provided yet',
+  payoutMethod: 'Payout method', companyEmail: 'Company email', mobile: 'Mobile', personalEmail: 'Personal email',
+
+  teamTitle: 'Team & access', teamSub: '{n} active users · roles control what each person sees',
+  addUser: '+ Add user', addUserTitle: 'Add a user', fullName: 'Full name *', emailReq: 'Company email *',
+  deptLbl: 'Department', jobTitle: 'Job title', role: 'Role *',
+  ssoHint: 'In production this sends an SSO invite instead of creating a login.',
+  createUser: 'Create user', cancel: 'Cancel', user: 'User', active: 'Active', disabled: 'Disabled',
+  disable: 'Disable', enable: 'Enable', you: 'you',
+  teamNote: 'You cannot change or disable your own account. Disabled users keep their history but can no longer sign in.',
+  userAddedToast: '{name} added — they now appear on the sign-in screen.',
+  roleUpdated: 'Role updated to {role}.', userDisabled: '{name} disabled.', userEnabled: '{name} enabled.',
+
+  commissionRules: 'Commission rules', rulesSub: 'Changes apply instantly across every dashboard (demo)',
+  commissionPctLbl: 'Hunter commission (% of net)', currentRate: 'Currently {rate} of subscription value excl. VAT',
+  vatLbl: 'VAT rate (%)', vatHint: 'KSA standard is 15% — deals with other VAT read it from HubSpot in production',
+  saveRules: 'Save rules', demoControls: 'Demo controls', forPresentations: 'For presentations',
+  resetSub: 'Reset clears everything done in this browser — submitted leads, payment status changes, payslips, added users, and settings — back to the original mock data.',
+  resetBtn: 'Reset demo data', auditLog: 'Audit log',
+  auditSub: 'Sensitive actions in this browser session — in production every payout, role change, and IBAN view lands here',
+  when: 'When', who: 'Who', action: 'Action',
+  auditEmpty: 'Nothing yet — payment status changes, payslip uploads, and team edits will appear here.',
+  rulesRange: 'Enter a commission between 1–50% and VAT between 0–30%.',
+  rulesSaved: 'Rules saved — commission is now {rate} everywhere.', resetToast: 'Demo reset to original mock data.',
+
+  profileManager: 'manager: {name}', contactInfo: 'Contact information',
+  emailHint: 'Used for sign-in and lead notifications', optional: 'Optional',
+  payoutDetails: 'Payout details', ibanLbl: 'IBAN',
+  ibanCurrent: 'Current: ···· {last4} — leave blank to keep it. Stored masked; never shown in full.',
+  ibanHint: 'Saudi IBAN: SA followed by 22 digits', preferredMethod: 'Preferred payout method',
+  bankTransfer: 'Bank transfer (payroll)', separateTransfer: 'Separate bank transfer',
+  nationalId: 'National ID / Iqama (optional)', nationalIdHint: 'Only needed if finance requires it for payout',
+  profileNote: 'Payout details are stored encrypted and visible only to you and finance. In this demo they stay in your browser.',
+  saveProfile: 'Save profile', profileSaved: 'Profile saved.',
+  ibanErr: 'That does not look like a Saudi IBAN — it should be SA followed by 22 digits.',
+
+  unassigned: 'Unassigned',
+  dataBtn: 'Data', chartBtn: 'Chart', leadsReached: '{n} leads reached', ofPrevStage: '{pct} of previous stage',
+  leadsUnit: 'leads', noData: 'No data', emptyReasons: 'No data yet — nothing in this category. That is good news.',
+  leadsPct: '{n} leads ({pct})'
+},
+ar: {
+  appName: 'صياد المبيعات', byZid: 'من زد · داخلي', tagline: 'برنامج إحالات موظفي زد',
+  demoPill: 'تجريبي · بيانات وهمية',
+  footer: 'صياد المبيعات — برنامج داخلي من زد · نسخة تجريبية ببيانات وهمية · هبسبوت هو النظام الأساسي في الإنتاج',
+  signIn: 'تسجيل الدخول', signOut: 'تسجيل الخروج',
+  signInSub: 'اختر صلاحية لاستكشاف النسخة التجريبية. في الإنتاج يتم الدخول عبر حساب زد الموحّد.',
+  loginNote: 'نسخة تجريبية · بيانات وهمية · هبسبوت هو مصدر الحقيقة في الإنتاج',
+  accessHunter: 'تابع عملاءك المحتملين وخط المبيعات وعمولتك',
+  accessMgmt: 'نظرة عامة على البرنامج، الفريق والإعدادات',
+  accessFin: 'صرف العمولات وقسائم الدفع وحسابات الصيادين',
+  loginAs: 'بصفة {name} · {title}', addedByMgmt: 'أُضيفوا من الإدارة',
+  heroTitle: 'اكتشف تاجراً.<br>اجلبه إلى زد.<br>خذ {rate} من الصفقة.',
+  heroSub: 'كل عميل محتمل ترسله يدخل مباشرة إلى خط المبيعات. تابعه مرحلة بمرحلة — ولحظة إغلاق الصفقة بنجاح، تُثبَّت عمولتك.',
+  heroEarned: 'حصدها الصيادون حتى الآن', heroMerchants: 'تاجراً انضموا إلى زد', heroClose: 'من العملاء المحتملين يغلقون بنجاح',
+  heroBy: 'برنامج داخلي من',
+  navDashboard: 'لوحتي', navLeads: 'عملائي المحتملون', navSubmit: 'إرسال عميل محتمل', navCommission: 'العمولة',
+  navStores: 'أفضل متاجر زد', navOverview: 'نظرة عامة على البرنامج', navPerformance: 'أداء الصيادين',
+  navTeam: 'الفريق والصلاحيات', navSettings: 'إعدادات البرنامج', navPayouts: 'صرف العمولات',
+  navHunters: 'ملفات الصيادين', navProfile: 'ملفي الشخصي',
+  roleHunter: 'صياد', roleMgmt: 'الإدارة', roleFin: 'المالية',
+  themeToggle: 'تبديل المظهر', langToggle: 'English',
+
+  welcomeBack: 'أهلاً بعودتك، {name}', hunterId: 'رقم الصياد {code}',
+  winsTo: '{n} انتصارات تفصلك عن {rank}', winTo: 'انتصار واحد يفصلك عن {rank}', topRank: 'وصلت لأعلى رتبة',
+  totalLeads: 'إجمالي العملاء المحتملين', vsLastMonth: 'مقارنة بالشهر الماضي', activePipeline: 'في خط المبيعات الآن',
+  potentialValue: 'قيمة محتملة {v}', closedWon: 'صفقات ناجحة', closedLost: 'صفقات خاسرة',
+  unqualified: 'غير مؤهلين', avgCycle: 'متوسط الدورة {n} يوماً', conversionRate: 'معدل التحويل',
+  convSub: 'الصفقات الناجحة ÷ كل ما أُرسل', revenueGenerated: 'الإيراد الذي حققته',
+  revSub: 'قيمة الاشتراك، دون الضريبة', commissionEarned: 'العمولة المكتسبة', notYetPaid: '{v} لم تُدفع بعد',
+  hunterLevel: 'رتبة الصياد', levelSub: 'ارتقِ بإغلاق الصفقات',
+  nextRank: 'التالي: <b>{rank}</b> عند {n} صفقة ناجحة', topRankNote: 'أنت في أعلى رتبة في البرنامج.',
+  wonSoFar: 'صفقة ناجحة حتى الآن', moreToLevel: 'متبقية للترقية', chancesInPlay: 'فرصة قيد العمل',
+  sharpenAim: 'اضبط تصويبك', sharpenSub: 'قراءة في أرقامك',
+  tipBestCat: 'عملاؤك في فئة {cat} هم الأفضل تحويلاً — {pct} منهم أُغلق بنجاح. اصطد المزيد منهم.',
+  tipUnq: 'أكثر سبب لعدم التأهيل لديك هو «{reason}» — تحقق منه قبل الإرسال.',
+  tipNotes: 'العملاء المرفقون بملاحظات عن الحاجة والتوقيت يتأهلون أسرع بمرتين تقريباً.',
+  tipStores: 'راجع أفضل متاجر زد لقصص نجاح تستخدمها في عرضك.',
+  pipelineFunnel: 'قمع المبيعات', funnelSub: 'إلى أين يصل عملاؤك — عدد من وصل لكل مرحلة',
+  whereOpen: 'أين عملاؤك المفتوحون الآن', inPlay: '{n} عميلاً قيد العمل حالياً',
+  noOpen: 'لا عملاء مفتوحين الآن — أرسل عميلاً جديداً.',
+  outcomeSplit: 'توزيع النتائج', allToDate: 'كل العملاء حتى الآن: {n}',
+  won: 'ناجحة', lost: 'خاسرة', stillOpen: 'ما زالت مفتوحة',
+  leadsByMonth: 'العملاء المرسلون شهرياً', last12: 'آخر 12 شهراً',
+  winRateTitle: 'معدل نجاح العملاء المحسومين', winRateSub: 'الناجحة ÷ (الناجحة + الخاسرة + غير المؤهلة) المُغلقة كل شهر',
+  noDecided: 'لا عملاء حُسموا هذا الشهر',
+  whyLost: 'لماذا خسرنا الصفقات', whyLostSub: 'أسباب الخسارة من نظام إدارة العملاء ({n})',
+  whyUnq: 'لماذا لم يتأهل العملاء', whyUnqSub: 'تعلّم شكل العميل القوي ({n})',
+  month: 'الشهر', leads: 'عملاء', winRate: 'معدل النجاح', stage: 'المرحلة', reached: 'وصلوا إليها',
+  outcome: 'النتيجة', amount: 'المبلغ', reason: 'السبب',
+
+  all: 'الكل', open: 'مفتوحة', searchPh: 'ابحث عن متجر أو شخص أو مندوب…', submitLeadBtn: '+ عميل جديد',
+  merchant: 'التاجر', category: 'الفئة', submitted: 'أُرسل في', dealOwner: 'مندوب المبيعات',
+  lastActivity: 'آخر نشاط', valueExVat: 'القيمة (دون الضريبة)', commissionCol: 'العمولة',
+  noLeadsFilter: 'لا نتائج مطابقة لهذا الفلتر.', potential: 'محتملة {v}', toBeScoped: 'تُحدد لاحقاً',
+  twoYr: ' · سنتان',
+
+  synced: '⟳ متزامن من هبسبوت · صفقة {id}', packageLbl: 'الباقة', source: 'المصدر',
+  valueIncVat: 'القيمة (شاملة الضريبة)', valueLbl: 'القيمة', scopedBySales: 'يحددها فريق المبيعات',
+  commissionPct: 'العمولة ({rate})', lostReason: 'سبب الخسارة', unqReason: 'سبب عدم التأهيل',
+  timeline: 'سجل النشاط', paid: 'مدفوعة', approved: 'معتمدة', pendingApproval: 'بانتظار الاعتماد',
+  yearOne: ' · سنة واحدة', yearTwo: ' · سنتان', close: 'إغلاق',
+
+  submitTitle: 'إرسال عميل محتمل جديد',
+  submitSub: 'يدخل تاجرك مباشرة إلى خط المبيعات. في الإنتاج يُنشأ جهة الاتصال والصفقة في هبسبوت باسمك كصياد.',
+  merchantName: 'اسم التاجر / المتجر *', storeCat: 'فئة المتجر *', contactPerson: 'الشخص المسؤول *',
+  contactPhone: 'رقم الجوال', contactEmail: 'البريد الإلكتروني', city: 'المدينة',
+  howKnow: 'كيف تعرف هذا التاجر؟ *', likelyPackage: 'الباقة المتوقعة',
+  notSure: 'غير متأكد — سيحددها فريق المبيعات', perYear: '{v} / سنة',
+  commissionHint: 'عمولتك {rate} من قيمة الاشتراك النهائية دون الضريبة.',
+  whyGood: 'لماذا هذا عميل جيد؟',
+  notesPh: 'السياق يسرّع التأهيل: ماذا يبيع، قنواته الحالية (إنستقرام، واتساب…)، التوقيت، من يقرر.',
+  submitBtn: 'إرسال', dupNote: 'يتم التحقق من التكرار في نظام إدارة العملاء قبل إنشاء الصفقة.',
+  requiredErr: 'اسم المتجر والشخص المسؤول مطلوبان.',
+  submittedToast: 'تم الإرسال — عميلك الآن في خط المبيعات كـ«عميل جديد».',
+  fullNamePh: 'الاسم الكامل',
+
+  lifetimeCommission: 'إجمالي العمولات المكتسبة',
+  fromDeals: 'من {n} صفقة ناجحة · حققت للشركة إيراداً قدره {v}',
+  downloadCsv: 'تنزيل كشف (CSV)', thisMonth: 'هذا الشهر', lastMonth: 'الشهر الماضي',
+  awaitingFinance: 'بانتظار مراجعة المالية', approvedPayroll: 'معتمدة — الراتب القادم', paidToDate: 'المدفوع حتى الآن',
+  howCalc: 'كيف تُحسب عمولتك', calcExample: 'مثال: آخر صفقة ناجحة لك — {name}',
+  subIncVat: 'الاشتراك شامل الضريبة', customerPays: 'ما يدفعه العميل',
+  removeVat: 'استبعاد ضريبة {vat} (÷ {div})', netValue: 'صافي قيمة الاشتراك',
+  yourCommission: 'عمولتك (× {rate})', paidAfter: 'تُدفع مع الراتب القادم بعد الاعتماد',
+  revVsComm: 'الإيراد الذي حققته مقابل عمولتك', revVsCommSub: 'حسب شهر إغلاق الصفقة · كلاهما دون الضريبة',
+  revGenLegend: 'الإيراد المحقق', yourCommLegend: 'عمولتك ({rate})',
+  commHistory: 'سجل العمولات', oneRowPerDeal: 'صف لكل صفقة ناجحة',
+  deal: 'الصفقة', noWonYet: 'لا صفقات ناجحة بعد — أول صفقة تفتح هذا الجدول.',
+  statementDl: 'تم تنزيل الكشف.', revenueSar: 'الإيراد (ر.س)', commissionSar: 'العمولة (ر.س)',
+
+  storesTitle: 'المتاجر المتصدرة في زد الآن',
+  storesSub: 'اختر فئة لترى أفضل متاجرها — حجج قوية لعرضك: «متاجر مثلك تحقق هذا في زد».',
+  catWinRate: 'نجاح {pct}', no1: 'الأول · {name}', ordersMo: 'طلب / شهر',
+  topStoresCount: '{n} متاجر متصدرة لعرضك', topStoreCount: 'متجر متصدر واحد لعرضك',
+  youHaveLeads: 'لديك {n} عملاء هنا', youHaveLead: 'لديك عميل واحد هنا',
+  browseCat: 'تصفح الفئة ←', backCats: '→ كل الفئات',
+  catHeadSub: 'أفضل متاجر زد في هذه الفئة', catWinInline: ' · عملاء الصيادين هنا يُغلقون بنجاح {pct} من المرات',
+  catMineInline: ' · لديك {n} عميلاً في هذه الفئة', growthYear: 'نمو هذا العام',
+
+  activeHunters: 'الصيادون النشطون', ofEnrolled: 'من أصل {n} مسجلين', currentlyOpen: '{n} مفتوحة حالياً',
+  newStores: 'متاجر زد الجديدة', wonMerchants: 'تجار بصفقات ناجحة', programConv: 'تحويل البرنامج',
+  revenueClosed: 'الإيراد المُغلق', avgPerStore: 'متوسط {v} لكل متجر · دون الضريبة', exVat: 'دون الضريبة',
+  pipelineValue: 'قيمة خط المبيعات', openExVat: 'صفقات مفتوحة، دون الضريبة',
+  commOwedPaid: 'العمولات المستحقة والمدفوعة', alreadyPaid: 'دُفع منها {v}',
+  forecastTile: 'التوقع من خط المبيعات', forecastSub: 'الصفقات المفتوحة × احتمالية المرحلة',
+  momTitle: 'هذا الشهر مقابل الماضي', momSub: '{m1} حتى اليوم {d} مقابل {m2} كاملاً',
+  metric: 'المؤشر', change: 'التغير', momLeads: 'عملاء محتملون أُرسلوا', momStores: 'متاجر زد جديدة (ناجحة)',
+  momRevenue: 'الإيراد المُغلق', momCommission: 'العمولات المستحقة', newDelta: 'جديد',
+  topPackages: 'الباقات الأكثر مبيعاً', topPackagesSub: 'الصفقات الناجحة حسب باقة زد · حصة الإيراد',
+  packageCol: 'الباقة', stores: 'متاجر', revenue: 'الإيراد', share: 'الحصة', zidPlan: 'زد {name}',
+  programFunnel: 'قمع البرنامج', programFunnelSub: 'كل عملاء الصيادين — عدد من وصل لكل مرحلة',
+  stageNow: 'الصفقات حسب المرحلة الآن', stageNowSub: 'عدّ حي لكل مرحلة — يطابق لوحة هبسبوت',
+  deals: 'صفقات', afterPayment: 'بعد الدفع',
+  outcomeAllLeads: 'كل العملاء حتى الآن: {n}', revenueWord: 'إيراد', inPlayWord: '{v} قيد العمل',
+  leadsByMonthProgram: 'على مستوى البرنامج، آخر 12 شهراً',
+  repPerf: 'أداء مندوبي المبيعات مع عملاء الصيادين',
+  repPerfSub: 'كيف يتعامل كل مندوب مع عملاء الصيادين — معدل النجاح على المحسومين فقط',
+  salesRep: 'المندوب', hunterLeads: 'عملاء الصيادين', revenueWon: 'إيراد ناجح', openNow: 'المفتوح لديه الآن',
+  revByMonth: 'الإيراد المُغلق شهرياً', revByMonthSub: 'قيمة اشتراكات الصفقات الناجحة، دون الضريبة',
+  deptComparison: 'مقارنة الإدارات', deptSub: 'أي الفرق يصطاد أفضل', department: 'الإدارة',
+  sourcePerf: 'أداء مصادر العملاء', sourceSub: 'الانتصارات حسب معرفة الصياد بالعميل · النجاح على المحسومين',
+  topLostReasons: 'أبرز أسباب الخسارة', programWideLost: 'على مستوى البرنامج ({n} خاسرة)',
+  whyUnqProgram: 'لماذا لم يتأهل العملاء', programWideUnq: 'على مستوى البرنامج ({n} غير مؤهلين)',
+  winsFrom: 'من أين تأتي الانتصارات', winsFromSub: 'المتاجر الناجحة حسب الفئة', avgDeal: 'متوسط الصفقة',
+  noWonStores: 'لا متاجر ناجحة بعد.',
+  payoutStatus: 'حالة صرف العمولات', payoutStatusSub: 'للمالية — أين يقف كل ريال من العمولات',
+  status: 'الحالة', totalCommNet: 'إجمالي العمولة ({rate} من الصافي)',
+  coaching: 'صيادون قد يحتاجون توجيهاً',
+  coachingSub: '8 عملاء أو أكثر مع تحويل أدنى بكثير من متوسط البرنامج {pct}',
+  coachConv: 'تحويل {pct}', coachUnq: '{n} غير مؤهلين',
+  nobodyFlagged: 'لا أحد — كل الصيادين النشطين قرب المتوسط أو أعلى.',
+  perfStrip: 'أداء الصيادين', perfStripSub: 'الترتيب الكامل والإيراد والعمولة لكل صياد — للإدارة فقط',
+  openBtn: 'فتح',
+
+  allTimeRanking: 'الترتيب العام',
+  rankingSub: 'مرتب حسب الإيراد المحقق (صفقات ناجحة، دون الضريبة) — يظهر للإدارة فقط؛ الصياد يرى أرقامه فقط',
+  hunter: 'الصياد', conversion: 'التحويل', achievements: 'الإنجازات',
+  badgeFirst: '🏆 أول صفقة', badgeWins: '🔥 5 انتصارات', badge500k: '💎 حقق 500 ألف ر.س',
+  badgeTop: '🚀 أفضل صياد هذا الشهر', badgeSharp: '🎯 عين ثاقبة',
+
+  stillToPay: 'المتبقي للدفع', pendingApprovedSub: '{p} بانتظار المراجعة · {a} معتمدة',
+  huntersAwaiting: 'صيادون بانتظار الدفع', seeProfiles: 'انظر ملفات الصيادين للحسابات',
+  totalCommission: 'إجمالي العمولات', pctOfNet: '{rate} من صافي إيراد {v}',
+  pending: 'معلقة', exportRun: 'تصدير دفعة الصرف (CSV)', closedBy: 'أغلقها (المندوب)',
+  payslip: 'قسيمة الدفع', payoutAccount: 'حساب الصرف', openHubspot: 'افتح في هبسبوت ↗',
+  uploadPayslip: 'رفع قسيمة الدفع', replace: 'استبدال', payslipDl: 'قسيمة الدفع ↓',
+  noPayouts: 'لا مدفوعات مطابقة لهذا الفلتر.',
+  payoutNote: 'حسابات الصرف من ملفات الصيادين. يظهر الآيبان مقنّعاً؛ في الإنتاج يُكشف كاملاً للمالية وقت الدفع فقط مع تسجيل كل اطلاع. قسائم الدفع مرئية للصياد والمالية فقط.',
+  hsToast: 'في الإنتاج يفتح هذا صفقة {id} في هبسبوت.',
+  statusPaidToast: 'صفقة {id} صارت «مدفوعة» — أرفق قسيمة الدفع ليكون لدى الصياد إثبات.',
+  statusToast: 'صفقة {id} صارت «{s}» — يراها الصياد فوراً.',
+  slipTooBig: 'أبقِ قسائم الدفع أقل من 1.5 م.ب في النسخة التجريبية.',
+  slipToast: 'أُرفقت قسيمة الدفع بصفقة {id} — يمكن للصياد تنزيلها الآن.',
+  slipFail: 'تعذر حفظ الملف — مساحة المتصفح ممتلئة.', exportedToast: 'تم تصدير دفعة الصرف.',
+
+  hunterProfiles: 'ملفات الصيادين', hunterProfilesSub: 'اضغط على صياد لرؤية ملفه الكامل وتفاصيل حساب الصرف',
+  contact: 'التواصل', dealsWon: 'صفقات ناجحة', bank: 'البنك',
+  fullIbanNote: '🔒 الآيبان الكامل يظهر للمالية فقط — كل اطلاع يُسجل في الإنتاج',
+  commissionSummary: 'ملخص العمولات', lifetime: 'إجمالي العمولات', notProvided: 'لم يُضف بعد',
+  payoutMethod: 'طريقة الصرف', companyEmail: 'البريد الرسمي', mobile: 'الجوال', personalEmail: 'البريد الشخصي',
+
+  teamTitle: 'الفريق والصلاحيات', teamSub: '{n} مستخدمين نشطين · الأدوار تتحكم بما يراه كل شخص',
+  addUser: '+ إضافة مستخدم', addUserTitle: 'إضافة مستخدم', fullName: 'الاسم الكامل *', emailReq: 'البريد الرسمي *',
+  deptLbl: 'الإدارة', jobTitle: 'المسمى الوظيفي', role: 'الدور *',
+  ssoHint: 'في الإنتاج تُرسل دعوة عبر الدخول الموحّد بدلاً من إنشاء حساب.',
+  createUser: 'إنشاء المستخدم', cancel: 'إلغاء', user: 'المستخدم', active: 'نشط', disabled: 'معطّل',
+  disable: 'تعطيل', enable: 'تفعيل', you: 'أنت',
+  teamNote: 'لا يمكنك تعديل أو تعطيل حسابك. المستخدمون المعطّلون يحتفظون بسجلهم لكن لا يمكنهم الدخول.',
+  userAddedToast: 'أُضيف {name} — يظهر الآن في شاشة الدخول.',
+  roleUpdated: 'تم تحديث الدور إلى {role}.', userDisabled: 'عُطّل {name}.', userEnabled: 'فُعّل {name}.',
+
+  commissionRules: 'قواعد العمولة', rulesSub: 'التغييرات تسري فوراً على كل اللوحات (تجريبي)',
+  commissionPctLbl: 'عمولة الصياد (% من الصافي)', currentRate: 'حالياً {rate} من قيمة الاشتراك دون الضريبة',
+  vatLbl: 'نسبة الضريبة (%)', vatHint: 'المعيار السعودي 15% — الصفقات المختلفة تقرأها من هبسبوت في الإنتاج',
+  saveRules: 'حفظ القواعد', demoControls: 'أدوات العرض', forPresentations: 'للعروض التقديمية',
+  resetSub: 'إعادة الضبط تمسح كل ما جرى في هذا المتصفح — العملاء المرسلون، حالات الدفع، القسائم، المستخدمون المضافون، والإعدادات — وتعيد البيانات الأصلية.',
+  resetBtn: 'إعادة ضبط البيانات', auditLog: 'سجل التدقيق',
+  auditSub: 'الإجراءات الحساسة في هذه الجلسة — في الإنتاج يُسجل هنا كل دفع وتغيير دور واطلاع على آيبان',
+  when: 'متى', who: 'من', action: 'الإجراء',
+  auditEmpty: 'لا شيء بعد — تغييرات حالات الدفع ورفع القسائم وتعديلات الفريق ستظهر هنا.',
+  rulesRange: 'أدخل عمولة بين 1–50% وضريبة بين 0–30%.',
+  rulesSaved: 'حُفظت القواعد — العمولة الآن {rate} في كل مكان.', resetToast: 'أُعيد ضبط البيانات التجريبية.',
+
+  profileManager: 'المدير: {name}', contactInfo: 'معلومات التواصل',
+  emailHint: 'يُستخدم للدخول وإشعارات العملاء', optional: 'اختياري',
+  payoutDetails: 'تفاصيل الصرف', ibanLbl: 'الآيبان',
+  ibanCurrent: 'الحالي: ···· {last4} — اتركه فارغاً للإبقاء عليه. يُخزن مقنّعاً ولا يُعرض كاملاً.',
+  ibanHint: 'آيبان سعودي: SA يتبعها 22 رقماً', preferredMethod: 'طريقة الصرف المفضلة',
+  bankTransfer: 'تحويل بنكي (مع الراتب)', separateTransfer: 'تحويل بنكي مستقل',
+  nationalId: 'الهوية / الإقامة (اختياري)', nationalIdHint: 'فقط إذا طلبتها المالية للصرف',
+  profileNote: 'تفاصيل الصرف مشفرة ولا يراها إلا أنت والمالية. في هذه النسخة تبقى في متصفحك.',
+  saveProfile: 'حفظ الملف', profileSaved: 'تم حفظ الملف.',
+  ibanErr: 'لا يبدو آيبان سعودياً صحيحاً — يجب أن يبدأ بـ SA يتبعها 22 رقماً.',
+
+  unassigned: 'غير مُسند بعد',
+  dataBtn: 'البيانات', chartBtn: 'الرسم', leadsReached: 'وصل {n} عميلاً', ofPrevStage: '{pct} من المرحلة السابقة',
+  leadsUnit: 'عملاء', noData: 'لا بيانات', emptyReasons: 'لا بيانات بعد — لا شيء في هذه الفئة. وهذا خبر جيد.',
+  leadsPct: '{n} عميلاً ({pct})'
+}
+};

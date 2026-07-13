@@ -21,7 +21,7 @@
   /* ---- Users & roles: hunter (emp) / management (mgr) / finance (fin).
      Base users come from data.js; Management can add users and change
      roles — stored as overrides + custom records. ---- */
-  var ROLE_NAMES = { emp: 'Hunter', mgr: 'Management', fin: 'Finance' };
+  function roleName(r) { return t(r === 'emp' ? 'roleHunter' : r === 'mgr' ? 'roleMgmt' : 'roleFin'); }
   function baseUsers() {
     return EMPLOYEES.map(function (e) { return Object.assign({ role: 'emp' }, e); })
       .concat([Object.assign({ role: 'mgr' }, MANAGER), Object.assign({ role: 'fin' }, FINANCE)]);
@@ -68,7 +68,7 @@
   function slipLink(dealId, cls) {
     var slip = getSlips()[dealId];
     if (!slip) return '';
-    return '<a class="' + (cls || '') + '" href="' + slip.dataUrl + '" download="' + esc(slip.name) + '">Payslip ↓</a>';
+    return '<a class="' + (cls || '') + '" href="' + slip.dataUrl + '" download="' + esc(slip.name) + '">' + t('payslipDl') + '</a>';
   }
 
   /* Payout details: saved profile overrides the employee defaults */
@@ -120,7 +120,7 @@
   function stagePill(stageId) {
     var st = STAGE_BY_ID[stageId];
     var g = st.group === 'open' ? 'g-open' : st.group === 'won' ? 'g-won' : st.group === 'lost' ? 'g-lost' : 'g-unq';
-    return '<span class="stage-pill ' + g + '"><i></i>' + esc(st.label) + '</span>';
+    return '<span class="stage-pill ' + g + '"><i></i>' + esc(trStage(st.label)) + '</span>';
   }
   function deltaHTML(cur, prev, label) {
     if (prev === 0 && cur === 0) return '<span>' + esc(label) + '</span>';
@@ -193,18 +193,18 @@
 
   /* ---------------- Router ---------------- */
   var ROUTES = {
-    '/dashboard':  { title: 'My Dashboard',      icon: 'dash',    render: viewDashboard, who: 'emp' },
-    '/leads':      { title: 'My Leads',           icon: 'leads',   render: viewLeads,     who: 'emp' },
-    '/submit':     { title: 'Submit a Lead',      icon: 'plus',    render: viewSubmit,    who: 'emp' },
-    '/commission': { title: 'Commission',         icon: 'money',   render: viewCommission,who: 'emp' },
-    '/stores':     { title: 'Top Zid Stores',     icon: 'store',   render: viewTopStores, who: 'all' },
-    '/manager':    { title: 'Program Overview',   icon: 'manager', render: viewManager,   who: 'mgr' },
-    '/performance':{ title: 'Hunter Performance', icon: 'trophy',  render: viewPerformance, who: 'mgr' },
-    '/team':       { title: 'Team & Access',      icon: 'team',    render: viewTeam,      who: 'mgr' },
-    '/settings':   { title: 'Program Settings',   icon: 'gear',    render: viewSettings,  who: 'mgr' },
-    '/payouts':    { title: 'Commission Payouts', icon: 'money',   render: viewPayouts,   who: 'fin' },
-    '/hunters':    { title: 'Hunter Profiles',    icon: 'person',  render: viewHunters,   who: 'fin' },
-    '/profile':    { title: 'My Profile',         icon: 'person',  render: viewProfile,   who: 'emp' }
+    '/dashboard':  { titleKey: 'navDashboard',   icon: 'dash',    render: viewDashboard, who: 'emp' },
+    '/leads':      { titleKey: 'navLeads',        icon: 'leads',   render: viewLeads,     who: 'emp' },
+    '/submit':     { titleKey: 'navSubmit',       icon: 'plus',    render: viewSubmit,    who: 'emp' },
+    '/commission': { titleKey: 'navCommission',   icon: 'money',   render: viewCommission,who: 'emp' },
+    '/stores':     { titleKey: 'navStores',       icon: 'store',   render: viewTopStores, who: 'all' },
+    '/manager':    { titleKey: 'navOverview',     icon: 'manager', render: viewManager,   who: 'mgr' },
+    '/performance':{ titleKey: 'navPerformance',  icon: 'trophy',  render: viewPerformance, who: 'mgr' },
+    '/team':       { titleKey: 'navTeam',         icon: 'team',    render: viewTeam,      who: 'mgr' },
+    '/settings':   { titleKey: 'navSettings',     icon: 'gear',    render: viewSettings,  who: 'mgr' },
+    '/payouts':    { titleKey: 'navPayouts',      icon: 'money',   render: viewPayouts,   who: 'fin' },
+    '/hunters':    { titleKey: 'navHunters',      icon: 'person',  render: viewHunters,   who: 'fin' },
+    '/profile':    { titleKey: 'navProfile',      icon: 'person',  render: viewProfile,   who: 'emp' }
   };
 
   // Finance sees ONLY its own views; everyone else gets role + shared views
@@ -225,43 +225,64 @@
   /* ---------------- Login ---------------- */
   function renderLogin() {
     var users = usersAll().filter(function (u) { return u.active; });
-    // hunters first (a handful), then management & finance
-    var hunters = users.filter(function (u) { return u.role === 'emp'; });
-    var staff = users.filter(function (u) { return u.role !== 'emp'; });
-    var list = hunters.slice(0, 5).concat(hunters.slice(5).filter(function (u) { return String(u.id).charAt(0) === 'u'; }), staff);
-    var personas = list.map(function (u) {
+    // Exactly three accesses: Hunter, Management, Finance
+    var ACCESS = [
+      { id: 'e1',  icon: 'dash',    desc: t('accessHunter') },
+      { id: 'mgr', icon: 'manager', desc: t('accessMgmt') },
+      { id: 'fin', icon: 'money',   desc: t('accessFin') }
+    ];
+    var personas = ACCESS.map(function (a) {
+      var u = users.find(function (x) { return x.id === a.id; });
+      if (!u) return '';
       var dark = u.role !== 'emp' ? ' style="background: var(--ink); color: var(--ground)"' : '';
       return '<button class="persona" data-login="' + esc(u.id) + '">' +
-        '<span class="avatar"' + dark + '>' + esc(initials(u.name)) + '</span>' +
-        '<span class="who"><b>' + esc(u.name) + '</b><span>' + esc(u.title || '') + ' · ' + esc(ROLE_NAMES[u.role]) + '</span></span>' +
+        '<span class="avatar"' + dark + '>' + ICONS[a.icon] + '</span>' +
+        '<span class="who"><b>' + esc(roleName(u.role)) + '</b><span>' + esc(a.desc) + '</span>' +
+        '<span class="p-as">' + t('loginAs', { name: esc(u.name), title: esc(u.title || '') }) + '</span></span>' +
         '<span class="go">→</span></button>';
     }).join('');
+    // users added through Team & Access sign in here too
+    var custom = users.filter(function (u) { return String(u.id).charAt(0) === 'u'; });
+    if (custom.length) {
+      personas += '<p class="eyebrow" style="margin:10px 2px 2px">' + t('addedByMgmt') + '</p>' +
+        custom.map(function (u) {
+          return '<button class="persona" data-login="' + esc(u.id) + '">' +
+            '<span class="avatar">' + esc(initials(u.name)) + '</span>' +
+            '<span class="who"><b>' + esc(u.name) + '</b><span>' + esc(u.title || '') + ' · ' + esc(roleName(u.role)) + '</span></span>' +
+            '<span class="go">→</span></button>';
+        }).join('');
+    }
 
     var ps = statsFor(allLeads()); // program-wide, for the hero stats
     app.innerHTML =
       '<div class="login-wrap">' +
         '<div class="login-left"><div class="login-card">' +
-          '<div class="brand">' + SH_MARK + '<div><b>Sales Hunter</b><small>Zid employee referral program</small></div></div>' +
+          '<div class="brand">' + SH_MARK + '<div><b>' + t('appName') + '</b><small>' + t('tagline') + '</small></div></div>' +
           '<div class="card">' +
-            '<h2>Sign in</h2>' +
-            '<p class="sub">Pick a profile to explore the demo. In production this is Zid single sign-on.</p>' +
+            '<h2>' + t('signIn') + '</h2>' +
+            '<p class="sub">' + t('signInSub') + '</p>' +
             '<div class="persona-list">' + personas + '</div>' +
           '</div>' +
-          '<p class="login-note">Demo build · mock data · HubSpot is the system of record in production</p>' +
+          '<p class="login-note">' + t('loginNote') + ' · <a href="#" id="login-lang">' + t('langToggle') + '</a></p>' +
         '</div></div>' +
         '<div class="login-hero">' +
           HERO_RINGS +
-          '<h2>Spot a merchant.<br>Bring them to Zid.<br>Take ' + ratePct() + ' of the win.</h2>' +
-          '<p>Every lead you submit goes straight to the sales pipeline. Watch it move stage by stage — and the moment it closes won, your commission is locked in.</p>' +
+          '<h2>' + t('heroTitle', { rate: ratePct() }) + '</h2>' +
+          '<p>' + t('heroSub') + '</p>' +
           '<div class="hero-stats">' +
-            '<div class="hero-stat"><b>' + fmtMoneyC(ps.commission) + '</b><span>earned by hunters so far</span></div>' +
-            '<div class="hero-stat"><b>' + fmtNum(ps.won) + '</b><span>merchants brought to Zid</span></div>' +
-            '<div class="hero-stat"><b>' + fmtPct(ps.conversion, 0) + '</b><span>of leads close won</span></div>' +
+            '<div class="hero-stat"><b>' + fmtMoneyC(ps.commission) + '</b><span>' + t('heroEarned') + '</span></div>' +
+            '<div class="hero-stat"><b>' + fmtNum(ps.won) + '</b><span>' + t('heroMerchants') + '</span></div>' +
+            '<div class="hero-stat"><b>' + fmtPct(ps.conversion, 0) + '</b><span>' + t('heroClose') + '</span></div>' +
           '</div>' +
-          '<div class="hero-zid">an internal program by ' + LOGO + '</div>' +
+          '<div class="hero-zid">' + t('heroBy') + ' ' + LOGO + '</div>' +
         '</div>' +
       '</div>';
 
+    document.getElementById('login-lang').addEventListener('click', function (e) {
+      e.preventDefault();
+      setLang(isAr() ? 'en' : 'ar');
+      renderLogin();
+    });
     app.querySelectorAll('[data-login]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         LS.set('user', btn.getAttribute('data-login'));
@@ -277,29 +298,30 @@
     var nav = Object.keys(ROUTES).filter(function (p) {
       return canAccess(ROUTES[p].who, roleOf());
     }).map(function (p) {
-      return '<a href="#' + p + '" class="' + (p === path ? 'active' : '') + '">' + ICONS[ROUTES[p].icon] + esc(ROUTES[p].title) + '</a>';
+      return '<a href="#' + p + '" class="' + (p === path ? 'active' : '') + '">' + ICONS[ROUTES[p].icon] + esc(t(ROUTES[p].titleKey)) + '</a>';
     }).join('');
 
     app.innerHTML =
       '<div class="shell">' +
         '<aside class="sidebar">' +
-          '<div class="brand">' + SH_MARK + '<div><b>Sales Hunter</b><small>by Zid · internal</small></div></div>' +
+          '<div class="brand">' + SH_MARK + '<div><b>' + t('appName') + '</b><small>' + t('byZid') + '</small></div></div>' +
           '<nav class="nav">' + nav + '</nav>' +
           '<div class="side-foot">' +
             '<div class="userchip"><span class="avatar">' + esc(initials(user.name)) + '</span>' +
-            '<span class="who"><b>' + esc(user.name) + '</b><span>' + esc(user.dept) + '</span></span></div>' +
-            '<button class="link-btn" id="logout">Sign out</button>' +
+            '<span class="who"><b>' + esc(user.name) + '</b><span>' + esc(trDept(user.dept)) + '</span></span></div>' +
+            '<button class="link-btn" id="logout">' + t('signOut') + '</button>' +
           '</div>' +
         '</aside>' +
         '<div class="main">' +
           '<div class="topbar">' +
-            '<div class="crumbs"><h1>' + esc(r.title) + '</h1><span class="demo-pill">Demo · mock data</span></div>' +
+            '<div class="crumbs"><h1>' + esc(t(r.titleKey)) + '</h1><span class="demo-pill">' + t('demoPill') + '</span></div>' +
             '<div class="actions">' +
-              '<button class="icon-btn" id="theme-toggle" title="Toggle light/dark" aria-label="Toggle theme">' + ICONS.sun + '</button>' +
+              '<button class="icon-btn lang-btn" id="lang-toggle" aria-label="' + t('langToggle') + '">' + (isAr() ? 'EN' : 'ع') + '</button>' +
+              '<button class="icon-btn" id="theme-toggle" title="' + t('themeToggle') + '" aria-label="' + t('themeToggle') + '">' + ICONS.sun + '</button>' +
             '</div>' +
           '</div>' +
           '<div class="content" id="content"></div>' +
-          '<footer class="app-foot">Sales Hunter — an internal Zid program · demo with mock data · HubSpot becomes the backend in production</footer>' +
+          '<footer class="app-foot">' + t('footer') + '</footer>' +
         '</div>' +
       '</div>';
 
@@ -307,6 +329,7 @@
       LS.set('user', null); location.hash = ''; route();
     });
     document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+    document.getElementById('lang-toggle').addEventListener('click', function () { setLang(isAr() ? 'en' : 'ar'); route(); });
 
     var content = document.getElementById('content');
     r.render(content, user);
@@ -315,6 +338,10 @@
   }
 
   /* ================= Views ================= */
+
+  function trFunnel(rows) {
+    return rows.map(function (f) { return { stage: trStage(f.stage), count: f.count }; });
+  }
 
   function tile(label, value, deltaHtml) {
     return '<div class="tile"><div class="t-label">' + esc(label) + '</div>' +
@@ -346,9 +373,9 @@
       return decided.filter(function (l) { return l.stage === 'won'; }).length / decided.length;
     });
 
-    var reasonsLost = Object.keys(s.lostReasons).map(function (k) { return { label: k, count: s.lostReasons[k] }; })
+    var reasonsLost = Object.keys(s.lostReasons).map(function (k) { return { label: trReason(k), count: s.lostReasons[k] }; })
       .sort(function (a, b) { return b.count - a.count; });
-    var reasonsUnq = Object.keys(s.unqualReasons).map(function (k) { return { label: k, count: s.unqualReasons[k] }; })
+    var reasonsUnq = Object.keys(s.unqualReasons).map(function (k) { return { label: trReason(k), count: s.unqualReasons[k] }; })
       .sort(function (a, b) { return b.count - a.count; });
 
     var currentStages = STAGES.filter(function (st) { return st.group === 'open'; }).map(function (st) {
@@ -376,105 +403,105 @@
         if (!bestCat || wr > bestCat.wr) bestCat = { cat: c, wr: wr };
       }
     });
-    if (bestCat && bestCat.wr > 0) tips.push('Your ' + bestCat.cat + ' leads convert best — ' + fmtPct(bestCat.wr, 0) + ' of them close won. Hunt more of these.');
+    if (bestCat && bestCat.wr > 0) tips.push(t('tipBestCat', { cat: trCat(bestCat.cat), pct: fmtPct(bestCat.wr, 0) }));
     var topUnq = Object.keys(s.unqualReasons).sort(function (a, b) { return s.unqualReasons[b] - s.unqualReasons[a]; })[0];
-    if (topUnq) tips.push('Your most common unqualified reason is “' + topUnq + '” — screen for this before submitting.');
-    tips.push('Leads with notes on need and timing get qualified by pre-sales roughly twice as fast.');
-    tips.push('Check Top Zid Stores for success stories to use in your pitch.');
+    if (topUnq) tips.push(t('tipUnq', { reason: trReason(topUnq) }));
+    tips.push(t('tipNotes'));
+    tips.push(t('tipStores'));
 
     content.innerHTML =
       '<div class="welcome-banner">' +
-        '<div><h2>Welcome back, ' + esc(user.name.split(' ')[0]) + '</h2>' +
-        '<p class="w-date">' + NOW.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + ' · Hunter ID ' + hunterCode(user) + '</p></div>' +
+        '<div><h2>' + t('welcomeBack', { name: esc(user.name.split(' ')[0]) }) + '</h2>' +
+        '<p class="w-date">' + NOW.toLocaleDateString(isAr() ? 'ar-SA-u-ca-gregory-nu-latn' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + ' · ' + t('hunterId', { code: hunterCode(user) }) + '</p></div>' +
         '<div class="w-chips">' +
-          '<span class="wchip solid">' + esc(rank.current.name) + '</span>' +
-          (rank.next ? '<span class="wchip">' + winsToNext + (winsToNext === 1 ? ' win' : ' wins') + ' to ' + esc(rank.next.name) + '</span>'
-                     : '<span class="wchip">Top rank reached</span>') +
+          '<span class="wchip solid">' + esc(trRank(rank.current.name)) + '</span>' +
+          (rank.next ? '<span class="wchip">' + t(winsToNext === 1 ? 'winTo' : 'winsTo', { n: winsToNext, rank: esc(trRank(rank.next.name)) }) + '</span>'
+                     : '<span class="wchip">' + t('topRank') + '</span>') +
         '</div>' +
       '</div>' +
 
       '<div class="kpis">' +
-        tile('Total leads', fmtNum(s.total), deltaHTML(leadsThisMonth, leadsLastMonth, 'vs last month')) +
-        tile('Active pipeline', fmtNum(s.open), esc(fmtMoneyC(s.pipelineValue)) + ' potential value') +
-        tile('Closed won', fmtNum(s.won), s.avgCycleDays ? s.avgCycleDays + ' days avg. cycle' : '') +
-        tile('Closed lost', fmtNum(s.lost), '') +
-        tile('Unqualified', fmtNum(s.unqualified), '') +
-        tile('Conversion rate', fmtPct(s.conversion), 'closed won ÷ all submitted') +
-        tile('Revenue generated', fmtMoneyC(s.revenueNet), 'subscription value, excl. VAT') +
-        tile('Commission earned', '<span class="money-pos">' + fmtMoneyC(s.commission) + '</span>', fmtMoneyC(s.commissionPending + s.commissionApproved) + ' not yet paid') +
+        tile(t('totalLeads'), fmtNum(s.total), deltaHTML(leadsThisMonth, leadsLastMonth, t('vsLastMonth'))) +
+        tile(t('activePipeline'), fmtNum(s.open), t('potentialValue', { v: esc(fmtMoneyC(s.pipelineValue)) })) +
+        tile(t('closedWon'), fmtNum(s.won), s.avgCycleDays ? t('avgCycle', { n: s.avgCycleDays }) : '') +
+        tile(t('closedLost'), fmtNum(s.lost), '') +
+        tile(t('unqualified'), fmtNum(s.unqualified), '') +
+        tile(t('conversionRate'), fmtPct(s.conversion), t('convSub')) +
+        tile(t('revenueGenerated'), fmtMoneyC(s.revenueNet), t('revSub')) +
+        tile(t('commissionEarned'), '<span class="money-pos">' + fmtMoneyC(s.commission) + '</span>', t('notYetPaid', { v: fmtMoneyC(s.commissionPending + s.commissionApproved) })) +
       '</div>' +
 
       '<div class="grid-2">' +
         '<section class="card">' +
-          '<div class="card-head"><div><h3>Hunter level</h3><p class="sub">Level up by closing deals</p></div>' +
+          '<div class="card-head"><div><h3>' + t('hunterLevel') + '</h3><p class="sub">' + t('levelSub') + '</p></div>' +
           '<span class="rank-pct">' + Math.round(rank.progress * 100) + '%</span></div>' +
-          '<div class="rank-row"><b style="font-size:17px">' + esc(rank.current.name) + '</b></div>' +
+          '<div class="rank-row"><b style="font-size:17px">' + esc(trRank(rank.current.name)) + '</b></div>' +
           '<div class="rank-track"><div class="rank-fill" style="width:' + Math.max(4, Math.round(rank.progress * 100)) + '%"></div></div>' +
-          '<p class="rank-next">' + (rank.next ? 'Next: <b>' + esc(rank.next.name) + '</b> at ' + rank.next.minWins + ' closed-won deals' : 'You hold the highest rank in the program.') + '</p>' +
+          '<p class="rank-next">' + (rank.next ? t('nextRank', { rank: esc(trRank(rank.next.name)), n: rank.next.minWins }) : t('topRankNote')) + '</p>' +
           '<div class="rank-needs">' +
-            '<div class="rank-need"><b>' + fmtNum(s.won) + '</b>deals won so far</div>' +
-            (rank.next ? '<div class="rank-need"><b>' + winsToNext + '</b>more to level up</div>' : '') +
-            '<div class="rank-need"><b>' + fmtNum(s.open) + '</b>chances in play</div>' +
+            '<div class="rank-need"><b>' + fmtNum(s.won) + '</b>' + t('wonSoFar') + '</div>' +
+            (rank.next ? '<div class="rank-need"><b>' + winsToNext + '</b>' + t('moreToLevel') + '</div>' : '') +
+            '<div class="rank-need"><b>' + fmtNum(s.open) + '</b>' + t('chancesInPlay') + '</div>' +
           '</div>' +
         '</section>' +
         '<section class="card">' +
-          '<div class="card-head"><div><h3>Sharpen your aim</h3><p class="sub">Reading your own numbers</p></div></div>' +
-          '<div class="tips-list">' + tips.slice(0, 4).map(function (t) {
-            return '<div class="tip-item"><span class="t-ico">›</span><span>' + esc(t) + '</span></div>';
+          '<div class="card-head"><div><h3>' + t('sharpenAim') + '</h3><p class="sub">' + t('sharpenSub') + '</p></div></div>' +
+          '<div class="tips-list">' + tips.slice(0, 4).map(function (tip) {
+            return '<div class="tip-item"><span class="t-ico">›</span><span>' + esc(tip) + '</span></div>';
           }).join('') + '</div>' +
         '</section>' +
       '</div>' +
 
       '<div class="grid-2">' +
         chartCard({
-          title: 'Pipeline funnel', subtitle: 'How far your leads travel — count that reached each stage',
-          svg: funnelSVG(s.funnel),
-          table: { head: ['Stage', 'Leads reached'], rows: s.funnel.map(function (f) { return [f.stage, fmtNum(f.count)]; }) }
+          title: t('pipelineFunnel'), subtitle: t('funnelSub'),
+          svg: funnelSVG(trFunnel(s.funnel)),
+          table: { head: [t('stage'), t('reached')], rows: s.funnel.map(function (f) { return [trStage(f.stage), fmtNum(f.count)]; }) }
         }) +
         '<div>' +
           chartCard({
-            title: 'Where your open leads are now', subtitle: fmtNum(s.open) + ' leads currently in play',
-            svg: currentStages.length ? hbarsSVG(currentStages, { aria: 'Open leads by stage' }) : '<div class="empty">No open leads right now — submit a new one.</div>',
-            table: { head: ['Stage', 'Leads'], rows: currentStages.map(function (c) { return [c.label, fmtNum(c.count)]; }) }
+            title: t('whereOpen'), subtitle: t('inPlay', { n: fmtNum(s.open) }),
+            svg: currentStages.length ? hbarsSVG(trFunnel(currentStages.map(function (c) { return { stage: c.label, count: c.count }; })).map(function (x) { return { label: x.stage, count: x.count }; }), { aria: 'Open leads by stage' }) : '<div class="empty">' + t('noOpen') + '</div>',
+            table: { head: [t('stage'), t('leads')], rows: currentStages.map(function (c) { return [trStage(c.label), fmtNum(c.count)]; }) }
           }) +
           '<div style="height:16px"></div>' +
           chartCard({
-            title: 'Outcome split', subtitle: 'All ' + fmtNum(s.total) + ' leads to date',
-            legend: [{ cls: 'good', label: 'Won' }, { cls: 'critical', label: 'Lost' }, { cls: 'gray', label: 'Unqualified' }, { cls: 's1', label: 'Still open' }],
+            title: t('outcomeSplit'), subtitle: t('allToDate', { n: fmtNum(s.total) }),
+            legend: [{ cls: 'good', label: t('won') }, { cls: 'critical', label: t('lost') }, { cls: 'gray', label: t('unqualified') }, { cls: 's1', label: t('stillOpen') }],
             svg: stackedBarSVG([
-              { label: 'Closed won', count: s.won, cls: 'good' },
-              { label: 'Closed lost', count: s.lost, cls: 'critical' },
-              { label: 'Unqualified', count: s.unqualified, cls: 'gray' },
-              { label: 'Still open', count: s.open, cls: 's1' }
+              { label: t('closedWon'), count: s.won, cls: 'good' },
+              { label: t('closedLost'), count: s.lost, cls: 'critical' },
+              { label: t('unqualified'), count: s.unqualified, cls: 'gray' },
+              { label: t('stillOpen'), count: s.open, cls: 's1' }
             ]),
-            table: { head: ['Outcome', 'Leads'], rows: [['Closed won', fmtNum(s.won)], ['Closed lost', fmtNum(s.lost)], ['Unqualified', fmtNum(s.unqualified)], ['Still open', fmtNum(s.open)]] }
+            table: { head: [t('outcome'), t('leads')], rows: [[t('closedWon'), fmtNum(s.won)], [t('closedLost'), fmtNum(s.lost)], [t('unqualified'), fmtNum(s.unqualified)], [t('stillOpen'), fmtNum(s.open)]] }
           }) +
         '</div>' +
       '</div>' +
 
       '<div class="grid-2">' +
         chartCard({
-          title: 'Leads submitted by month', subtitle: 'Last 12 months',
+          title: t('leadsByMonth'), subtitle: t('last12'),
           svg: columnsSVG(months.map(function (m) { return m.label; }), byMonth, { aria: 'Leads by month', unit: 'leads' }),
-          table: { head: ['Month', 'Leads'], rows: months.map(function (m, i) { return [m.label, fmtNum(byMonth[i])]; }) }
+          table: { head: [t('month'), t('leads')], rows: months.map(function (m, i) { return [m.label, fmtNum(byMonth[i])]; }) }
         }) +
         chartCard({
-          title: 'Win rate of decided leads', subtitle: 'Won ÷ (won + lost + unqualified) closed in each month',
-          svg: lineSVG(months.map(function (m) { return m.label; }), winRate, { pct: true, maxHint: 0.5, aria: 'Win rate trend', nullLabel: 'No leads decided this month' }),
-          table: { head: ['Month', 'Win rate'], rows: months.map(function (m, i) { return [m.label, winRate[i] === null ? '—' : fmtPct(winRate[i], 0)]; }) }
+          title: t('winRateTitle'), subtitle: t('winRateSub'),
+          svg: lineSVG(months.map(function (m) { return m.label; }), winRate, { pct: true, maxHint: 0.5, aria: 'Win rate trend', nullLabel: t('noDecided') }),
+          table: { head: [t('month'), t('winRate')], rows: months.map(function (m, i) { return [m.label, winRate[i] === null ? '—' : fmtPct(winRate[i], 0)]; }) }
         }) +
       '</div>' +
 
       '<div class="grid-2">' +
         chartCard({
-          title: 'Why leads were lost', subtitle: 'Closed-lost reasons from the CRM (' + fmtNum(s.lost) + ' leads)',
+          title: t('whyLost'), subtitle: t('whyLostSub', { n: fmtNum(s.lost) }),
           svg: hbarsSVG(reasonsLost, { aria: 'Lost reasons', cls: 'critical' }),
-          table: { head: ['Reason', 'Leads'], rows: reasonsLost.map(function (x) { return [x.label, fmtNum(x.count)]; }) }
+          table: { head: [t('reason'), t('leads')], rows: reasonsLost.map(function (x) { return [trReason(x.label), fmtNum(x.count)]; }) }
         }) +
         chartCard({
-          title: 'Why leads were unqualified', subtitle: 'Learn what a strong lead looks like (' + fmtNum(s.unqualified) + ' leads)',
+          title: t('whyUnq'), subtitle: t('whyUnqSub', { n: fmtNum(s.unqualified) }),
           svg: hbarsSVG(reasonsUnq, { aria: 'Unqualified reasons', cls: 'gray' }),
-          table: { head: ['Reason', 'Leads'], rows: reasonsUnq.map(function (x) { return [x.label, fmtNum(x.count)]; }) }
+          table: { head: [t('reason'), t('leads')], rows: reasonsUnq.map(function (x) { return [trReason(x.label), fmtNum(x.count)]; }) }
         }) +
       '</div>';
   }
@@ -496,23 +523,23 @@
       });
       var rows = leads.map(function (l) {
         var comm = l.stage === 'won' ? '<span class="money-pos">' + fmtMoneyC(commissionOf(l)) + '</span>'
-          : (isOpen(l) && l.amountNet) ? '<span class="cell-sub">' + fmtMoneyC(l.amountNet * COMMISSION_RATE) + ' potential</span>' : '—';
+          : (isOpen(l) && l.amountNet) ? '<span class="cell-sub">' + t('potential', { v: fmtMoneyC(l.amountNet * COMMISSION_RATE) }) + '</span>' : '—';
         return '<tr class="rowlink" data-lead="' + l.id + '" tabindex="0">' +
-          '<td><b>' + esc(l.company) + '</b><span class="cell-sub">' + esc(l.contact) + ' · ' + esc(l.city) + '</span></td>' +
-          '<td>' + esc(l.industry) + '</td>' +
+          '<td><b>' + esc(l.company) + '</b><span class="cell-sub">' + esc(l.contact) + ' · ' + esc(trCity(l.city)) + '</span></td>' +
+          '<td>' + esc(trCat(l.industry)) + '</td>' +
           '<td>' + fmtDate(l.createdAt) + '</td>' +
           '<td>' + stagePill(l.stage) + '</td>' +
-          '<td>' + esc(l.salesOwner) + '</td>' +
+          '<td>' + (l.salesOwner === 'Unassigned' ? t('unassigned') : esc(l.salesOwner)) + '</td>' +
           '<td>' + fmtDate(lastActivity(l)) + '</td>' +
-          '<td class="num">' + (l.amountNet ? fmtMoneyC(l.amountNet) : '<span class="cell-sub">to be scoped</span>') +
-            (l.plan ? '<span class="cell-sub">' + esc(l.plan) + (l.years === 2 ? ' · 2 yr' : '') + '</span>' : '') + '</td>' +
+          '<td class="num">' + (l.amountNet ? fmtMoneyC(l.amountNet) : '<span class="cell-sub">' + t('toBeScoped') + '</span>') +
+            (l.plan ? '<span class="cell-sub">' + esc(trPlan(l.plan)) + (l.years === 2 ? t('twoYr') : '') + '</span>' : '') + '</td>' +
           '<td class="num">' + comm + '</td>' +
         '</tr>';
       }).join('');
       document.getElementById('leads-table').innerHTML =
         '<div class="tbl-wrap"><table>' +
-          '<thead><tr><th>Merchant</th><th>Category</th><th>Submitted</th><th>Stage</th><th>Deal owner</th><th>Last activity</th><th class="num">Value (excl. VAT)</th><th class="num">Commission</th></tr></thead>' +
-          '<tbody>' + (rows || '<tr><td colspan="8"><div class="empty">No leads match this filter.</div></td></tr>') + '</tbody>' +
+          '<thead><tr><th>' + t('merchant') + '</th><th>' + t('category') + '</th><th>' + t('submitted') + '</th><th>' + t('stage') + '</th><th>' + t('dealOwner') + '</th><th>' + t('lastActivity') + '</th><th class="num">' + t('valueExVat') + '</th><th class="num">' + t('commissionCol') + '</th></tr></thead>' +
+          '<tbody>' + (rows || '<tr><td colspan="8"><div class="empty">' + t('noLeadsFilter') + '</div></td></tr>') + '</tbody>' +
         '</table></div>';
       document.querySelectorAll('[data-lead]').forEach(function (tr) {
         function open() { openDrawer(tr.getAttribute('data-lead')); }
@@ -521,15 +548,15 @@
       });
     }
 
-    var segStages = [['all', 'All'], ['open', 'Open'], ['won', 'Won'], ['lost', 'Lost'], ['unqualified', 'Unqualified']];
+    var segStages = [['all', t('all')], ['open', t('open')], ['won', t('won')], ['lost', t('lost')], ['unqualified', t('unqualified')]];
     content.innerHTML =
       '<div class="filter-row">' +
         '<div class="seg" id="stage-seg">' + segStages.map(function (s, i) {
           return '<button data-seg="' + s[0] + '" class="' + (i === 0 ? 'active' : '') + '">' + s[1] + '</button>';
         }).join('') + '</div>' +
         '<div class="spacer"></div>' +
-        '<input type="text" class="search-input" id="lead-search" placeholder="Search company, contact, owner…">' +
-        '<a href="#/submit" class="btn" style="text-decoration:none">+ Submit lead</a>' +
+        '<input type="text" class="search-input" id="lead-search" placeholder="' + t('searchPh') + '">' +
+        '<a href="#/submit" class="btn" style="text-decoration:none">' + t('submitLeadBtn') + '</a>' +
       '</div>' +
       '<div class="card" id="leads-table"></div>';
 
@@ -569,42 +596,42 @@
     var timeline = lead.events.map(function (e) {
       var cls = e.stage === 'won' ? 'won' : e.stage === 'lost' ? 'lost' : e.stage === 'unqualified' ? 'unq' : '';
       return '<li class="' + cls + '"><span class="t-dot"></span>' +
-        '<b>' + esc(STAGE_BY_ID[e.stage].label) + '</b>' +
+        '<b>' + esc(trStage(STAGE_BY_ID[e.stage].label)) + '</b>' +
         '<span class="t-date">' + fmtDate(e.date) + '</span>' +
-        '<p>' + esc(STAGE_STORY[e.stage] || '') + '</p></li>';
+        '<p>' + esc((isAr() ? STORY_AR[e.stage] : STAGE_STORY[e.stage]) || '') + '</p></li>';
     }).join('');
 
     var commissionRow = '';
     if (lead.stage === 'won') {
       var cs = commissionStatus(lead);
       commissionRow =
-        '<dt>Commission (' + ratePct() + ')</dt><dd class="money-pos">' + fmtMoney(commissionOf(lead)) +
-        ' <span class="status-chip ' + cs + '">' + (cs === 'paid' ? 'Paid' : cs === 'approved' ? 'Approved' : 'Pending approval') + '</span></dd>';
+        '<dt>' + t('commissionPct', { rate: ratePct() }) + '</dt><dd class="money-pos">' + fmtMoney(commissionOf(lead)) +
+        ' <span class="status-chip ' + cs + '">' + (cs === 'paid' ? t('paid') : cs === 'approved' ? t('approved') : t('pendingApproval')) + '</span></dd>';
     }
     var reasonRow = '';
-    if (lead.stage === 'lost' && lead.lostReason) reasonRow = '<dt>Lost reason</dt><dd>' + esc(lead.lostReason) + '</dd>';
-    if (lead.stage === 'unqualified' && lead.unqualReason) reasonRow = '<dt>Unqualified reason</dt><dd>' + esc(lead.unqualReason) + '</dd>';
+    if (lead.stage === 'lost' && lead.lostReason) reasonRow = '<dt>' + t('lostReason') + '</dt><dd>' + esc(trReason(lead.lostReason)) + '</dd>';
+    if (lead.stage === 'unqualified' && lead.unqualReason) reasonRow = '<dt>' + t('unqReason') + '</dt><dd>' + esc(trReason(lead.unqualReason)) + '</dd>';
 
     var root = el('<div id="drawer-root">' +
       '<div class="drawer-backdrop"></div>' +
       '<div class="drawer" role="dialog" aria-label="Lead detail">' +
         '<div class="d-head"><div><h2>' + esc(lead.company) + '</h2>' +
-        '<p class="sub">' + esc(lead.contact) + ' · ' + esc(lead.industry) + ' · ' + esc(lead.city) + '</p></div>' +
+        '<p class="sub">' + esc(lead.contact) + ' · ' + esc(trCat(lead.industry)) + ' · ' + esc(trCity(lead.city)) + '</p></div>' +
         '<button class="icon-btn" id="drawer-close" aria-label="Close">✕</button></div>' +
-        '<span class="hs-chip">⟳ Synced from HubSpot · deal ' + esc(lead.id) + '</span>' +
+        '<span class="hs-chip">' + t('synced', { id: esc(lead.id) }) + '</span>' +
         '<dl class="d-kv">' +
-          '<dt>Stage</dt><dd>' + stagePill(lead.stage) + '</dd>' +
-          '<dt>Deal owner</dt><dd>' + esc(lead.salesOwner) + '</dd>' +
-          (lead.plan ? '<dt>Package</dt><dd>Zid ' + esc(lead.plan) + (lead.years === 2 ? ' · 2 years' : ' · 1 year') + '</dd>' : '') +
-          '<dt>Source</dt><dd>' + esc(lead.source) + '</dd>' +
-          '<dt>Submitted</dt><dd>' + fmtDate(lead.createdAt) + '</dd>' +
+          '<dt>' + t('stage') + '</dt><dd>' + stagePill(lead.stage) + '</dd>' +
+          '<dt>' + t('dealOwner') + '</dt><dd>' + (lead.salesOwner === 'Unassigned' ? t('unassigned') : esc(lead.salesOwner)) + '</dd>' +
+          (lead.plan ? '<dt>' + t('packageLbl') + '</dt><dd>' + t('zidPlan', { name: esc(trPlan(lead.plan)) }) + (lead.years === 2 ? t('yearTwo') : t('yearOne')) + '</dd>' : '') +
+          '<dt>' + t('source') + '</dt><dd>' + esc(trSource(lead.source)) + '</dd>' +
+          '<dt>' + t('submitted') + '</dt><dd>' + fmtDate(lead.createdAt) + '</dd>' +
           (lead.amountNet
-            ? '<dt>Value (excl. VAT)</dt><dd>' + fmtMoney(lead.amountNet) + '</dd>' +
-              '<dt>Value (incl. VAT)</dt><dd>' + fmtMoney(grossOf(lead)) + '</dd>'
-            : '<dt>Value</dt><dd>To be scoped by sales</dd>') +
+            ? '<dt>' + t('valueExVat') + '</dt><dd>' + fmtMoney(lead.amountNet) + '</dd>' +
+              '<dt>' + t('valueIncVat') + '</dt><dd>' + fmtMoney(grossOf(lead)) + '</dd>'
+            : '<dt>' + t('valueLbl') + '</dt><dd>' + t('scopedBySales') + '</dd>') +
           commissionRow + reasonRow +
         '</dl>' +
-        '<h3 class="eyebrow">Activity timeline</h3>' +
+        '<h3 class="eyebrow">' + t('timeline') + '</h3>' +
         '<ul class="timeline">' + timeline + '</ul>' +
       '</div></div>');
     document.body.appendChild(root);
@@ -619,30 +646,30 @@
   function viewSubmit(content, user) {
     content.innerHTML =
       '<div class="card" style="max-width:720px">' +
-        '<h2>Submit a new lead</h2>' +
-        '<p class="sub">Your merchant goes straight to the sales pipeline. In production this creates the contact and deal in HubSpot with you tagged as the hunter.</p>' +
+        '<h2>' + t('submitTitle') + '</h2>' +
+        '<p class="sub">' + t('submitSub') + '</p>' +
         '<form id="lead-form" style="margin-top:16px">' +
           '<div class="form-grid">' +
-            '<div><label class="f-label" for="f-company">Merchant / store name *</label><input type="text" id="f-company" required placeholder="e.g. Lulwa Boutique"></div>' +
-            '<div><label class="f-label" for="f-industry">Store category *</label><select id="f-industry">' +
-              INDUSTRIES.map(function (i) { return '<option>' + esc(i) + '</option>'; }).join('') + '</select></div>' +
-            '<div><label class="f-label" for="f-contact">Contact person *</label><input type="text" id="f-contact" required placeholder="Full name"></div>' +
-            '<div><label class="f-label" for="f-phone">Contact phone</label><input type="tel" id="f-phone" placeholder="+966 5X XXX XXXX"></div>' +
-            '<div><label class="f-label" for="f-email">Contact email</label><input type="email" id="f-email" placeholder="name@store.com"></div>' +
-            '<div><label class="f-label" for="f-city">City</label><select id="f-city">' +
-              CITIES.map(function (c) { return '<option>' + esc(c) + '</option>'; }).join('') + '</select></div>' +
-            '<div><label class="f-label" for="f-source">How do you know this merchant? *</label><select id="f-source">' +
-              SOURCES.map(function (s) { return '<option>' + esc(s) + '</option>'; }).join('') + '</select></div>' +
-            '<div><label class="f-label" for="f-plan">Likely package</label><select id="f-plan">' +
-              '<option value="">Not sure — sales will scope it</option>' +
-              PLANS.map(function (p) { return '<option value="' + p.price + '">Zid ' + esc(p.name) + ' — ' + fmtMoney(p.price) + ' / yr</option>'; }).join('') + '</select>' +
-              '<p class="f-hint">Your commission is ' + ratePct() + ' of the final subscription value excl. VAT.</p></div>' +
-            '<div class="full"><label class="f-label" for="f-notes">Why is this a good lead?</label>' +
-              '<textarea id="f-notes" rows="3" placeholder="Context helps pre-sales qualify faster: what they sell, current channels (Instagram, WhatsApp…), timing, who decides."></textarea></div>' +
+            '<div><label class="f-label" for="f-company">' + t('merchantName') + '</label><input type="text" id="f-company" required placeholder="Lulwa Boutique"></div>' +
+            '<div><label class="f-label" for="f-industry">' + t('storeCat') + '</label><select id="f-industry">' +
+              INDUSTRIES.map(function (i) { return '<option value="' + esc(i) + '">' + esc(trCat(i)) + '</option>'; }).join('') + '</select></div>' +
+            '<div><label class="f-label" for="f-contact">' + t('contactPerson') + '</label><input type="text" id="f-contact" required placeholder="' + t('fullNamePh') + '"></div>' +
+            '<div><label class="f-label" for="f-phone">' + t('contactPhone') + '</label><input type="tel" id="f-phone" placeholder="+966 5X XXX XXXX"></div>' +
+            '<div><label class="f-label" for="f-email">' + t('contactEmail') + '</label><input type="email" id="f-email" placeholder="name@store.com"></div>' +
+            '<div><label class="f-label" for="f-city">' + t('city') + '</label><select id="f-city">' +
+              CITIES.map(function (c) { return '<option value="' + esc(c) + '">' + esc(trCity(c)) + '</option>'; }).join('') + '</select></div>' +
+            '<div><label class="f-label" for="f-source">' + t('howKnow') + '</label><select id="f-source">' +
+              SOURCES.map(function (s) { return '<option value="' + esc(s) + '">' + esc(trSource(s)) + '</option>'; }).join('') + '</select></div>' +
+            '<div><label class="f-label" for="f-plan">' + t('likelyPackage') + '</label><select id="f-plan">' +
+              '<option value="">' + t('notSure') + '</option>' +
+              PLANS.map(function (p) { return '<option value="' + p.price + '">' + t('zidPlan', { name: esc(trPlan(p.name)) }) + ' — ' + t('perYear', { v: fmtMoney(p.price) }) + '</option>'; }).join('') + '</select>' +
+              '<p class="f-hint">' + t('commissionHint', { rate: ratePct() }) + '</p></div>' +
+            '<div class="full"><label class="f-label" for="f-notes">' + t('whyGood') + '</label>' +
+              '<textarea id="f-notes" rows="3" placeholder="' + t('notesPh') + '"></textarea></div>' +
           '</div>' +
           '<div style="margin-top:16px; display:flex; gap:10px; align-items:center">' +
-            '<button type="submit" class="btn">Submit lead</button>' +
-            '<span class="sub">Duplicates are checked against the CRM before the deal is created.</span>' +
+            '<button type="submit" class="btn">' + t('submitBtn') + '</button>' +
+            '<span class="sub">' + t('dupNote') + '</span>' +
           '</div>' +
         '</form>' +
       '</div>';
@@ -651,7 +678,7 @@
       e.preventDefault();
       var company = document.getElementById('f-company').value.trim();
       var contact = document.getElementById('f-contact').value.trim();
-      if (!company || !contact) { toast('Company and contact person are required.'); return; }
+      if (!company || !contact) { toast(t('requiredErr')); return; }
       var planPrice = parseInt(document.getElementById('f-plan').value, 10);
       var plan = PLANS.find(function (p) { return p.price === planPrice; });
       // Anchor to the demo's frozen "today" so the lead lands inside every
@@ -676,7 +703,7 @@
         salesOwner: 'Unassigned'
       });
       LS.set('leads', leads);
-      toast('Lead submitted — it is now in the pipeline as “New Lead”.');
+      toast(t('submittedToast'));
       location.hash = '#/leads';
     });
   }
@@ -708,12 +735,12 @@
     if (example) {
       mathCard =
         '<section class="card">' +
-          '<div class="card-head"><div><h3>How your commission is calculated</h3>' +
-          '<p class="sub">Example: your latest won deal — ' + esc(example.company) + '</p></div></div>' +
+          '<div class="card-head"><div><h3>' + t('howCalc') + '</h3>' +
+          '<p class="sub">' + t('calcExample', { name: esc(example.company) }) + '</p></div></div>' +
           '<div class="math-steps">' +
-            '<div class="math-step"><div class="m-label">Subscription incl. VAT</div><div class="m-value">' + fmtMoney(grossOf(example)) + '</div><div class="m-note">what the customer pays</div></div>' +
-            '<div class="math-step"><div class="m-label">Remove ' + vatPct() + ' VAT (÷ ' + (1 + VAT_RATE).toFixed(2) + ')</div><div class="m-value">' + fmtMoney(example.amountNet) + '</div><div class="m-note">net subscription value</div></div>' +
-            '<div class="math-step result"><div class="m-label">Your commission (× ' + ratePct() + ')</div><div class="m-value">' + fmtMoney(commissionOf(example)) + '</div><div class="m-note">paid with next payroll after approval</div></div>' +
+            '<div class="math-step"><div class="m-label">' + t('subIncVat') + '</div><div class="m-value">' + fmtMoney(grossOf(example)) + '</div><div class="m-note">' + t('customerPays') + '</div></div>' +
+            '<div class="math-step"><div class="m-label">' + t('removeVat', { vat: vatPct(), div: (1 + VAT_RATE).toFixed(2) }) + '</div><div class="m-value">' + fmtMoney(example.amountNet) + '</div><div class="m-note">' + t('netValue') + '</div></div>' +
+            '<div class="math-step result"><div class="m-label">' + t('yourCommission', { rate: ratePct() }) + '</div><div class="m-value">' + fmtMoney(commissionOf(example)) + '</div><div class="m-note">' + t('paidAfter') + '</div></div>' +
           '</div>' +
         '</section>';
     }
@@ -721,46 +748,46 @@
     var histRows = wonLeads.map(function (l) {
       var cs = commissionStatus(l);
       return '<tr>' +
-        '<td><b>' + esc(l.company) + '</b><span class="cell-sub">deal ' + esc(l.id) + '</span></td>' +
+        '<td><b>' + esc(l.company) + '</b><span class="cell-sub">' + esc(l.id) + '</span></td>' +
         '<td>' + fmtDate(wonDate(l)) + '</td>' +
         '<td class="num">' + fmtMoney(l.amountNet) + '</td>' +
         '<td class="num"><b>' + fmtMoney(commissionOf(l)) + '</b></td>' +
-        '<td><span class="status-chip ' + cs + '">' + (cs === 'paid' ? 'Paid' : cs === 'approved' ? 'Approved' : 'Pending approval') + '</span>' +
+        '<td><span class="status-chip ' + cs + '">' + (cs === 'paid' ? t('paid') : cs === 'approved' ? t('approved') : t('pendingApproval')) + '</span>' +
           (cs === 'paid' && getSlips()[l.id] ? '<span class="cell-sub">' + slipLink(l.id) + '</span>' : '') + '</td>' +
       '</tr>';
     }).join('');
 
     content.innerHTML =
       '<div class="card" style="display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:14px">' +
-        '<div><span class="eyebrow">Lifetime commission earned</span>' +
+        '<div><span class="eyebrow">' + t('lifetimeCommission') + '</span>' +
         '<div class="hero-figure money-pos">' + fmtMoney(s.commission) + '</div>' +
-        '<p class="sub">from ' + fmtNum(s.won) + ' closed-won deals · ' + fmtMoneyC(s.revenueNet) + ' revenue generated for the company</p></div>' +
-        '<button class="btn secondary" id="dl-statement">Download statement (CSV)</button>' +
+        '<p class="sub">' + t('fromDeals', { n: fmtNum(s.won), v: fmtMoneyC(s.revenueNet) }) + '</p></div>' +
+        '<button class="btn secondary" id="dl-statement">' + t('downloadCsv') + '</button>' +
       '</div>' +
 
       '<div class="kpis">' +
-        tile('This month', fmtMoneyC(commInMonth(thisMonthKey)), '') +
-        tile('Last month', fmtMoneyC(commInMonth(lastMonthKey)), '') +
-        tile('Pending approval', fmtMoneyC(s.commissionPending), 'awaiting finance review') +
-        tile('Approved — next payroll', fmtMoneyC(s.commissionApproved), '') +
-        tile('Paid to date', fmtMoneyC(s.commissionPaid), '') +
+        tile(t('thisMonth'), fmtMoneyC(commInMonth(thisMonthKey)), '') +
+        tile(t('lastMonth'), fmtMoneyC(commInMonth(lastMonthKey)), '') +
+        tile(t('pendingApproval'), fmtMoneyC(s.commissionPending), t('awaitingFinance')) +
+        tile(t('approvedPayroll'), fmtMoneyC(s.commissionApproved), '') +
+        tile(t('paidToDate'), fmtMoneyC(s.commissionPaid), '') +
       '</div>' +
 
       mathCard +
 
       chartCard({
-        title: 'Revenue you generated vs. commission earned', subtitle: 'By month the deal closed won · both excl. VAT',
-        legend: [{ cls: 's1', label: 'Revenue generated' }, { cls: 's2', label: 'Your commission (' + ratePct() + ')' }],
+        title: t('revVsComm'), subtitle: t('revVsCommSub'),
+        legend: [{ cls: 's1', label: t('revGenLegend') }, { cls: 's2', label: t('yourCommLegend', { rate: ratePct() }) }],
         svg: groupedColumnsSVG(months.map(function (m) { return m.label; }), revByMonth, commByMonth,
-          { nameA: 'Revenue generated', nameB: 'Your commission', aria: 'Revenue vs commission', W: 1080 }),
-        table: { head: ['Month', 'Revenue (SAR)', 'Commission (SAR)'], rows: months.map(function (m, i) { return [m.label, fmtNum(revByMonth[i]), fmtNum(commByMonth[i])]; }) }
+          { nameA: t('revGenLegend'), nameB: t('yourCommLegend', { rate: ratePct() }), aria: 'Revenue vs commission', W: 1080 }),
+        table: { head: [t('month'), t('revenueSar'), t('commissionSar')], rows: months.map(function (m, i) { return [m.label, fmtNum(revByMonth[i]), fmtNum(commByMonth[i])]; }) }
       }) +
 
       '<section class="card">' +
-        '<div class="card-head"><div><h3>Commission history</h3><p class="sub">One row per closed-won deal</p></div></div>' +
+        '<div class="card-head"><div><h3>' + t('commHistory') + '</h3><p class="sub">' + t('oneRowPerDeal') + '</p></div></div>' +
         '<div class="tbl-wrap"><table>' +
-          '<thead><tr><th>Deal</th><th>Closed won</th><th class="num">Value (excl. VAT)</th><th class="num">Commission</th><th>Status</th></tr></thead>' +
-          '<tbody>' + (histRows || '<tr><td colspan="5"><div class="empty">No closed-won deals yet — your first one unlocks this table.</div></td></tr>') + '</tbody>' +
+          '<thead><tr><th>' + t('deal') + '</th><th>' + t('closedWon') + '</th><th class="num">' + t('valueExVat') + '</th><th class="num">' + t('commissionCol') + '</th><th>' + t('status') + '</th></tr></thead>' +
+          '<tbody>' + (histRows || '<tr><td colspan="5"><div class="empty">' + t('noWonYet') + '</div></td></tr>') + '</tbody>' +
         '</table></div>' +
       '</section>';
 
@@ -775,18 +802,18 @@
       a.download = 'sales-hunter-commission-statement.csv';
       a.click();
       URL.revokeObjectURL(a.href);
-      toast('Statement downloaded.');
+      toast(t('statementDl'));
     });
   }
 
   /* ---- Leaderboard ---- */
   function badgesFor(empId, s, topThisMonth) {
     var out = [];
-    if (s.won >= 1) out.push('🏆 First sale');
-    if (s.won >= 5) out.push('🔥 5 wins');
-    if (s.revenueNet >= 500000) out.push('💎 SAR 500K generated');
-    if (topThisMonth === empId) out.push('🚀 Top hunter this month');
-    if (s.total >= 10 && s.unqualified / s.total < 0.1) out.push('🎯 Sharp eye');
+    if (s.won >= 1) out.push(t('badgeFirst'));
+    if (s.won >= 5) out.push(t('badgeWins'));
+    if (s.revenueNet >= 500000) out.push(t('badge500k'));
+    if (topThisMonth === empId) out.push(t('badgeTop'));
+    if (s.total >= 10 && s.unqualified / s.total < 0.1) out.push(t('badgeSharp'));
     return out;
   }
 
@@ -816,7 +843,7 @@
       var badges = badgesFor(r.emp.id, r.s, data.topThisMonthId);
       return '<tr>' +
         '<td><span class="rank-badge ' + rankCls + '">' + (i + 1) + '</span></td>' +
-        '<td><b>' + esc(r.emp.name) + '</b><span class="cell-sub">' + esc(r.emp.dept) + '</span></td>' +
+        '<td><b>' + esc(r.emp.name) + '</b><span class="cell-sub">' + esc(trDept(r.emp.dept)) + '</span></td>' +
         '<td class="num">' + fmtNum(r.s.total) + '</td>' +
         '<td class="num">' + fmtNum(r.s.won) + '</td>' +
         '<td class="num">' + fmtPct(r.s.conversion, 0) + '</td>' +
@@ -829,10 +856,10 @@
 
     content.innerHTML =
       '<section class="card">' +
-        '<div class="card-head"><div><h3>All-time ranking</h3>' +
-        '<p class="sub">Ranked by revenue generated (closed-won, excl. VAT) — visible to management only; hunters see just their own numbers</p></div></div>' +
+        '<div class="card-head"><div><h3>' + t('allTimeRanking') + '</h3>' +
+        '<p class="sub">' + t('rankingSub') + '</p></div></div>' +
         '<div class="tbl-wrap"><table>' +
-          '<thead><tr><th></th><th>Hunter</th><th class="num">Leads</th><th class="num">Won</th><th class="num">Conversion</th><th>Revenue</th><th class="num"></th><th class="num">Commission</th><th>Achievements</th></tr></thead>' +
+          '<thead><tr><th></th><th>' + t('hunter') + '</th><th class="num">' + t('leads') + '</th><th class="num">' + t('won') + '</th><th class="num">' + t('conversion') + '</th><th>' + t('revenue') + '</th><th class="num"></th><th class="num">' + t('commissionCol') + '</th><th>' + t('achievements') + '</th></tr></thead>' +
           '<tbody>' + body + '</tbody>' +
         '</table></div>' +
       '</section>';
@@ -851,53 +878,53 @@
       var rows = users.map(function (u) {
         var isSelf = u.id === user.id;
         return '<tr>' +
-          '<td><b>' + esc(u.name) + (isSelf ? ' · you' : '') + '</b><span class="cell-sub">' + esc(u.title || '') + '</span></td>' +
-          '<td>' + esc(u.dept || '—') + '</td>' +
+          '<td><b>' + esc(u.name) + (isSelf ? ' · ' + t('you') : '') + '</b><span class="cell-sub">' + esc(u.title || '') + '</span></td>' +
+          '<td>' + esc(trDept(u.dept) || '—') + '</td>' +
           '<td>' + esc(u.email || '—') + '</td>' +
           '<td>' + (isSelf
-            ? '<span class="cat-chip">' + ROLE_NAMES[u.role] + '</span>'
+            ? '<span class="cat-chip">' + roleName(u.role) + '</span>'
             : '<select class="status-select role-select" data-user="' + esc(u.id) + '">' +
                 ['emp', 'mgr', 'fin'].map(function (r) {
-                  return '<option value="' + r + '"' + (r === u.role ? ' selected' : '') + '>' + ROLE_NAMES[r] + '</option>';
+                  return '<option value="' + r + '"' + (r === u.role ? ' selected' : '') + '>' + roleName(r) + '</option>';
                 }).join('') + '</select>') + '</td>' +
           '<td>' + (u.active
-            ? '<span class="status-chip paid">Active</span>'
-            : '<span class="status-chip pending">Disabled</span>') + '</td>' +
-          '<td>' + (isSelf ? '' : '<button class="ghost-btn toggle-active" data-user="' + esc(u.id) + '">' + (u.active ? 'Disable' : 'Enable') + '</button>') + '</td>' +
+            ? '<span class="status-chip paid">' + t('active') + '</span>'
+            : '<span class="status-chip pending">' + t('disabled') + '</span>') + '</td>' +
+          '<td>' + (isSelf ? '' : '<button class="ghost-btn toggle-active" data-user="' + esc(u.id) + '">' + (u.active ? t('disable') : t('enable')) + '</button>') + '</td>' +
         '</tr>';
       }).join('');
 
       content.innerHTML =
         '<div class="filter-row">' +
-          '<div><h2>Team & access</h2><p class="sub">' + users.filter(function (u) { return u.active; }).length + ' active users · roles control what each person sees</p></div>' +
+          '<div><h2>' + t('teamTitle') + '</h2><p class="sub">' + t('teamSub', { n: users.filter(function (u) { return u.active; }).length }) + '</p></div>' +
           '<div class="spacer"></div>' +
-          '<button class="btn" id="add-user-btn">+ Add user</button>' +
+          '<button class="btn" id="add-user-btn">' + t('addUser') + '</button>' +
         '</div>' +
         '<div class="card" id="add-user-card" hidden>' +
-          '<h3>Add a user</h3>' +
+          '<h3>' + t('addUserTitle') + '</h3>' +
           '<form id="add-user-form" style="margin-top:12px">' +
             '<div class="form-grid">' +
-              '<div><label class="f-label" for="nu-name">Full name *</label><input type="text" id="nu-name" required></div>' +
-              '<div><label class="f-label" for="nu-email">Company email *</label><input type="email" id="nu-email" required placeholder="name@zid.sa"></div>' +
-              '<div><label class="f-label" for="nu-dept">Department</label><input type="text" id="nu-dept" placeholder="e.g. Marketing"></div>' +
-              '<div><label class="f-label" for="nu-title">Job title</label><input type="text" id="nu-title"></div>' +
-              '<div><label class="f-label" for="nu-role">Role *</label><select id="nu-role">' +
-                '<option value="emp">Hunter</option><option value="mgr">Management</option><option value="fin">Finance</option>' +
-              '</select><p class="f-hint">In production this sends an SSO invite instead of creating a login.</p></div>' +
+              '<div><label class="f-label" for="nu-name">' + t('fullName') + '</label><input type="text" id="nu-name" required></div>' +
+              '<div><label class="f-label" for="nu-email">' + t('emailReq') + '</label><input type="email" id="nu-email" required placeholder="name@zid.sa"></div>' +
+              '<div><label class="f-label" for="nu-dept">' + t('deptLbl') + '</label><input type="text" id="nu-dept"></div>' +
+              '<div><label class="f-label" for="nu-title">' + t('jobTitle') + '</label><input type="text" id="nu-title"></div>' +
+              '<div><label class="f-label" for="nu-role">' + t('role') + '</label><select id="nu-role">' +
+                '<option value="emp">' + t('roleHunter') + '</option><option value="mgr">' + t('roleMgmt') + '</option><option value="fin">' + t('roleFin') + '</option>' +
+              '</select><p class="f-hint">' + t('ssoHint') + '</p></div>' +
             '</div>' +
             '<div style="margin-top:14px; display:flex; gap:10px">' +
-              '<button type="submit" class="btn">Create user</button>' +
-              '<button type="button" class="btn secondary" id="add-user-cancel">Cancel</button>' +
+              '<button type="submit" class="btn">' + t('createUser') + '</button>' +
+              '<button type="button" class="btn secondary" id="add-user-cancel">' + t('cancel') + '</button>' +
             '</div>' +
           '</form>' +
         '</div>' +
         '<section class="card">' +
           '<div class="tbl-wrap"><table>' +
-            '<thead><tr><th>User</th><th>Department</th><th>Email</th><th>Role</th><th>Status</th><th></th></tr></thead>' +
+            '<thead><tr><th>' + t('user') + '</th><th>' + t('department') + '</th><th>' + t('contactEmail') + '</th><th>' + t('role').replace(' *', '') + '</th><th>' + t('status') + '</th><th></th></tr></thead>' +
             '<tbody>' + rows + '</tbody>' +
           '</table></div>' +
         '</section>' +
-        '<p class="sub" style="text-align:center">You cannot change or disable your own account. Disabled users keep their history but can no longer sign in.</p>';
+        '<p class="sub" style="text-align:center">' + t('teamNote') + '</p>';
 
       document.getElementById('add-user-btn').addEventListener('click', function () {
         document.getElementById('add-user-card').hidden = false;
@@ -915,21 +942,21 @@
           id: 'u' + (100 + custom.length),
           name: name, email: email,
           dept: document.getElementById('nu-dept').value.trim() || 'General',
-          title: document.getElementById('nu-title').value.trim() || ROLE_NAMES[document.getElementById('nu-role').value],
+          title: document.getElementById('nu-title').value.trim() || roleName(document.getElementById('nu-role').value),
           role: document.getElementById('nu-role').value,
           code: String(8681849300 + custom.length)
         });
         LS.set('users', custom);
-        audit('Added user ' + name + ' (' + ROLE_NAMES[document.getElementById('nu-role').value] + ')');
-        toast(name + ' added — they now appear on the sign-in screen.');
+        audit('Added user ' + name + ' (' + roleName(document.getElementById('nu-role').value) + ')');
+        toast(t('userAddedToast', { name: name }));
         render();
       });
       content.querySelectorAll('.role-select').forEach(function (sel) {
         sel.addEventListener('change', function () {
           var u = usersAll().find(function (x) { return x.id === sel.getAttribute('data-user'); });
           saveOverride(sel.getAttribute('data-user'), { role: sel.value });
-          audit('Changed role of ' + (u ? u.name : sel.getAttribute('data-user')) + ' to ' + ROLE_NAMES[sel.value]);
-          toast('Role updated to ' + ROLE_NAMES[sel.value] + '.');
+          audit('Changed role of ' + (u ? u.name : sel.getAttribute('data-user')) + ' to ' + roleName(sel.value));
+          toast(t('roleUpdated', { role: roleName(sel.value) }));
           render();
         });
       });
@@ -939,7 +966,7 @@
           var u = usersAll().find(function (x) { return x.id === id; });
           saveOverride(id, { active: !u.active });
           audit((u.active ? 'Disabled ' : 'Enabled ') + u.name);
-          toast(u.name + (u.active ? ' disabled.' : ' enabled.'));
+          toast(t(u.active ? 'userDisabled' : 'userEnabled', { name: u.name }));
           render();
         });
       });
@@ -953,33 +980,33 @@
     content.innerHTML =
       '<div class="grid-2">' +
         '<section class="card">' +
-          '<div class="card-head"><div><h3>Commission rules</h3>' +
-          '<p class="sub">Changes apply instantly across every dashboard (demo)</p></div></div>' +
+          '<div class="card-head"><div><h3>' + t('commissionRules') + '</h3>' +
+          '<p class="sub">' + t('rulesSub') + '</p></div></div>' +
           '<form id="settings-form"><div class="form-grid">' +
-            '<div><label class="f-label" for="set-rate">Hunter commission (% of net)</label>' +
+            '<div><label class="f-label" for="set-rate">' + t('commissionPctLbl') + '</label>' +
               '<input type="number" id="set-rate" min="1" max="50" step="0.5" value="' + (COMMISSION_RATE * 100) + '">' +
-              '<p class="f-hint">Currently ' + ratePct() + ' of subscription value excl. VAT</p></div>' +
-            '<div><label class="f-label" for="set-vat">VAT rate (%)</label>' +
+              '<p class="f-hint">' + t('currentRate', { rate: ratePct() }) + '</p></div>' +
+            '<div><label class="f-label" for="set-vat">' + t('vatLbl') + '</label>' +
               '<input type="number" id="set-vat" min="0" max="30" step="1" value="' + (VAT_RATE * 100) + '">' +
-              '<p class="f-hint">KSA standard is 15% — deals with other VAT read it from HubSpot in production</p></div>' +
+              '<p class="f-hint">' + t('vatHint') + '</p></div>' +
           '</div>' +
-          '<div style="margin-top:14px"><button type="submit" class="btn">Save rules</button></div></form>' +
+          '<div style="margin-top:14px"><button type="submit" class="btn">' + t('saveRules') + '</button></div></form>' +
         '</section>' +
         '<section class="card">' +
-          '<div class="card-head"><div><h3>Demo controls</h3><p class="sub">For presentations</p></div></div>' +
-          '<p class="sub" style="margin-bottom:12px">Reset clears everything done in this browser — submitted leads, payment status changes, payslips, added users, and settings — back to the original mock data.</p>' +
-          '<button class="btn secondary" id="reset-demo">Reset demo data</button>' +
+          '<div class="card-head"><div><h3>' + t('demoControls') + '</h3><p class="sub">' + t('forPresentations') + '</p></div></div>' +
+          '<p class="sub" style="margin-bottom:12px">' + t('resetSub') + '</p>' +
+          '<button class="btn secondary" id="reset-demo">' + t('resetBtn') + '</button>' +
         '</section>' +
       '</div>' +
       '<section class="card">' +
-        '<div class="card-head"><div><h3>Audit log</h3><p class="sub">Sensitive actions in this browser session — in production every payout, role change, and IBAN view lands here</p></div></div>' +
+        '<div class="card-head"><div><h3>' + t('auditLog') + '</h3><p class="sub">' + t('auditSub') + '</p></div></div>' +
         (log.length
-          ? '<div class="tbl-wrap"><table class="mini"><thead><tr><th>When</th><th>Who</th><th>Action</th></tr></thead><tbody>' +
+          ? '<div class="tbl-wrap"><table class="mini"><thead><tr><th>' + t('when') + '</th><th>' + t('who') + '</th><th>' + t('action') + '</th></tr></thead><tbody>' +
             log.map(function (e) {
               return '<tr><td>' + fmtDate(new Date(e.at)) + '<span class="cell-sub">' + new Date(e.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + '</span></td>' +
                 '<td>' + esc(e.who) + '</td><td>' + esc(e.action) + '</td></tr>';
             }).join('') + '</tbody></table></div>'
-          : '<div class="empty">Nothing yet — payment status changes, payslip uploads, and team edits will appear here.</div>') +
+          : '<div class="empty">' + t('auditEmpty') + '</div>') +
       '</section>';
 
     document.getElementById('settings-form').addEventListener('submit', function (e) {
@@ -987,14 +1014,14 @@
       var rate = parseFloat(document.getElementById('set-rate').value);
       var vat = parseFloat(document.getElementById('set-vat').value);
       if (isNaN(rate) || rate <= 0 || rate > 50 || isNaN(vat) || vat < 0 || vat > 30) {
-        toast('Enter a commission between 1–50% and VAT between 0–30%.');
+        toast(t('rulesRange'));
         return;
       }
       COMMISSION_RATE = rate / 100;
       VAT_RATE = vat / 100;
       LS.set('settings', { commissionRate: COMMISSION_RATE, vatRate: VAT_RATE });
       audit('Set commission to ' + rate + '% and VAT to ' + vat + '%');
-      toast('Rules saved — commission is now ' + ratePct() + ' everywhere.');
+      toast(t('rulesSaved', { rate: ratePct() }));
       route();
     });
     document.getElementById('reset-demo').addEventListener('click', function () {
@@ -1004,7 +1031,7 @@
       EMPLOYEES.forEach(function (emp) { try { localStorage.removeItem('sh.profile.' + emp.id); } catch (e) {} });
       Object.keys(COMMISSION_STATUS_OVERRIDES).forEach(function (k) { delete COMMISSION_STATUS_OVERRIDES[k]; });
       COMMISSION_RATE = 0.20; VAT_RATE = 0.15;
-      toast('Demo reset to original mock data.');
+      toast(t('resetToast'));
       route();
     });
   }
@@ -1032,8 +1059,8 @@
     function renderCategories() {
       content.innerHTML =
         '<div class="card" style="display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; align-items:center">' +
-          '<div><h2>The stores winning on Zid right now</h2>' +
-          '<p class="sub">Pick a category to see its top performers — proof points for your pitch: “stores like yours do this on Zid.”</p></div>' +
+          '<div><h2>' + t('storesTitle') + '</h2>' +
+          '<p class="sub">' + t('storesSub') + '</p></div>' +
         '</div>' +
         '<div class="store-grid">' +
         STORE_SHOWCASE.map(function (c, i) {
@@ -1041,12 +1068,12 @@
           var mine = mineByCat[c.category] || 0;
           var leader = c.stores[0];
           return '<button class="card store-card cat-card" data-cat="' + i + '">' +
-            '<div class="s-cat"><span class="cat-chip">' + esc(c.category) + '</span>' +
-            (wr !== null ? '<span class="s-city" title="Program-wide win rate of decided leads in this category">' + fmtPct(wr, 0) + ' win rate</span>' : '') + '</div>' +
-            '<div><h3>№1 · ' + esc(leader.name) + '</h3><span class="s-city">' + esc(leader.city) + ' · ' + fmtNum(leader.ordersMo) + ' orders / month</span></div>' +
-            '<p class="s-blurb">' + c.stores.length + ' top ' + (c.stores.length === 1 ? 'store' : 'stores') + ' to use in your pitch' +
-              (mine ? ' · <span class="s-mine">you have ' + mine + (mine === 1 ? ' lead' : ' leads') + ' here</span>' : '') + '</p>' +
-            '<span class="s-open">Browse category →</span>' +
+            '<div class="s-cat"><span class="cat-chip">' + esc(trCat(c.category)) + '</span>' +
+            (wr !== null ? '<span class="s-city">' + t('catWinRate', { pct: fmtPct(wr, 0) }) + '</span>' : '') + '</div>' +
+            '<div><h3>' + t('no1', { name: esc(leader.name) }) + '</h3><span class="s-city">' + esc(trCity(leader.city)) + ' · ' + fmtNum(leader.ordersMo) + ' ' + t('ordersMo') + '</span></div>' +
+            '<p class="s-blurb">' + t(c.stores.length === 1 ? 'topStoreCount' : 'topStoresCount', { n: c.stores.length }) +
+              (mine ? ' · <span class="s-mine">' + t(mine === 1 ? 'youHaveLead' : 'youHaveLeads', { n: mine }) + '</span>' : '') + '</p>' +
+            '<span class="s-open">' + t('browseCat') + '</span>' +
           '</button>';
         }).join('') +
         '</div>';
@@ -1063,25 +1090,25 @@
       var mine = mineByCat[c.category] || 0;
       content.innerHTML =
         '<div class="filter-row">' +
-          '<button class="ghost-btn" id="back-cats">← All categories</button>' +
+          '<button class="ghost-btn" id="back-cats">' + t('backCats') + '</button>' +
         '</div>' +
         '<div class="card" style="display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; align-items:center">' +
-          '<div><h2>' + esc(c.category) + '</h2>' +
-          '<p class="sub">Top Zid stores in this category' +
-            (wr !== null ? ' · hunter leads here close won ' + fmtPct(wr, 0) + ' of the time' : '') +
-            (mine ? ' · you have ' + mine + (mine === 1 ? ' lead' : ' leads') + ' in this category' : '') + '</p></div>' +
+          '<div><h2>' + esc(trCat(c.category)) + '</h2>' +
+          '<p class="sub">' + t('catHeadSub') +
+            (wr !== null ? t('catWinInline', { pct: fmtPct(wr, 0) }) : '') +
+            (mine ? t('catMineInline', { n: mine }) : '') + '</p></div>' +
         '</div>' +
         '<div class="store-grid">' +
-        c.stores.map(function (t, i) {
+        c.stores.map(function (st, i) {
           return '<section class="card store-card">' +
             '<div class="s-cat"><span class="rank-badge ' + (i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : '') + '">' + (i + 1) + '</span>' +
-            '<span class="s-city">' + esc(t.city) + '</span></div>' +
-            '<div><h3>' + esc(t.name) + '</h3></div>' +
+            '<span class="s-city">' + esc(trCity(st.city)) + '</span></div>' +
+            '<div><h3>' + esc(st.name) + '</h3></div>' +
             '<div class="s-metrics">' +
-              '<div class="s-metric"><b>' + fmtNum(t.ordersMo) + '</b><span>orders / month</span></div>' +
-              '<div class="s-metric"><b class="money-pos">+' + Math.round(t.growth * 100) + '%</b><span>growth this year</span></div>' +
+              '<div class="s-metric"><b>' + fmtNum(st.ordersMo) + '</b><span>' + t('ordersMo') + '</span></div>' +
+              '<div class="s-metric"><b class="money-pos">+' + Math.round(st.growth * 100) + '%</b><span>' + t('growthYear') + '</span></div>' +
             '</div>' +
-            '<p class="s-blurb">' + esc(t.blurb) + '</p>' +
+            '<p class="s-blurb">' + esc(st.blurb) + '</p>' +
           '</section>';
         }).join('') +
         '</div>';
@@ -1151,16 +1178,16 @@
     var mThis = aggMonth(thisKey), mLast = aggMonth(lastKey);
     function momDelta(cur, prev) {
       if (!prev && !cur) return '<span class="mom-flat">—</span>';
-      if (!prev) return '<span class="mom-up">new</span>';
+      if (!prev) return '<span class="mom-up">' + t('newDelta') + '</span>';
       var ch = (cur - prev) / prev;
       var cls = ch >= 0 ? 'mom-up' : 'mom-down';
       return '<span class="' + cls + '">' + (ch >= 0 ? '▲' : '▼') + ' ' + Math.abs(Math.round(ch * 100)) + '%</span>';
     }
     var momRows = [
-      ['Leads submitted', fmtNum(mThis.leads), fmtNum(mLast.leads), momDelta(mThis.leads, mLast.leads)],
-      ['New Zid stores (won)', fmtNum(mThis.won), fmtNum(mLast.won), momDelta(mThis.won, mLast.won)],
-      ['Revenue closed', fmtMoneyC(mThis.revenue), fmtMoneyC(mLast.revenue), momDelta(mThis.revenue, mLast.revenue)],
-      ['Commission unlocked', fmtMoneyC(mThis.commission), fmtMoneyC(mLast.commission), momDelta(mThis.commission, mLast.commission)]
+      [t('momLeads'), fmtNum(mThis.leads), fmtNum(mLast.leads), momDelta(mThis.leads, mLast.leads)],
+      [t('momStores'), fmtNum(mThis.won), fmtNum(mLast.won), momDelta(mThis.won, mLast.won)],
+      [t('momRevenue'), fmtMoneyC(mThis.revenue), fmtMoneyC(mLast.revenue), momDelta(mThis.revenue, mLast.revenue)],
+      [t('momCommission'), fmtMoneyC(mThis.commission), fmtMoneyC(mLast.commission), momDelta(mThis.commission, mLast.commission)]
     ];
 
     // Top packages sold (won deals by Zid plan — ordered tiers)
@@ -1188,8 +1215,7 @@
     }).sort(function (a, b) { return b.revenue - a.revenue; }).slice(0, 6);
 
     // Sales rep performance on hunter leads
-    var STAGE_SHORT = { new: 'New', prospect: 'Prospect', qualified: 'Qualified', sql: 'SQL', commit: 'Commit', reengage: 'Re-engage' };
-    var reps = {};
+        var reps = {};
     all.forEach(function (l) {
       if (!reps[l.salesOwner]) reps[l.salesOwner] = { leads: 0, won: 0, lost: 0, unq: 0, open: 0, revenue: 0, stages: {} };
       var r = reps[l.salesOwner];
@@ -1217,9 +1243,9 @@
     var coach = lb.filter(function (r) { return r.s.total >= 8 && r.s.conversion < avgConv * 0.55; })
       .sort(function (a, b) { return a.s.conversion - b.s.conversion; });
 
-    var reasonsLost = Object.keys(s.lostReasons).map(function (k) { return { label: k, count: s.lostReasons[k] }; })
+    var reasonsLost = Object.keys(s.lostReasons).map(function (k) { return { label: trReason(k), count: s.lostReasons[k] }; })
       .sort(function (a, b) { return b.count - a.count; });
-    var reasonsUnq = Object.keys(s.unqualReasons).map(function (k) { return { label: k, count: s.unqualReasons[k] }; })
+    var reasonsUnq = Object.keys(s.unqualReasons).map(function (k) { return { label: trReason(k), count: s.unqualReasons[k] }; })
       .sort(function (a, b) { return b.count - a.count; });
 
     // Live pipeline board: current count + value sitting in each stage
@@ -1237,40 +1263,40 @@
 
     content.innerHTML =
       '<div class="kpis">' +
-        tile('Active hunters', fmtNum(participants), 'of ' + EMPLOYEES.length + ' enrolled') +
-        tile('Total leads', fmtNum(s.total), fmtNum(s.open) + ' currently open') +
-        tile('New Zid stores', fmtNum(s.won), (s.avgCycleDays ? s.avgCycleDays + ' days avg. cycle' : 'closed-won merchants')) +
-        tile('Program conversion', fmtPct(s.conversion), 'closed won ÷ all submitted') +
-        tile('Revenue closed', fmtMoneyC(s.revenueNet), s.won ? fmtMoneyC(s.revenueNet / s.won) + ' avg per store · excl. VAT' : 'excl. VAT') +
-        tile('Pipeline value', fmtMoneyC(s.pipelineValue), 'open deals, excl. VAT') +
-        tile('Commission owed + paid', fmtMoneyC(s.commission), fmtMoneyC(s.commissionPaid) + ' already paid') +
-        tile('Forecast from pipeline', fmtMoneyC(forecast), 'open deals × stage probability') +
+        tile(t('activeHunters'), fmtNum(participants), t('ofEnrolled', { n: EMPLOYEES.length })) +
+        tile(t('totalLeads'), fmtNum(s.total), t('currentlyOpen', { n: fmtNum(s.open) })) +
+        tile(t('newStores'), fmtNum(s.won), (s.avgCycleDays ? t('avgCycle', { n: s.avgCycleDays }) : t('wonMerchants'))) +
+        tile(t('programConv'), fmtPct(s.conversion), t('convSub')) +
+        tile(t('revenueClosed'), fmtMoneyC(s.revenueNet), s.won ? t('avgPerStore', { v: fmtMoneyC(s.revenueNet / s.won) }) : t('exVat')) +
+        tile(t('pipelineValue'), fmtMoneyC(s.pipelineValue), t('openExVat')) +
+        tile(t('commOwedPaid'), fmtMoneyC(s.commission), t('alreadyPaid', { v: fmtMoneyC(s.commissionPaid) })) +
+        tile(t('forecastTile'), fmtMoneyC(forecast), t('forecastSub')) +
       '</div>' +
 
       '<div class="grid-2">' +
         '<section class="card">' +
-          '<div class="card-head"><div><h3>This month vs last month</h3>' +
-          '<p class="sub">' + NOW.toLocaleString('en', { month: 'long' }) + ' month-to-date (day ' + NOW.getDate() + ') vs full ' + new Date(NOW.getFullYear(), NOW.getMonth() - 1, 1).toLocaleString('en', { month: 'long' }) + '</p></div></div>' +
+          '<div class="card-head"><div><h3>' + t('momTitle') + '</h3>' +
+          '<p class="sub">' + t('momSub', { m1: NOW.toLocaleString(isAr() ? 'ar' : 'en', { month: 'long' }), d: NOW.getDate(), m2: new Date(NOW.getFullYear(), NOW.getMonth() - 1, 1).toLocaleString(isAr() ? 'ar' : 'en', { month: 'long' }) }) + '</p></div></div>' +
           '<div class="tbl-wrap"><table class="mini">' +
-            '<thead><tr><th>Metric</th><th class="num">This month</th><th class="num">Last month</th><th class="num">Change</th></tr></thead>' +
+            '<thead><tr><th>' + t('metric') + '</th><th class="num">' + t('thisMonth') + '</th><th class="num">' + t('lastMonth') + '</th><th class="num">' + t('change') + '</th></tr></thead>' +
             '<tbody>' + momRows.map(function (r) {
               return '<tr><td>' + r[0] + '</td><td class="num"><b>' + r[1] + '</b></td><td class="num">' + r[2] + '</td><td class="num">' + r[3] + '</td></tr>';
             }).join('') + '</tbody>' +
           '</table></div>' +
         '</section>' +
         '<section class="card">' +
-          '<div class="card-head"><div><h3>Top packages sold</h3><p class="sub">Closed-won deals by Zid plan · share of revenue</p></div></div>' +
+          '<div class="card-head"><div><h3>' + t('topPackages') + '</h3><p class="sub">' + t('topPackagesSub') + '</p></div></div>' +
           '<div class="legend">' + PLANS.map(function (p) {
-            return '<span class="lg"><i class="sw ' + PLAN_CLS[p.name] + '"></i>' + esc(p.name) + '</span>';
+            return '<span class="lg"><i class="sw ' + PLAN_CLS[p.name] + '"></i>' + esc(trPlan(p.name)) + '</span>';
           }).join('') + '</div>' +
           stackedBarSVG(PLANS.map(function (p) {
-            return { label: 'Zid ' + p.name, count: planAgg[p.name].revenue, cls: PLAN_CLS[p.name] };
+            return { label: t('zidPlan', { name: trPlan(p.name) }), count: planAgg[p.name].revenue, cls: PLAN_CLS[p.name] };
           }), { money: true, aria: 'Revenue share by package' }) +
           '<div class="tbl-wrap"><table class="mini">' +
-            '<thead><tr><th>Package</th><th class="num">Stores</th><th class="num">Revenue</th><th class="num">Share</th></tr></thead>' +
+            '<thead><tr><th>' + t('packageCol') + '</th><th class="num">' + t('stores') + '</th><th class="num">' + t('revenue') + '</th><th class="num">' + t('share') + '</th></tr></thead>' +
             '<tbody>' + PLANS.map(function (p) {
               var a = planAgg[p.name];
-              return '<tr><td>Zid ' + esc(p.name) + '</td><td class="num">' + fmtNum(a.count) + '</td><td class="num"><b>' + fmtMoneyC(a.revenue) + '</b></td><td class="num">' + fmtPct(a.revenue / planRevTotal, 0) + '</td></tr>';
+              return '<tr><td>' + t('zidPlan', { name: esc(trPlan(p.name)) }) + '</td><td class="num">' + fmtNum(a.count) + '</td><td class="num"><b>' + fmtMoneyC(a.revenue) + '</b></td><td class="num">' + fmtPct(a.revenue / planRevTotal, 0) + '</td></tr>';
             }).join('') + '</tbody>' +
           '</table></div>' +
         '</section>' +
@@ -1278,15 +1304,15 @@
 
       '<div class="grid-2">' +
         chartCard({
-          title: 'Program funnel', subtitle: 'All hunter leads — count that reached each stage',
-          svg: funnelSVG(s.funnel),
-          table: { head: ['Stage', 'Leads reached'], rows: s.funnel.map(function (f) { return [f.stage, fmtNum(f.count)]; }) }
+          title: t('programFunnel'), subtitle: t('programFunnelSub'),
+          svg: funnelSVG(trFunnel(s.funnel)),
+          table: { head: [t('stage'), t('reached')], rows: s.funnel.map(function (f) { return [trStage(f.stage), fmtNum(f.count)]; }) }
         }) +
         '<section class="card">' +
-          '<div class="card-head"><div><h3>Deals by stage right now</h3>' +
-          '<p class="sub">Live count in each pipeline stage — mirrors the HubSpot board</p></div></div>' +
+          '<div class="card-head"><div><h3>' + t('stageNow') + '</h3>' +
+          '<p class="sub">' + t('stageNowSub') + '</p></div></div>' +
           '<div class="tbl-wrap"><table class="mini">' +
-            '<thead><tr><th>Stage</th><th class="num">Deals</th><th class="num">Value (excl. VAT)</th></tr></thead>' +
+            '<thead><tr><th>' + t('stage') + '</th><th class="num">' + t('deals') + '</th><th class="num">' + t('valueExVat') + '</th></tr></thead>' +
             '<tbody>' + stageNowRows + '</tbody>' +
           '</table></div>' +
         '</section>' +
@@ -1294,43 +1320,43 @@
 
       '<div class="grid-2">' +
         '<section class="card">' +
-          '<div class="card-head"><div><h3>Outcome split</h3><p class="sub">All ' + fmtNum(s.total) + ' leads to date</p></div></div>' +
+          '<div class="card-head"><div><h3>' + t('outcomeSplit') + '</h3><p class="sub">' + t('allToDate', { n: fmtNum(s.total) }) + '</p></div></div>' +
           '<div class="legend">' +
-            '<span class="lg"><i class="sw good"></i>Won</span><span class="lg"><i class="sw critical"></i>Lost</span>' +
-            '<span class="lg"><i class="sw gray"></i>Unqualified</span><span class="lg"><i class="sw s1"></i>Still open</span>' +
+            '<span class="lg"><i class="sw good"></i>' + t('won') + '</span><span class="lg"><i class="sw critical"></i>' + t('lost') + '</span>' +
+            '<span class="lg"><i class="sw gray"></i>' + t('unqualified') + '</span><span class="lg"><i class="sw s1"></i>' + t('stillOpen') + '</span>' +
           '</div>' +
           stackedBarSVG([
-            { label: 'Closed won', count: s.won, cls: 'good' },
-            { label: 'Closed lost', count: s.lost, cls: 'critical' },
-            { label: 'Unqualified', count: s.unqualified, cls: 'gray' },
-            { label: 'Still open', count: s.open, cls: 's1' }
+            { label: t('closedWon'), count: s.won, cls: 'good' },
+            { label: t('closedLost'), count: s.lost, cls: 'critical' },
+            { label: t('unqualified'), count: s.unqualified, cls: 'gray' },
+            { label: t('stillOpen'), count: s.open, cls: 's1' }
           ]) +
           '<div class="tbl-wrap"><table class="mini">' +
-            '<thead><tr><th>Outcome</th><th class="num">Leads</th><th class="num">Amount</th></tr></thead>' +
+            '<thead><tr><th>' + t('outcome') + '</th><th class="num">' + t('leads') + '</th><th class="num">' + t('amount') + '</th></tr></thead>' +
             '<tbody>' +
-              '<tr><td>Closed won</td><td class="num"><b>' + fmtNum(s.won) + '</b></td><td class="num"><b class="money-pos">' + fmtMoneyC(s.revenueNet) + '</b> revenue</td></tr>' +
-              '<tr><td>Still open</td><td class="num"><b>' + fmtNum(s.open) + '</b></td><td class="num">' + fmtMoneyC(s.pipelineValue) + ' in play</td></tr>' +
-              '<tr><td>Closed lost</td><td class="num"><b>' + fmtNum(s.lost) + '</b></td><td class="num">—</td></tr>' +
-              '<tr><td>Unqualified</td><td class="num"><b>' + fmtNum(s.unqualified) + '</b></td><td class="num">—</td></tr>' +
+              '<tr><td>' + t('closedWon') + '</td><td class="num"><b>' + fmtNum(s.won) + '</b></td><td class="num"><b class="money-pos">' + fmtMoneyC(s.revenueNet) + '</b> ' + t('revenueWord') + '</td></tr>' +
+              '<tr><td>' + t('stillOpen') + '</td><td class="num"><b>' + fmtNum(s.open) + '</b></td><td class="num">' + t('inPlayWord', { v: fmtMoneyC(s.pipelineValue) }) + '</td></tr>' +
+              '<tr><td>' + t('closedLost') + '</td><td class="num"><b>' + fmtNum(s.lost) + '</b></td><td class="num">—</td></tr>' +
+              '<tr><td>' + t('unqualified') + '</td><td class="num"><b>' + fmtNum(s.unqualified) + '</b></td><td class="num">—</td></tr>' +
             '</tbody>' +
           '</table></div>' +
         '</section>' +
         chartCard({
-          title: 'Leads submitted by month', subtitle: 'Program-wide, last 12 months',
+          title: t('leadsByMonth'), subtitle: t('leadsByMonthProgram'),
           svg: columnsSVG(months.map(function (m) { return m.label; }), byMonth, { aria: 'Program leads by month' }),
-          table: { head: ['Month', 'Leads'], rows: months.map(function (m, i) { return [m.label, fmtNum(byMonth[i])]; }) }
+          table: { head: [t('month'), t('leads')], rows: months.map(function (m, i) { return [m.label, fmtNum(byMonth[i])]; }) }
         }) +
       '</div>' +
 
       '<section class="card">' +
-        '<div class="card-head"><div><h3>Sales rep performance on hunter leads</h3>' +
-        '<p class="sub">How each rep handles the leads hunters bring — win rate is over decided leads (won + lost + unqualified)</p></div></div>' +
+        '<div class="card-head"><div><h3>' + t('repPerf') + '</h3>' +
+        '<p class="sub">' + t('repPerfSub') + '</p></div></div>' +
         '<div class="tbl-wrap"><table>' +
-          '<thead><tr><th>Sales rep</th><th class="num">Hunter leads</th><th class="num">Won</th><th class="num">Lost</th><th class="num">Unqualified</th><th class="num">Win rate</th><th class="num">Revenue won</th><th>Open pipeline now</th></tr></thead>' +
+          '<thead><tr><th>' + t('salesRep') + '</th><th class="num">' + t('hunterLeads') + '</th><th class="num">' + t('won') + '</th><th class="num">' + t('lost') + '</th><th class="num">' + t('unqualified') + '</th><th class="num">' + t('winRate') + '</th><th class="num">' + t('revenueWon') + '</th><th>' + t('openNow') + '</th></tr></thead>' +
           '<tbody>' + repRows.map(function (row) {
             var r = row.r;
             var stageBits = Object.keys(r.stages).map(function (sid) {
-              return r.stages[sid] + ' ' + (STAGE_SHORT[sid] || sid);
+              return r.stages[sid] + ' ' + trStage(STAGE_BY_ID[sid] ? STAGE_BY_ID[sid].label : sid);
             }).join(' · ');
             return '<tr>' +
               '<td><b>' + esc(row.name) + '</b></td>' +
@@ -1348,16 +1374,16 @@
 
       '<div class="grid-2">' +
         chartCard({
-          title: 'Revenue closed by month', subtitle: 'Closed-won subscription value, excl. VAT',
+          title: t('revByMonth'), subtitle: t('revByMonthSub'),
           svg: columnsSVG(months.map(function (m) { return m.label; }), revByMonth, { money: true, compact: true, aria: 'Revenue by month' }),
-          table: { head: ['Month', 'Revenue (SAR)'], rows: months.map(function (m, i) { return [m.label, fmtNum(revByMonth[i])]; }) }
+          table: { head: [t('month'), t('revenueSar')], rows: months.map(function (m, i) { return [m.label, fmtNum(revByMonth[i])]; }) }
         }) +
         '<section class="card">' +
-          '<div class="card-head"><div><h3>Department comparison</h3><p class="sub">Which teams hunt best</p></div></div>' +
+          '<div class="card-head"><div><h3>' + t('deptComparison') + '</h3><p class="sub">' + t('deptSub') + '</p></div></div>' +
           '<div class="tbl-wrap"><table class="mini">' +
-            '<thead><tr><th>Department</th><th class="num">Leads</th><th class="num">Won</th><th class="num">Revenue</th></tr></thead>' +
+            '<thead><tr><th>' + t('department') + '</th><th class="num">' + t('leads') + '</th><th class="num">' + t('won') + '</th><th class="num">' + t('revenue') + '</th></tr></thead>' +
             '<tbody>' + deptRows.map(function (d) {
-              return '<tr><td>' + esc(d.label) + '</td><td class="num">' + fmtNum(d.count) + '</td><td class="num">' + fmtNum(d.won) + '</td><td class="num"><b>' + fmtMoneyC(d.revenue) + '</b></td></tr>';
+              return '<tr><td>' + esc(trDept(d.label)) + '</td><td class="num">' + fmtNum(d.count) + '</td><td class="num">' + fmtNum(d.won) + '</td><td class="num"><b>' + fmtMoneyC(d.revenue) + '</b></td></tr>';
             }).join('') + '</tbody>' +
           '</table></div>' +
         '</section>' +
@@ -1365,71 +1391,71 @@
 
       '<div class="grid-2">' +
         '<section class="card">' +
-          '<div class="card-head"><div><h3>Lead source performance</h3><p class="sub">Wins by how the hunter knows the lead · win rate of decided leads</p></div></div>' +
+          '<div class="card-head"><div><h3>' + t('sourcePerf') + '</h3><p class="sub">' + t('sourceSub') + '</p></div></div>' +
           '<div class="tbl-wrap"><table class="mini">' +
-            '<thead><tr><th>Source</th><th class="num">Leads</th><th class="num">Won</th><th class="num">Win rate</th></tr></thead>' +
+            '<thead><tr><th>' + t('source') + '</th><th class="num">' + t('leads') + '</th><th class="num">' + t('won') + '</th><th class="num">' + t('winRate') + '</th></tr></thead>' +
             '<tbody>' + srcRows.map(function (r) {
-              return '<tr><td>' + esc(r.label) + '</td><td class="num">' + fmtNum(r.total) + '</td><td class="num">' + fmtNum(r.count) + '</td><td class="num">' + (r.decided >= 3 ? fmtPct(r.count / r.decided, 0) : '—') + '</td></tr>';
+              return '<tr><td>' + esc(trSource(r.label)) + '</td><td class="num">' + fmtNum(r.total) + '</td><td class="num">' + fmtNum(r.count) + '</td><td class="num">' + (r.decided >= 3 ? fmtPct(r.count / r.decided, 0) : '—') + '</td></tr>';
             }).join('') + '</tbody>' +
           '</table></div>' +
         '</section>' +
         chartCard({
-          title: 'Top closed-lost reasons', subtitle: 'Program-wide (' + fmtNum(s.lost) + ' lost leads)',
+          title: t('topLostReasons'), subtitle: t('programWideLost', { n: fmtNum(s.lost) }),
           svg: hbarsSVG(reasonsLost.slice(0, 6), { aria: 'Program lost reasons', cls: 'critical' }),
-          table: { head: ['Reason', 'Leads'], rows: reasonsLost.map(function (x) { return [x.label, fmtNum(x.count)]; }) }
+          table: { head: [t('reason'), t('leads')], rows: reasonsLost.map(function (x) { return [trReason(x.label), fmtNum(x.count)]; }) }
         }) +
       '</div>' +
 
       '<div class="grid-2">' +
         chartCard({
-          title: 'Why leads were unqualified', subtitle: 'Program-wide (' + fmtNum(s.unqualified) + ' unqualified leads)',
+          title: t('whyUnqProgram'), subtitle: t('programWideUnq', { n: fmtNum(s.unqualified) }),
           svg: hbarsSVG(reasonsUnq.slice(0, 6), { aria: 'Program unqualified reasons', cls: 'gray' }),
-          table: { head: ['Reason', 'Leads'], rows: reasonsUnq.map(function (x) { return [x.label, fmtNum(x.count)]; }) }
+          table: { head: [t('reason'), t('leads')], rows: reasonsUnq.map(function (x) { return [trReason(x.label), fmtNum(x.count)]; }) }
         }) +
         '<section class="card">' +
-          '<div class="card-head"><div><h3>Where the wins come from</h3><p class="sub">Closed-won stores by category</p></div></div>' +
+          '<div class="card-head"><div><h3>' + t('winsFrom') + '</h3><p class="sub">' + t('winsFromSub') + '</p></div></div>' +
           '<div class="tbl-wrap"><table class="mini">' +
-            '<thead><tr><th>Category</th><th class="num">Stores</th><th class="num">Revenue</th><th class="num">Avg deal</th></tr></thead>' +
+            '<thead><tr><th>' + t('category') + '</th><th class="num">' + t('stores') + '</th><th class="num">' + t('revenue') + '</th><th class="num">' + t('avgDeal') + '</th></tr></thead>' +
             '<tbody>' + (catRows.length ? catRows.map(function (c) {
-              return '<tr><td>' + esc(c.label) + '</td><td class="num">' + fmtNum(c.count) + '</td><td class="num"><b>' + fmtMoneyC(c.revenue) + '</b></td><td class="num">' + fmtMoneyC(c.revenue / c.count) + '</td></tr>';
-            }).join('') : '<tr><td colspan="4"><div class="empty">No closed-won stores yet.</div></td></tr>') + '</tbody>' +
+              return '<tr><td>' + esc(trCat(c.label)) + '</td><td class="num">' + fmtNum(c.count) + '</td><td class="num"><b>' + fmtMoneyC(c.revenue) + '</b></td><td class="num">' + fmtMoneyC(c.revenue / c.count) + '</td></tr>';
+            }).join('') : '<tr><td colspan="4"><div class="empty">' + t('noWonStores') + '</div></td></tr>') + '</tbody>' +
           '</table></div>' +
         '</section>' +
       '</div>' +
 
       '<div class="grid-2">' +
         '<section class="card">' +
-          '<div class="card-head"><div><h3>Commission payout status</h3><p class="sub">For finance — where every riyal of commission stands</p></div></div>' +
+          '<div class="card-head"><div><h3>' + t('payoutStatus') + '</h3><p class="sub">' + t('payoutStatusSub') + '</p></div></div>' +
           '<div class="tbl-wrap"><table class="mini">' +
-            '<thead><tr><th>Status</th><th class="num">Amount</th></tr></thead>' +
+            '<thead><tr><th>' + t('status') + '</th><th class="num">' + t('amount') + '</th></tr></thead>' +
             '<tbody>' +
-              '<tr><td><span class="status-chip pending">Pending approval</span></td><td class="num"><b>' + fmtMoney(s.commissionPending) + '</b></td></tr>' +
-              '<tr><td><span class="status-chip approved">Approved — next payroll</span></td><td class="num"><b>' + fmtMoney(s.commissionApproved) + '</b></td></tr>' +
-              '<tr><td><span class="status-chip paid">Paid to date</span></td><td class="num"><b>' + fmtMoney(s.commissionPaid) + '</b></td></tr>' +
-              '<tr><td>Total commission (' + ratePct() + ' of net)</td><td class="num"><b>' + fmtMoney(s.commission) + '</b></td></tr>' +
+              '<tr><td><span class="status-chip pending">' + t('pendingApproval') + '</span></td><td class="num"><b>' + fmtMoney(s.commissionPending) + '</b></td></tr>' +
+              '<tr><td><span class="status-chip approved">' + t('approvedPayroll') + '</span></td><td class="num"><b>' + fmtMoney(s.commissionApproved) + '</b></td></tr>' +
+              '<tr><td><span class="status-chip paid">' + t('paidToDate') + '</span></td><td class="num"><b>' + fmtMoney(s.commissionPaid) + '</b></td></tr>' +
+              '<tr><td>' + t('totalCommNet', { rate: ratePct() }) + '</td><td class="num"><b>' + fmtMoney(s.commission) + '</b></td></tr>' +
             '</tbody>' +
           '</table></div>' +
         '</section>' +
         '<section class="card">' +
-          '<div class="card-head"><div><h3>Hunters who may need coaching</h3>' +
-          '<p class="sub">8+ leads with conversion well below the program average of ' + fmtPct(avgConv, 0) + '</p></div></div>' +
+          '<div class="card-head"><div><h3>' + t('coaching') + '</h3>' +
+          '<p class="sub">' + t('coachingSub', { pct: fmtPct(avgConv, 0) }) + '</p></div></div>' +
           (coach.length ? coach.map(function (r) {
             return '<div class="coach-item"><span class="avatar">' + esc(initials(r.emp.name)) + '</span>' +
-              '<span><b>' + esc(r.emp.name) + '</b><span class="cell-sub">' + esc(r.emp.dept) + ' · ' + fmtNum(r.s.total) + ' leads</span></span>' +
-              '<span class="why">' + fmtPct(r.s.conversion, 0) + ' conversion<br>' + fmtNum(r.s.unqualified) + ' unqualified</span></div>';
-          }).join('') : '<div class="empty">Nobody flagged — every active hunter is near or above the average.</div>') +
+              '<span><b>' + esc(r.emp.name) + '</b><span class="cell-sub">' + esc(trDept(r.emp.dept)) + ' · ' + fmtNum(r.s.total) + ' ' + t('leadsUnit') + '</span></span>' +
+              '<span class="why">' + t('coachConv', { pct: fmtPct(r.s.conversion, 0) }) + '<br>' + t('coachUnq', { n: fmtNum(r.s.unqualified) }) + '</span></div>';
+          }).join('') : '<div class="empty">' + t('nobodyFlagged') + '</div>') +
         '</section>' +
       '</div>' +
 
       '<section class="card">' +
-        '<div class="card-head"><div><h3>Hunter performance</h3><p class="sub">Full ranking, revenue and commission per hunter — management only</p></div>' +
-        '<a class="ghost-btn" href="#/performance" style="text-decoration:none">Open</a></div>' +
+        '<div class="card-head"><div><h3>' + t('perfStrip') + '</h3><p class="sub">' + t('perfStripSub') + '</p></div>' +
+        '<a class="ghost-btn" href="#/performance" style="text-decoration:none">' + t('openBtn') + '</a></div>' +
       '</section>';
   }
 
   /* ---- Finance: hunter profile drawer (full payout details) ---- */
   function fmtIbanFull(iban) {
-    return iban ? iban.replace(/(.{4})/g, '$1 ').trim() : 'Not provided yet';
+    return iban ? iban.replace(/(.{4})/g, '$1 ').trim() : t('notProvided');
   }
   function openHunterDrawer(empId) {
     var emp = EMPLOYEES.find(function (e) { return e.id === empId; });
@@ -1446,31 +1472,31 @@
         '<div class="d-head"><div style="display:flex; align-items:center; gap:11px">' +
           '<span class="avatar" style="width:42px;height:42px;flex:none;font-size:15px">' + esc(initials(emp.name)) + '</span>' +
           '<div><h2>' + esc(emp.name) + '</h2>' +
-          '<p class="sub">' + esc(emp.title) + ' · ' + esc(emp.dept) + ' · Hunter ID ' + hunterCode(emp) + '</p></div></div>' +
+          '<p class="sub">' + esc(emp.title) + ' · ' + esc(trDept(emp.dept)) + ' · ' + t('hunterId', { code: hunterCode(emp) }) + '</p></div></div>' +
         '<button class="icon-btn" id="drawer-close" aria-label="Close">✕</button></div>' +
 
-        '<h3 class="eyebrow" style="margin-top:14px">Contact</h3>' +
+        '<h3 class="eyebrow" style="margin-top:14px">' + t('contact') + '</h3>' +
         '<dl class="d-kv">' +
-          '<dt>Company email</dt><dd>' + esc(saved.companyEmail || emp.email) + '</dd>' +
-          '<dt>Mobile</dt><dd>' + esc(saved.phone || emp.phone || '—') + '</dd>' +
-          (saved.personalEmail ? '<dt>Personal email</dt><dd>' + esc(saved.personalEmail) + '</dd>' : '') +
+          '<dt>' + t('companyEmail') + '</dt><dd>' + esc(saved.companyEmail || emp.email) + '</dd>' +
+          '<dt>' + t('mobile') + '</dt><dd>' + esc(saved.phone || emp.phone || '—') + '</dd>' +
+          (saved.personalEmail ? '<dt>' + t('personalEmail') + '</dt><dd>' + esc(saved.personalEmail) + '</dd>' : '') +
         '</dl>' +
 
-        '<h3 class="eyebrow">Payout account</h3>' +
+        '<h3 class="eyebrow">' + t('payoutAccount') + '</h3>' +
         '<dl class="d-kv">' +
-          '<dt>Bank</dt><dd>' + esc(pay.bank) + '</dd>' +
-          '<dt>IBAN</dt><dd style="font-variant-numeric:tabular-nums">' + esc(fmtIbanFull(pay.iban)) + '</dd>' +
-          '<dt>Payout method</dt><dd>' + esc(saved.payMethod || 'Bank transfer (payroll)') + '</dd>' +
-          (saved.nationalId ? '<dt>National ID / Iqama</dt><dd>' + esc(saved.nationalId) + '</dd>' : '') +
+          '<dt>' + t('bank') + '</dt><dd>' + esc(trBank(pay.bank)) + '</dd>' +
+          '<dt>' + t('ibanLbl') + '</dt><dd style="font-variant-numeric:tabular-nums">' + esc(fmtIbanFull(pay.iban)) + '</dd>' +
+          '<dt>' + t('payoutMethod') + '</dt><dd>' + esc(saved.payMethod || t('bankTransfer')) + '</dd>' +
+          (saved.nationalId ? '<dt>' + t('nationalId') + '</dt><dd>' + esc(saved.nationalId) + '</dd>' : '') +
         '</dl>' +
-        '<span class="hs-chip">🔒 Full IBAN visible to finance only — every view is access-logged in production</span>' +
+        '<span class="hs-chip">' + t('fullIbanNote') + '</span>' +
 
-        '<h3 class="eyebrow" style="margin-top:16px">Commission summary</h3>' +
+        '<h3 class="eyebrow" style="margin-top:16px">' + t('commissionSummary') + '</h3>' +
         '<dl class="d-kv">' +
-          '<dt>Deals won</dt><dd>' + fmtNum(s.won) + '</dd>' +
-          '<dt>Still to pay</dt><dd><b class="money-pos">' + fmtMoney(s.commissionPending + s.commissionApproved) + '</b></dd>' +
-          '<dt>Paid to date</dt><dd>' + fmtMoney(s.commissionPaid) + '</dd>' +
-          '<dt>Lifetime commission</dt><dd>' + fmtMoney(s.commission) + '</dd>' +
+          '<dt>' + t('dealsWon') + '</dt><dd>' + fmtNum(s.won) + '</dd>' +
+          '<dt>' + t('stillToPay') + '</dt><dd><b class="money-pos">' + fmtMoney(s.commissionPending + s.commissionApproved) + '</b></dd>' +
+          '<dt>' + t('paidToDate') + '</dt><dd>' + fmtMoney(s.commissionPaid) + '</dd>' +
+          '<dt>' + t('lifetime') + '</dt><dd>' + fmtMoney(s.commission) + '</dd>' +
         '</dl>' +
       '</div></div>');
     document.body.appendChild(root);
@@ -1493,19 +1519,19 @@
 
     content.innerHTML =
       '<section class="card">' +
-        '<div class="card-head"><div><h3>Hunter profiles</h3>' +
-        '<p class="sub">Click a hunter to see full profile and payout account details</p></div></div>' +
+        '<div class="card-head"><div><h3>' + t('hunterProfiles') + '</h3>' +
+        '<p class="sub">' + t('hunterProfilesSub') + '</p></div></div>' +
         '<div class="tbl-wrap"><table>' +
-          '<thead><tr><th>Hunter</th><th>Contact</th><th class="num">Deals won</th><th class="num">Still to pay</th><th class="num">Paid to date</th><th>Bank</th><th>IBAN</th></tr></thead>' +
+          '<thead><tr><th>' + t('hunter') + '</th><th>' + t('contact') + '</th><th class="num">' + t('dealsWon') + '</th><th class="num">' + t('stillToPay') + '</th><th class="num">' + t('paidToDate') + '</th><th>' + t('bank') + '</th><th>' + t('ibanLbl') + '</th></tr></thead>' +
           '<tbody>' + rows.map(function (r) {
             var owed = r.s.commissionPending + r.s.commissionApproved;
             return '<tr class="rowlink" data-hunter="' + r.e.id + '" tabindex="0">' +
-              '<td><b>' + esc(r.e.name) + '</b><span class="cell-sub">' + esc(r.e.title) + ' · ' + esc(r.e.dept) + '</span></td>' +
+              '<td><b>' + esc(r.e.name) + '</b><span class="cell-sub">' + esc(r.e.title) + ' · ' + esc(trDept(r.e.dept)) + '</span></td>' +
               '<td>' + esc(r.e.email) + '<span class="cell-sub">' + esc(r.e.phone || '') + '</span></td>' +
               '<td class="num">' + fmtNum(r.s.won) + '</td>' +
               '<td class="num">' + (owed ? '<b class="money-pos">' + fmtMoney(owed) + '</b>' : '—') + '</td>' +
               '<td class="num">' + (r.s.commissionPaid ? fmtMoney(r.s.commissionPaid) : '—') + '</td>' +
-              '<td>' + esc(r.pay.bank) + '</td>' +
+              '<td>' + esc(trBank(r.pay.bank)) + '</td>' +
               '<td>' + esc(maskIban(r.pay.iban)) + '</td>' +
             '</tr>';
           }).join('') + '</tbody>' +
@@ -1540,34 +1566,34 @@
         var cs = commissionStatus(l);
         return '<tr>' +
           '<td>' + (hunter
-            ? '<a href="#" class="hunter-link" data-hunter="' + hunter.id + '"><b>' + esc(hunter.name) + '</b></a><span class="cell-sub">' + esc(hunter.dept) + '</span>'
+            ? '<a href="#" class="hunter-link" data-hunter="' + hunter.id + '"><b>' + esc(hunter.name) + '</b></a><span class="cell-sub">' + esc(trDept(hunter.dept)) + '</span>'
             : '<b>Unknown</b>') + '</td>' +
-          '<td><b>' + esc(l.company) + '</b><span class="cell-sub">deal ' + esc(l.id) + ' · <a href="#" class="hs-link" data-deal="' + esc(l.id) + '">open in HubSpot ↗</a></span></td>' +
+          '<td><b>' + esc(l.company) + '</b><span class="cell-sub">' + esc(l.id) + ' · <a href="#" class="hs-link" data-deal="' + esc(l.id) + '">' + t('openHubspot') + '</a></span></td>' +
           '<td>' + fmtDate(wonDate(l)) + '</td>' +
           '<td>' + esc(l.salesOwner) + '</td>' +
           '<td class="num">' + fmtMoney(l.amountNet) + '</td>' +
           '<td class="num"><b class="money-pos">' + fmtMoney(commissionOf(l)) + '</b></td>' +
           '<td><select class="status-select" data-deal="' + esc(l.id) + '" aria-label="Payment status for deal ' + esc(l.id) + '">' +
-            [['pending', 'Pending approval'], ['approved', 'Approved'], ['paid', 'Paid']].map(function (o) {
+            [['pending', t('pendingApproval')], ['approved', t('approved')], ['paid', t('paid')]].map(function (o) {
               return '<option value="' + o[0] + '"' + (o[0] === cs ? ' selected' : '') + '>' + o[1] + '</option>';
             }).join('') + '</select></td>' +
           '<td>' + (cs === 'paid'
             ? (getSlips()[l.id]
-                ? slipLink(l.id) + '<span class="cell-sub"><button class="linklike slip-up" data-deal="' + esc(l.id) + '">replace</button></span>'
-                : '<button class="ghost-btn slip-up" data-deal="' + esc(l.id) + '">Upload payslip</button>')
-            : '<span class="cell-sub">after payment</span>') + '</td>' +
-          '<td>' + esc(pay.bank) + '<span class="cell-sub">' + esc(maskIban(pay.iban)) + '</span></td>' +
+                ? slipLink(l.id) + '<span class="cell-sub"><button class="linklike slip-up" data-deal="' + esc(l.id) + '">' + t('replace') + '</button></span>'
+                : '<button class="ghost-btn slip-up" data-deal="' + esc(l.id) + '">' + t('uploadPayslip') + '</button>')
+            : '<span class="cell-sub">' + t('afterPayment') + '</span>') + '</td>' +
+          '<td>' + esc(trBank(pay.bank)) + '<span class="cell-sub">' + esc(maskIban(pay.iban)) + '</span></td>' +
         '</tr>';
       }).join('');
       document.getElementById('payout-table').innerHTML =
         '<div class="tbl-wrap"><table>' +
-          '<thead><tr><th>Hunter</th><th>Deal</th><th>Closed won</th><th>Closed by (sales rep)</th><th class="num">Value (excl. VAT)</th><th class="num">Commission (' + ratePct() + ')</th><th>Status</th><th>Payslip</th><th>Payout account</th></tr></thead>' +
-          '<tbody>' + (rows || '<tr><td colspan="9"><div class="empty">No payouts match this filter.</div></td></tr>') + '</tbody>' +
+          '<thead><tr><th>' + t('hunter') + '</th><th>' + t('deal') + '</th><th>' + t('closedWon') + '</th><th>' + t('closedBy') + '</th><th class="num">' + t('valueExVat') + '</th><th class="num">' + t('commissionPct', { rate: ratePct() }) + '</th><th>' + t('status') + '</th><th>' + t('payslip') + '</th><th>' + t('payoutAccount') + '</th></tr></thead>' +
+          '<tbody>' + (rows || '<tr><td colspan="9"><div class="empty">' + t('noPayouts') + '</div></td></tr>') + '</tbody>' +
         '</table></div>';
       document.querySelectorAll('.hs-link').forEach(function (a) {
         a.addEventListener('click', function (e) {
           e.preventDefault();
-          toast('In production this opens deal ' + a.getAttribute('data-deal') + ' in HubSpot.');
+          toast(t('hsToast', { id: a.getAttribute('data-deal') }));
         });
       });
       document.querySelectorAll('.hunter-link').forEach(function (a) {
@@ -1585,8 +1611,8 @@
           COMMISSION_STATUS_OVERRIDES[dealId] = sel.value;
           audit('Set payment status of deal ' + dealId + ' to ' + sel.value);
           toast(sel.value === 'paid'
-            ? 'Deal ' + dealId + ' marked “Paid” — attach the payslip so the hunter has proof.'
-            : 'Deal ' + dealId + ' marked “' + sel.options[sel.selectedIndex].text + '” — the hunter sees this instantly.');
+            ? t('statusPaidToast', { id: dealId })
+            : t('statusToast', { id: dealId, s: sel.options[sel.selectedIndex].text }));
           renderTiles();
           renderTable();
         });
@@ -1607,41 +1633,41 @@
         return es.commissionPending + es.commissionApproved > 0;
       }).length;
       document.getElementById('payout-tiles').innerHTML =
-        tile('Still to pay', '<span class="money-pos">' + fmtMoneyC(owedTotal) + '</span>',
-          fmtMoneyC(s.commissionPending) + ' pending review · ' + fmtMoneyC(s.commissionApproved) + ' approved') +
-        tile('Paid to date', fmtMoneyC(s.commissionPaid), '') +
-        tile('Hunters awaiting payout', fmtNum(huntersOwed), 'see Hunter Profiles for accounts') +
-        tile('Total commission', fmtMoneyC(s.commission), ratePct() + ' of ' + fmtMoneyC(s.revenueNet) + ' net revenue');
+        tile(t('stillToPay'), '<span class="money-pos">' + fmtMoneyC(owedTotal) + '</span>',
+          t('pendingApprovedSub', { p: fmtMoneyC(s.commissionPending), a: fmtMoneyC(s.commissionApproved) })) +
+        tile(t('paidToDate'), fmtMoneyC(s.commissionPaid), '') +
+        tile(t('huntersAwaiting'), fmtNum(huntersOwed), t('seeProfiles')) +
+        tile(t('totalCommission'), fmtMoneyC(s.commission), t('pctOfNet', { rate: ratePct(), v: fmtMoneyC(s.revenueNet) }));
     }
 
     content.innerHTML =
       '<div class="kpis" id="payout-tiles"></div>' +
       '<div class="filter-row">' +
-        '<div class="seg" id="status-seg">' + [['all', 'All'], ['pending', 'Pending'], ['approved', 'Approved'], ['paid', 'Paid']].map(function (x, i) {
+        '<div class="seg" id="status-seg">' + [['all', t('all')], ['pending', t('pending')], ['approved', t('approved')], ['paid', t('paid')]].map(function (x, i) {
           return '<button data-seg="' + x[0] + '" class="' + (i === 0 ? 'active' : '') + '">' + x[1] + '</button>';
         }).join('') + '</div>' +
         '<div class="spacer"></div>' +
-        '<button class="btn secondary" id="dl-payouts">Export payout run (CSV)</button>' +
+        '<button class="btn secondary" id="dl-payouts">' + t('exportRun') + '</button>' +
       '</div>' +
       '<div class="card" id="payout-table"></div>' +
       '<input type="file" id="slip-file" hidden accept="application/pdf,image/png,image/jpeg">' +
-      '<p class="sub" style="text-align:center">Payout accounts come from each hunter’s profile. IBANs are shown masked; in production the full IBAN is revealed to finance only at payout time, with access logged. Payslips are visible to the hunter and finance only.</p>';
+      '<p class="sub" style="text-align:center">' + t('payoutNote') + '</p>';
 
     var pendingSlipDeal = null;
     document.getElementById('slip-file').addEventListener('change', function () {
       var f = this.files[0];
       this.value = '';
       if (!f || !pendingSlipDeal) return;
-      if (f.size > 1.5 * 1024 * 1024) { toast('Keep payslips under 1.5 MB in the demo.'); return; }
+      if (f.size > 1.5 * 1024 * 1024) { toast(t('slipTooBig')); return; }
       var deal = pendingSlipDeal;
       var reader = new FileReader();
       reader.onload = function () {
         if (saveSlip(deal, { name: f.name, dataUrl: reader.result, uploadedAt: new Date().toISOString() })) {
           audit('Uploaded payslip “' + f.name + '” for deal ' + deal);
-          toast('Payslip attached to deal ' + deal + ' — the hunter can download it now.');
+          toast(t('slipToast', { id: deal }));
           renderTable();
         } else {
-          toast('Could not store the file — browser storage is full.');
+          toast(t('slipFail'));
         }
       };
       reader.readAsDataURL(f);
@@ -1675,7 +1701,7 @@
       a.download = 'sales-hunter-payout-run.csv';
       a.click();
       URL.revokeObjectURL(a.href);
-      toast('Payout run exported.');
+      toast(t('exportedToast'));
     });
     renderTiles();
     renderTable();
@@ -1701,30 +1727,30 @@
       '<div class="card" style="max-width:760px">' +
         '<div style="display:flex; align-items:center; gap:14px; margin-bottom:18px">' +
           '<span class="avatar" style="width:46px;height:46px;flex:none;font-size:16px">' + esc(initials(user.name)) + '</span>' +
-          '<div><h2>' + esc(user.name) + '</h2><p class="sub">' + esc(user.title) + ' · ' + esc(user.dept) + ' · manager: ' + esc(MANAGER.name) + '</p></div>' +
+          '<div><h2>' + esc(user.name) + '</h2><p class="sub">' + esc(user.title) + ' · ' + esc(trDept(user.dept)) + ' · ' + t('profileManager', { name: esc(MANAGER.name) }) + '</p></div>' +
         '</div>' +
         '<form id="profile-form">' +
-          '<h3 class="eyebrow" style="margin-bottom:10px">Contact information</h3>' +
+          '<h3 class="eyebrow" style="margin-bottom:10px">' + t('contactInfo') + '</h3>' +
           '<div class="form-grid">' +
-            field('p-name', 'Full name', 'text', p.name) +
-            field('p-phone', 'Mobile number', 'tel', p.phone) +
-            field('p-cemail', 'Company email', 'email', p.companyEmail, 'Used for sign-in and lead notifications') +
-            field('p-pemail', 'Personal email', 'email', p.personalEmail, 'Optional') +
+            field('p-name', t('fullName').replace(' *', ''), 'text', p.name) +
+            field('p-phone', t('mobile'), 'tel', p.phone) +
+            field('p-cemail', t('companyEmail'), 'email', p.companyEmail, t('emailHint')) +
+            field('p-pemail', t('personalEmail'), 'email', p.personalEmail, t('optional')) +
           '</div>' +
-          '<h3 class="eyebrow" style="margin:20px 0 10px">Payout details</h3>' +
+          '<h3 class="eyebrow" style="margin:20px 0 10px">' + t('payoutDetails') + '</h3>' +
           '<div class="form-grid">' +
-            '<div><label class="f-label" for="p-bank">Bank</label><select id="p-bank">' +
-              BANKS.map(function (b) { return '<option' + (b === p.bank ? ' selected' : '') + '>' + esc(b) + '</option>'; }).join('') + '</select></div>' +
-            field('p-iban', 'IBAN', 'text', '',
-              p.iban ? 'Current: ···· ' + p.iban.slice(-4) + ' — leave blank to keep it. Stored masked; never shown in full.'
-                     : 'Saudi IBAN: SA followed by 22 digits',
+            '<div><label class="f-label" for="p-bank">' + t('bank') + '</label><select id="p-bank">' +
+              BANKS.map(function (b) { return '<option value="' + esc(b) + '"' + (b === p.bank ? ' selected' : '') + '>' + esc(trBank(b)) + '</option>'; }).join('') + '</select></div>' +
+            field('p-iban', t('ibanLbl'), 'text', '',
+              p.iban ? t('ibanCurrent', { last4: p.iban.slice(-4) })
+                     : t('ibanHint'),
               'placeholder="SA00 0000 0000 0000 0000 0000" autocomplete="off"') +
-            '<div><label class="f-label" for="p-method">Preferred payout method</label><select id="p-method">' +
-              ['Bank transfer (payroll)', 'Separate bank transfer'].map(function (m) { return '<option' + (m === p.payMethod ? ' selected' : '') + '>' + m + '</option>'; }).join('') + '</select></div>' +
-            field('p-nid', 'National ID / Iqama (optional)', 'text', p.nationalId, 'Only needed if finance requires it for payout') +
+            '<div><label class="f-label" for="p-method">' + t('preferredMethod') + '</label><select id="p-method">' +
+              [['Bank transfer (payroll)', t('bankTransfer')], ['Separate bank transfer', t('separateTransfer')]].map(function (m) { return '<option value="' + m[0] + '"' + (m[0] === p.payMethod ? ' selected' : '') + '>' + m[1] + '</option>'; }).join('') + '</select></div>' +
+            field('p-nid', t('nationalId'), 'text', p.nationalId, t('nationalIdHint')) +
           '</div>' +
-          '<p class="f-hint" style="margin-top:14px">Payout details are stored encrypted and visible only to you and finance. In this demo they stay in your browser.</p>' +
-          '<div style="margin-top:16px"><button type="submit" class="btn">Save profile</button></div>' +
+          '<p class="f-hint" style="margin-top:14px">' + t('profileNote') + '</p>' +
+          '<div style="margin-top:16px"><button type="submit" class="btn">' + t('saveProfile') + '</button></div>' +
         '</form>' +
       '</div>';
 
@@ -1733,7 +1759,7 @@
       var iban = document.getElementById('p-iban').value.replace(/\s/g, '').toUpperCase();
       var ibanErr = document.getElementById('p-iban-err');
       if (iban && !/^SA\d{22}$/.test(iban)) {
-        ibanErr.textContent = 'That does not look like a Saudi IBAN — it should be SA followed by 22 digits.';
+        ibanErr.textContent = t('ibanErr');
         ibanErr.hidden = false;
         return;
       }
@@ -1749,13 +1775,14 @@
         payMethod: document.getElementById('p-method').value,
         nationalId: document.getElementById('p-nid').value
       });
-      toast('Profile saved.');
+      toast(t('profileSaved'));
     });
   }
 
   /* ---------------- Boot ---------------- */
   Object.assign(COMMISSION_STATUS_OVERRIDES, LS.get('paystatus', {}));
   applyTheme();
+  applyLang();
   window.addEventListener('hashchange', route);
   route();
 })();

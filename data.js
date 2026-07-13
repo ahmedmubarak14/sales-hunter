@@ -375,7 +375,8 @@ function last12Months() {
   var out = [];
   for (var i = 11; i >= 0; i--) {
     var d = new Date(NOW.getFullYear(), NOW.getMonth() - i, 1);
-    out.push({ key: monthKey(d), label: d.toLocaleString('en', { month: 'short' }), date: d });
+    var loc = (typeof isAr === 'function' && isAr()) ? 'ar' : 'en';
+    out.push({ key: monthKey(d), label: d.toLocaleString(loc, { month: 'short' }), date: d });
   }
   return out;
 }
