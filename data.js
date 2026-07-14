@@ -290,7 +290,11 @@ function closedDate(lead) { // date the lead reached a terminal stage
 }
 function lastActivity(lead) { return lead.events[lead.events.length - 1].date; }
 
-function commissionOf(lead) { // 20% of subscription value excl. VAT
+function commissionOf(lead) {
+  // Live mode: the amount comes from the Metabase calculation, never computed here.
+  if (window.LIVE && window.LIVE.commAmount && window.LIVE.commAmount[lead.id] !== undefined) {
+    return Math.round(window.LIVE.commAmount[lead.id]);
+  }
   return lead.stage === 'won' ? Math.round(lead.amountNet * COMMISSION_RATE) : 0;
 }
 function grossOf(lead) { return Math.round(lead.amountNet * (1 + VAT_RATE)); }

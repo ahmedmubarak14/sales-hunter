@@ -44,14 +44,24 @@ values ('YOUR.EMAIL@zid.sa', 'Your Name', 'Marketing', 'Marketing Specialist', '
 Storage → New bucket → name `payslips`, **private**. (Access is via signed
 URLs issued by the app; the RLS on the `payslips` table gates who can ask.)
 
-## 6. Auth (can be deferred)
+## 6. Auth (Email OTP — two dashboard tweaks)
 
-- Quickest start: Authentication → Providers → **Email (magic link / OTP)**
-  restricted in the app to `@zid.sa` addresses.
-- Proper setup: **Google** provider with the Zid Google Workspace (needs a
-  Google OAuth client from IT — internal type, so no verification review).
-- The login email must equal `app_users.zid_email` — that IS the
-  attribution key. `email_aliases` covers old addresses.
+The app signs users in with a magic link **or** a 6-digit code (`api.js`).
+Email provider is on by default; do these two things:
+
+1. Authentication → Email Templates → **Magic Link**: add
+   `{{ .Token }}` somewhere in the body so the email also contains the
+   6-digit code (useful when the link's redirect URL doesn't match where
+   the app is running).
+2. Authentication → URL Configuration → set **Site URL** to where the app
+   is hosted (Cloudflare Pages URL later; `http://localhost:8080` while
+   testing locally with `python3 -m http.server 8080`).
+
+Only people already in `app_users` can enter — a stranger who signs in
+sees "management hasn't added you yet" and no data (RLS returns nothing).
+The login email must equal `app_users.zid_email` — that IS the attribution
+key; `email_aliases` covers old addresses. Google Workspace SSO can replace
+OTP later without touching the schema.
 
 ## 7. Edge Functions (later, when building the sync — needs the CLI)
 

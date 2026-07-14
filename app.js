@@ -27,6 +27,7 @@
       .concat([Object.assign({ role: 'mgr' }, MANAGER), Object.assign({ role: 'fin' }, FINANCE)]);
   }
   function usersAll() {
+    if (window.LIVE) return LIVE.users.slice();
     var custom = LS.get('users', []);
     var over = LS.get('userOverrides', {});
     return baseUsers().concat(custom).map(function (u) {
@@ -34,6 +35,7 @@
     });
   }
   function currentUser() {
+    if (window.LIVE) return LIVE.me;
     var id = LS.get('user', null);
     if (!id) return null;
     var u = usersAll().find(function (x) { return x.id === id; });
@@ -65,7 +67,14 @@
     try { localStorage.setItem('sh.payslips', JSON.stringify(slips)); return true; }
     catch (e) { return false; } // storage quota exceeded
   }
+  function hasSlip(dealId) {
+    return window.LIVE ? SH_API.hasPayslip(dealId) : !!getSlips()[dealId];
+  }
   function slipLink(dealId, cls) {
+    if (window.LIVE) {
+      if (!SH_API.hasPayslip(dealId)) return '';
+      return '<button class="linklike slip-open ' + (cls || '') + '" data-deal="' + esc(dealId) + '">' + t('payslipDl') + '</button>';
+    }
     var slip = getSlips()[dealId];
     if (!slip) return '';
     return '<a class="' + (cls || '') + '" href="' + slip.dataUrl + '" download="' + esc(slip.name) + '">' + t('payslipDl') + '</a>';
@@ -73,6 +82,10 @@
 
   /* Payout details: saved profile overrides the employee defaults */
   function payoutDetailsOf(emp) {
+    if (window.LIVE) {
+      var pr = SH_API.profileOf(emp) || {};
+      return { bank: pr.bank || '—', iban: pr.iban_last4 ? ('SA000000000000000000' + pr.iban_last4) : '' };
+    }
     var saved = LS.get('profile.' + emp.id, {});
     return { bank: saved.bank || emp.bank, iban: saved.iban || emp.iban };
   }
@@ -80,6 +93,7 @@
 
   /* Leads submitted through the demo form (persisted locally) */
   function customLeads() {
+    if (window.LIVE) return [];
     return LS.get('leads', []).map(function (l) {
       return Object.assign({}, l, {
         createdAt: new Date(l.createdAt),
@@ -253,11 +267,26 @@
         }).join('');
     }
 
+    var liveCard = '';
+    if (window.SH_API && SH_API.enabled()) {
+      liveCard =
+        '<div class="card" style="margin-bottom:14px">' +
+          '<h2>' + t('liveTitle') + '</h2><p class="sub">' + t('liveSub') + '</p>' +
+          (window.LIVE_ERROR === 'no_app_user' ? '<p class="f-error" style="margin-top:8px">' + t('noAppUser') + '</p>' : '') +
+          '<div style="display:flex; gap:8px; margin-top:12px"><input type="email" id="live-email" placeholder="you@zid.sa" style="flex:1">' +
+          '<button class="btn" id="live-send">' + t('sendLink') + '</button></div>' +
+          '<div id="live-step2" hidden style="margin-top:10px"><p class="f-hint">' + t('linkSent') + '</p>' +
+          '<div style="display:flex; gap:8px; margin-top:6px"><input type="text" id="live-code" placeholder="' + t('codePh') + '" style="flex:1" inputmode="numeric">' +
+          '<button class="btn secondary" id="live-verify">' + t('verifyBtn') + '</button></div></div>' +
+        '</div>' +
+        '<p class="eyebrow" style="margin:0 2px 8px">' + t('orDemo') + '</p>';
+    }
     var ps = statsFor(allLeads()); // program-wide, for the hero stats
     app.innerHTML =
       '<div class="login-wrap">' +
         '<div class="login-left"><div class="login-card">' +
           '<div class="brand">' + SH_MARK + '<div><b>' + t('appName') + '</b><small>' + t('tagline') + '</small></div></div>' +
+          liveCard +
           '<div class="card">' +
             '<h2>' + t('signIn') + '</h2>' +
             '<p class="sub">' + t('signInSub') + '</p>' +
@@ -278,6 +307,29 @@
         '</div>' +
       '</div>';
 
+    if (window.SH_API && SH_API.enabled()) {
+      document.getElementById('live-send').addEventListener('click', function () {
+        var em = document.getElementById('live-email').value.trim();
+        if (!em) return;
+        var btn = this; btn.disabled = true;
+        SH_API.sendMagicLink(em).then(function () {
+          document.getElementById('live-step2').hidden = false;
+          btn.disabled = false;
+        }).catch(function (e2) { toast(String(e2.message)); btn.disabled = false; });
+      });
+      document.getElementById('live-verify').addEventListener('click', function () {
+        var em = document.getElementById('live-email').value.trim();
+        var code = document.getElementById('live-code').value.trim();
+        if (!em || !code) return;
+        toast(t('loadingLive'));
+        SH_API.verifyOtp(em, code).then(function () {
+          return SH_API.init();
+        }).then(function (ok) {
+          if (ok) { location.hash = '#' + homeOf(roleOf()); route(); }
+          else renderLogin();
+        }).catch(function (e2) { toast(String(e2.message)); });
+      });
+    }
     document.getElementById('login-lang').addEventListener('click', function (e) {
       e.preventDefault();
       setLang(isAr() ? 'en' : 'ar');
@@ -314,7 +366,7 @@
         '</aside>' +
         '<div class="main">' +
           '<div class="topbar">' +
-            '<div class="crumbs"><h1>' + esc(t(r.titleKey)) + '</h1><span class="demo-pill">' + t('demoPill') + '</span></div>' +
+            '<div class="crumbs"><h1>' + esc(t(r.titleKey)) + '</h1>' + (window.LIVE ? '<span class="demo-pill" style="background:var(--good);color:#fff">' + t('livePill') + '</span>' : '<span class="demo-pill">' + t('demoPill') + '</span>') + '</div>' +
             '<div class="actions">' +
               '<button class="icon-btn lang-btn" id="lang-toggle" aria-label="' + t('langToggle') + '">' + (isAr() ? 'EN' : 'ع') + '</button>' +
               '<button class="icon-btn" id="theme-toggle" title="' + t('themeToggle') + '" aria-label="' + t('themeToggle') + '">' + ICONS.sun + '</button>' +
@@ -326,6 +378,7 @@
       '</div>';
 
     document.getElementById('logout').addEventListener('click', function () {
+      if (window.LIVE) { SH_API.signOut(); location.hash = ''; location.reload(); return; }
       LS.set('user', null); location.hash = ''; route();
     });
     document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
@@ -691,6 +744,19 @@
       var platformEl = document.querySelector('input[name="f-platform"]:checked');
       if (!company || !phone || !platformEl) { toast(t('submitReqErr')); return; }
       var industry = document.getElementById('f-industry').value.trim();
+      if (window.LIVE) {
+        SH_API.submitLead({
+          company: company, industry: industry, platform: platformEl.value,
+          storeUrl: document.getElementById('f-store').value.trim(),
+          contactEmail: document.getElementById('f-email').value.trim(),
+          phone: phone,
+          notes: document.getElementById('f-notes').value.trim()
+        }).then(function () {
+          toast(t('submittedToast'));
+          location.hash = '#/leads';
+        }).catch(function (e2) { toast(String(e2.message)); });
+        return;
+      }
       // Anchor to the demo's frozen "today" so the lead lands inside every
       // monthly chart window (the whole dataset lives at NOW).
       var now = new Date(NOW.getTime());
@@ -769,7 +835,7 @@
         '<td class="num">' + fmtMoney(l.amountNet) + '</td>' +
         '<td class="num"><b>' + fmtMoney(commissionOf(l)) + '</b></td>' +
         '<td><span class="status-chip ' + cs + '">' + (cs === 'paid' ? t('paid') : cs === 'approved' ? t('approved') : t('pendingApproval')) + '</span>' +
-          (cs === 'paid' && getSlips()[l.id] ? '<span class="cell-sub">' + slipLink(l.id) + '</span>' : '') + '</td>' +
+          (cs === 'paid' && hasSlip(l.id) ? '<span class="cell-sub">' + slipLink(l.id) + '</span>' : '') + '</td>' +
       '</tr>';
     }).join('');
 
@@ -953,23 +1019,35 @@
         var name = document.getElementById('nu-name').value.trim();
         var email = document.getElementById('nu-email').value.trim();
         if (!name || !email) return;
-        var custom = LS.get('users', []);
-        custom.push({
-          id: 'u' + (100 + custom.length),
+        var nuRole = document.getElementById('nu-role').value;
+        var nu = {
           name: name, email: email,
           dept: document.getElementById('nu-dept').value.trim() || 'General',
-          title: document.getElementById('nu-title').value.trim() || roleName(document.getElementById('nu-role').value),
-          role: document.getElementById('nu-role').value,
-          code: String(8681849300 + custom.length)
-        });
+          title: document.getElementById('nu-title').value.trim() || roleName(nuRole),
+          role: nuRole
+        };
+        if (window.LIVE) {
+          SH_API.addUser(nu).then(function () {
+            toast(t('userAddedToast', { name: name })); render();
+          }).catch(function (e2) { toast(String(e2.message)); });
+          return;
+        }
+        var custom = LS.get('users', []);
+        custom.push(Object.assign({ id: 'u' + (100 + custom.length), code: String(8681849300 + custom.length) }, nu));
         LS.set('users', custom);
-        audit('Added user ' + name + ' (' + roleName(document.getElementById('nu-role').value) + ')');
+        audit('Added user ' + name + ' (' + roleName(nuRole) + ')');
         toast(t('userAddedToast', { name: name }));
         render();
       });
       content.querySelectorAll('.role-select').forEach(function (sel) {
         sel.addEventListener('change', function () {
           var u = usersAll().find(function (x) { return x.id === sel.getAttribute('data-user'); });
+          if (window.LIVE) {
+            SH_API.patchUser(sel.getAttribute('data-user'), { role: sel.value }).then(function () {
+              toast(t('roleUpdated', { role: roleName(sel.value) })); render();
+            }).catch(function (e2) { toast(String(e2.message)); render(); });
+            return;
+          }
           saveOverride(sel.getAttribute('data-user'), { role: sel.value });
           audit('Changed role of ' + (u ? u.name : sel.getAttribute('data-user')) + ' to ' + roleName(sel.value));
           toast(t('roleUpdated', { role: roleName(sel.value) }));
@@ -980,6 +1058,12 @@
         btn.addEventListener('click', function () {
           var id = btn.getAttribute('data-user');
           var u = usersAll().find(function (x) { return x.id === id; });
+          if (window.LIVE) {
+            SH_API.patchUser(id, { active: !u.active }).then(function () {
+              toast(t(u.active ? 'userDisabled' : 'userEnabled', { name: u.name })); render();
+            }).catch(function (e2) { toast(String(e2.message)); render(); });
+            return;
+          }
           saveOverride(id, { active: !u.active });
           audit((u.active ? 'Disabled ' : 'Enabled ') + u.name);
           toast(t(u.active ? 'userDisabled' : 'userEnabled', { name: u.name }));
@@ -1008,11 +1092,12 @@
           '</div>' +
           '<div style="margin-top:14px"><button type="submit" class="btn">' + t('saveRules') + '</button></div></form>' +
         '</section>' +
+        (window.LIVE ? '' :
         '<section class="card">' +
           '<div class="card-head"><div><h3>' + t('demoControls') + '</h3><p class="sub">' + t('forPresentations') + '</p></div></div>' +
           '<p class="sub" style="margin-bottom:12px">' + t('resetSub') + '</p>' +
           '<button class="btn secondary" id="reset-demo">' + t('resetBtn') + '</button>' +
-        '</section>' +
+        '</section>') +
       '</div>' +
       '<section class="card">' +
         '<div class="card-head"><div><h3>' + t('auditLog') + '</h3><p class="sub">' + t('auditSub') + '</p></div></div>' +
@@ -1033,6 +1118,13 @@
         toast(t('rulesRange'));
         return;
       }
+      if (window.LIVE) {
+        SH_API.saveSettings(rate / 100, vat / 100).then(function () {
+          COMMISSION_RATE = rate / 100; VAT_RATE = vat / 100;
+          toast(t('rulesSaved', { rate: ratePct() })); route();
+        }).catch(function (e2) { toast(String(e2.message)); });
+        return;
+      }
       COMMISSION_RATE = rate / 100;
       VAT_RATE = vat / 100;
       LS.set('settings', { commissionRate: COMMISSION_RATE, vatRate: VAT_RATE });
@@ -1040,7 +1132,8 @@
       toast(t('rulesSaved', { rate: ratePct() }));
       route();
     });
-    document.getElementById('reset-demo').addEventListener('click', function () {
+    var resetBtn = document.getElementById('reset-demo');
+    if (resetBtn) resetBtn.addEventListener('click', function () {
       ['leads', 'paystatus', 'payslips', 'users', 'userOverrides', 'settings', 'audit'].forEach(function (k) {
         try { localStorage.removeItem('sh.' + k); } catch (e) {}
       });
@@ -1475,9 +1568,12 @@
     return iban ? iban.replace(/(.{4})/g, '$1 ').trim() : t('notProvided');
   }
   function openHunterDrawer(empId) {
-    var emp = EMPLOYEES.find(function (e) { return e.id === empId; });
+    var emp = (window.LIVE ? LIVE.users : EMPLOYEES).find(function (e) { return e.id === empId; });
     if (!emp) return;
-    var saved = LS.get('profile.' + emp.id, {});
+    var saved = window.LIVE ? (function () {
+      var pr = SH_API.profileOf(emp) || {};
+      return { phone: pr.phone, personalEmail: pr.personal_email, payMethod: pr.payout_method };
+    })() : LS.get('profile.' + emp.id, {});
     var pay = payoutDetailsOf(emp);
     var s = statsFor(leadsOf(emp.id));
     var old = document.getElementById('drawer-root');
@@ -1502,7 +1598,10 @@
         '<h3 class="eyebrow">' + t('payoutAccount') + '</h3>' +
         '<dl class="d-kv">' +
           '<dt>' + t('bank') + '</dt><dd>' + esc(trBank(pay.bank)) + '</dd>' +
-          '<dt>' + t('ibanLbl') + '</dt><dd style="font-variant-numeric:tabular-nums">' + esc(fmtIbanFull(pay.iban)) + '</dd>' +
+          '<dt>' + t('ibanLbl') + '</dt><dd style="font-variant-numeric:tabular-nums" id="iban-dd">' +
+            (window.LIVE
+              ? esc(maskIban(pay.iban)) + (pay.iban ? ' <button class="linklike" id="reveal-iban">' + t('revealBtn') + '</button>' : '')
+              : esc(fmtIbanFull(pay.iban))) + '</dd>' +
           '<dt>' + t('payoutMethod') + '</dt><dd>' + esc(saved.payMethod || t('bankTransfer')) + '</dd>' +
           (saved.nationalId ? '<dt>' + t('nationalId') + '</dt><dd>' + esc(saved.nationalId) + '</dd>' : '') +
         '</dl>' +
@@ -1522,11 +1621,18 @@
     root.querySelector('.drawer-backdrop').addEventListener('click', close);
     root.querySelector('#drawer-close').addEventListener('click', close);
     document.addEventListener('keydown', onKey);
+    var rb = root.querySelector('#reveal-iban');
+    if (rb) rb.addEventListener('click', function () {
+      SH_API.revealIban(emp.dbId).then(function (v) {
+        root.querySelector('#iban-dd').textContent = fmtIbanFull(String(v || ''));
+      }).catch(function (e2) { toast(String(e2.message)); });
+    });
   }
 
   /* ---- Finance: hunter directory ---- */
   function viewHunters(content) {
-    var rows = EMPLOYEES.map(function (e) {
+    var hunterList = window.LIVE ? LIVE.users.filter(function (u) { return u.role === 'emp' && u.active; }) : EMPLOYEES;
+    var rows = hunterList.map(function (e) {
       var s = statsFor(leadsOf(e.id));
       var pay = payoutDetailsOf(e);
       return { e: e, s: s, pay: pay };
@@ -1578,7 +1684,7 @@
 
     function renderTable() {
       var rows = rowsFor().map(function (l) {
-        var hunter = EMPLOYEES.find(function (e) { return e.id === l.hunterId; });
+        var hunter = (window.LIVE ? LIVE.users : EMPLOYEES).find(function (e) { return e.id === l.hunterId; });
         var pay = hunter ? payoutDetailsOf(hunter) : { bank: '—', iban: '' };
         var cs = commissionStatus(l);
         return '<tr>' +
@@ -1595,7 +1701,7 @@
               return '<option value="' + o[0] + '"' + (o[0] === cs ? ' selected' : '') + '>' + o[1] + '</option>';
             }).join('') + '</select></td>' +
           '<td>' + (cs === 'paid'
-            ? (getSlips()[l.id]
+            ? (hasSlip(l.id)
                 ? slipLink(l.id) + '<span class="cell-sub"><button class="linklike slip-up" data-deal="' + esc(l.id) + '">' + t('replace') + '</button></span>'
                 : '<button class="ghost-btn slip-up" data-deal="' + esc(l.id) + '">' + t('uploadPayslip') + '</button>')
             : '<span class="cell-sub">' + t('afterPayment') + '</span>') + '</td>' +
@@ -1622,6 +1728,14 @@
       document.querySelectorAll('.status-select').forEach(function (sel) {
         sel.addEventListener('change', function () {
           var dealId = sel.getAttribute('data-deal');
+          if (window.LIVE) {
+            SH_API.setCommissionStatus(dealId, sel.value).then(function () {
+              toast(sel.value === 'paid' ? t('statusPaidToast', { id: dealId })
+                                         : t('statusToast', { id: dealId, s: sel.options[sel.selectedIndex].text }));
+              renderTiles(); renderTable();
+            }).catch(function (e2) { toast(String(e2.message)); renderTable(); });
+            return;
+          }
           var overrides = LS.get('paystatus', {});
           overrides[dealId] = sel.value;
           LS.set('paystatus', overrides);
@@ -1677,6 +1791,13 @@
       if (!f || !pendingSlipDeal) return;
       if (f.size > 1.5 * 1024 * 1024) { toast(t('slipTooBig')); return; }
       var deal = pendingSlipDeal;
+      if (window.LIVE) {
+        SH_API.uploadPayslip(deal, f).then(function () {
+          toast(t('slipToast', { id: deal }));
+          renderTable();
+        }).catch(function (e2) { toast(String(e2.message)); });
+        return;
+      }
       var reader = new FileReader();
       reader.onload = function () {
         if (saveSlip(deal, { name: f.name, dataUrl: reader.result, uploadedAt: new Date().toISOString() })) {
@@ -1701,7 +1822,7 @@
     document.getElementById('dl-payouts').addEventListener('click', function () {
       var lines = ['Hunter,Department,Deal ID,Company,Closed Won,Sales Rep,Value (SAR excl. VAT),Commission (SAR),Status,Bank,IBAN (masked)'];
       rowsFor().forEach(function (l) {
-        var hunter = EMPLOYEES.find(function (e) { return e.id === l.hunterId; });
+        var hunter = (window.LIVE ? LIVE.users : EMPLOYEES).find(function (e) { return e.id === l.hunterId; });
         var pay = hunter ? payoutDetailsOf(hunter) : { bank: '', iban: '' };
         lines.push([
           '"' + (hunter ? hunter.name : 'Unknown').replace(/"/g, '""') + '"',
@@ -1726,7 +1847,17 @@
 
   /* ---- Profile ---- */
   function viewProfile(content, user) {
-    var saved = LS.get('profile.' + user.id, {});
+    var saved;
+    if (window.LIVE) {
+      var pr = SH_API.profileOf(user) || {};
+      saved = {
+        phone: pr.phone, personalEmail: pr.personal_email, bank: pr.bank,
+        payMethod: pr.payout_method,
+        iban: pr.iban_last4 ? ('SA000000000000000000' + pr.iban_last4) : ''
+      };
+    } else {
+      saved = LS.get('profile.' + user.id, {});
+    }
     var p = Object.assign({
       name: user.name, dept: user.dept, title: user.title,
       companyEmail: user.email, personalEmail: '', phone: user.phone || '',
@@ -1781,6 +1912,17 @@
         return;
       }
       ibanErr.hidden = true;
+      if (window.LIVE) {
+        SH_API.saveProfile({
+          phone: document.getElementById('p-phone').value,
+          personalEmail: document.getElementById('p-pemail').value,
+          bank: document.getElementById('p-bank').value,
+          payMethod: document.getElementById('p-method').value,
+          iban: iban || null // blank keeps the saved one (we never resend it)
+        }).then(function () { toast(t('profileSaved')); route(); })
+          .catch(function (e2) { toast(String(e2.message)); });
+        return;
+      }
       if (!iban && p.iban) iban = p.iban; // blank keeps the saved one
       LS.set('profile.' + user.id, {
         name: document.getElementById('p-name').value,
@@ -1796,10 +1938,25 @@
     });
   }
 
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('.slip-open');
+    if (b && window.LIVE) {
+      e.preventDefault();
+      SH_API.openPayslip(b.getAttribute('data-deal')).catch(function (e2) { toast(String(e2.message)); });
+    }
+  });
+
   /* ---------------- Boot ---------------- */
-  Object.assign(COMMISSION_STATUS_OVERRIDES, LS.get('paystatus', {}));
   applyTheme();
   applyLang();
   window.addEventListener('hashchange', route);
-  route();
+  if (window.SH_API && SH_API.enabled()) {
+    SH_API.init().then(function (live) {
+      if (!live) Object.assign(COMMISSION_STATUS_OVERRIDES, LS.get('paystatus', {}));
+      route();
+    });
+  } else {
+    Object.assign(COMMISSION_STATUS_OVERRIDES, LS.get('paystatus', {}));
+    route();
+  }
 })();
