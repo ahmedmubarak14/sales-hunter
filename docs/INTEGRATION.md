@@ -149,7 +149,18 @@ schema above adapts to what already exists rather than the reverse.
 - PDPL review with IT before go-live; data retention policy for payslips.
 - Hosting inside Zid infra or an IT-approved managed environment.
 
-## 8. Build phases
+## 8. Hosting decision (made)
+
+**Supabase** (managed Postgres + Auth + Storage + Edge Functions), frontend
+on Cloudflare Pages. Rationale: the schema in §5 runs as plain Postgres,
+SSO email = attribution key, RLS enforces the three roles in the database,
+`pg_dump` migrates to Zid-internal infra later with zero schema changes.
+Caveat: no KSA region — get IT sign-off for storing encrypted bank details
+in the EU region, or keep IBANs masked until the app moves in-house.
+Setup runbook: `docs/SUPABASE.md`; schema: `supabase/migrations/001_init.sql`;
+sync jobs: `supabase/functions/`.
+
+## 9. Build phases
 
 - **Phase 0 — access (blocking):** HubSpot private app + property names +
   stage IDs; Metabase API key + Q1/Q2/Q3 definitions; SSO app registration.
@@ -160,7 +171,7 @@ schema above adapts to what already exists rather than the reverse.
 - **Phase 3 (~1 wk):** SSO, notifications (stage change / won / paid),
   hosting hardening, unmatched-commission queue UI.
 
-## 9. Open items
+## 10. Open items
 
 - [ ] Internal name of the hunter-email deal property
 - [ ] Closed-lost / unqualified reason property names
