@@ -25,7 +25,7 @@ async function fetchModifiedDeals(since: string | null) {
       id: "MOCK-1",
       properties: {
         dealname: "Mock Merchant", dealstage: "closedwon", amount: "2990",
-        [HUNTER_PROP]: "ahmed.mubarak@zid.sa",
+        [HUNTER_PROP]: "ahmedmubaraks@hotmail.com",
         hs_lastmodifieddate: new Date().toISOString(),
       },
     }];

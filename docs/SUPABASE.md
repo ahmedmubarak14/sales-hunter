@@ -24,18 +24,15 @@ That creates every table, the role-based row-level security, and the
 security-definer functions (IBAN encryption/reveal, commission status
 transitions, audit logging).
 
-## 3. Set the IBAN encryption key (you — 1 minute)
+## 3. Set the IBAN encryption key (DONE — lives in Supabase Vault)
 
-SQL Editor:
+`ALTER DATABASE ... SET` is not permitted on managed Supabase, so the key
+is stored in **Supabase Vault** as the secret named `iban_key`, and the
+functions read it via the private `iban_key()` helper (migration 002).
+Rotate it (Vault → edit secret) before any real IBAN is stored, since the
+initial value passed through tooling during setup.
 
-```sql
-alter database postgres set app.iban_key = '<long random string — keep it safe>';
-```
-
-Generate the string with a password manager (32+ chars). Losing it means
-stored IBANs cannot be decrypted; treat it like a production secret.
-
-## 4. Create your first management user (you — 1 minute)
+## 4. Create your first management user (DONE — ahmedmubaraks@hotmail.com as management)
 
 ```sql
 insert into app_users (zid_email, name, dept, title, role)

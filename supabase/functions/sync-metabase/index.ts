@@ -28,7 +28,7 @@ async function runCard(cardId: string): Promise<Record<string, unknown>[]> {
 
 async function syncCommissions() {
   const rows = MOCK
-    ? [{ hubspot_deal_id: "MOCK-1", hunter_email: "ahmed.mubarak@zid.sa", base_amount: 2990, commission_amount: 598, period: "2026-07", collected: true }]
+    ? [{ hubspot_deal_id: "MOCK-1", hunter_email: "ahmedmubaraks@hotmail.com", base_amount: 2990, commission_amount: 598, period: "2026-07", collected: true }]
     : await runCard(Deno.env.get("MB_CARD_COMMISSIONS")!);
   // TODO once Q1 columns are confirmed: map column names here.
   for (const r of rows) {
