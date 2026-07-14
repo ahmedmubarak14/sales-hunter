@@ -56,6 +56,15 @@ window.SH_API = (function () {
     return false;
   }
 
+  /* Failed magic links land with an error in the hash instead of tokens
+     (e.g. #error=access_denied&error_code=otp_expired&...) */
+  function captureHashError() {
+    var m = location.hash.match(/error_code=([^&]+)/);
+    if (!m && location.hash.indexOf('error=') < 0) return;
+    window.LIVE_AUTH_ERROR = m ? decodeURIComponent(m[1]) : 'auth_error';
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+
   /* ---------------- HTTP ---------------- */
   function headers(extra) {
     var h = Object.assign({ apikey: cfg.key, 'Content-Type': 'application/json' }, extra || {});
@@ -239,6 +248,7 @@ window.SH_API = (function () {
 
   async function init() {
     if (!enabled()) return false;
+    captureHashError();
     captureHashTokens();
     if (!getSession()) return false;
     try {

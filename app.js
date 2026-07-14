@@ -273,9 +273,10 @@
         '<div class="card" style="margin-bottom:14px">' +
           '<h2>' + t('liveTitle') + '</h2><p class="sub">' + t('liveSub') + '</p>' +
           (window.LIVE_ERROR === 'no_app_user' ? '<p class="f-error" style="margin-top:8px">' + t('noAppUser') + '</p>' : '') +
+          (window.LIVE_AUTH_ERROR ? '<p class="f-error" style="margin-top:8px">' + t('linkExpired') + '</p>' : '') +
           '<div style="display:flex; gap:8px; margin-top:12px"><input type="email" id="live-email" placeholder="you@zid.sa" style="flex:1">' +
           '<button class="btn" id="live-send">' + t('sendLink') + '</button></div>' +
-          '<div id="live-step2" hidden style="margin-top:10px"><p class="f-hint">' + t('linkSent') + '</p>' +
+          '<div id="live-step2"' + (window.LIVE_AUTH_ERROR ? '' : ' hidden') + ' style="margin-top:10px"><p class="f-hint">' + t('linkSent') + '</p>' +
           '<div style="display:flex; gap:8px; margin-top:6px"><input type="text" id="live-code" placeholder="' + t('codePh') + '" style="flex:1" inputmode="numeric">' +
           '<button class="btn secondary" id="live-verify">' + t('verifyBtn') + '</button></div></div>' +
         '</div>' +
