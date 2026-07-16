@@ -172,6 +172,12 @@
     '<circle cx="16" cy="16" r="1.9" fill="currentColor"/>' +
     '<path d="M16 .8v6M16 25.2v6M.8 16h6M25.2 16h6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>';
 
+  var GOOGLE_G = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">' +
+    '<path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>' +
+    '<path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>' +
+    '<path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>' +
+    '<path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>';
+
   var HERO_RINGS = '<svg class="hero-rings" viewBox="0 0 580 580" fill="none" aria-hidden="true">' +
     [250, 205, 160, 115, 70].map(function (r, i) {
       return '<circle cx="290" cy="290" r="' + r + '" stroke="rgba(174,114,255,' + (0.16 + i * 0.1) + ')" stroke-width="2"/>';
@@ -273,10 +279,14 @@
         '<div class="card" style="margin-bottom:14px">' +
           '<h2>' + t('liveTitle') + '</h2><p class="sub">' + t('liveSub') + '</p>' +
           (window.LIVE_ERROR === 'no_app_user' ? '<p class="f-error" style="margin-top:8px">' + t('noAppUser') + '</p>' : '') +
-          (window.LIVE_AUTH_ERROR ? '<p class="f-error" style="margin-top:8px">' + t('linkExpired') + '</p>' : '') +
-          '<div style="display:flex; gap:8px; margin-top:12px"><input type="email" id="live-email" placeholder="you@zid.sa" style="flex:1">' +
+          (window.LIVE_AUTH_ERROR ? '<p class="f-error" style="margin-top:8px">' +
+            (window.LIVE_AUTH_ERROR === 'otp_expired' ? t('linkExpired') : t('authError')) + '</p>' : '') +
+          '<button class="btn" id="live-google" style="width:100%; margin-top:12px; display:flex; align-items:center; justify-content:center; gap:8px">' +
+            GOOGLE_G + t('googleBtn') + '</button>' +
+          '<p class="eyebrow" style="margin:12px 2px 0">' + t('orEmail') + '</p>' +
+          '<div style="display:flex; gap:8px; margin-top:8px"><input type="email" id="live-email" placeholder="you@zid.sa" style="flex:1">' +
           '<button class="btn" id="live-send">' + t('sendLink') + '</button></div>' +
-          '<div id="live-step2"' + (window.LIVE_AUTH_ERROR ? '' : ' hidden') + ' style="margin-top:10px"><p class="f-hint">' + t('linkSent') + '</p>' +
+          '<div id="live-step2"' + (window.LIVE_AUTH_ERROR === 'otp_expired' ? '' : ' hidden') + ' style="margin-top:10px"><p class="f-hint">' + t('linkSent') + '</p>' +
           '<div style="display:flex; gap:8px; margin-top:6px"><input type="text" id="live-code" placeholder="' + t('codePh') + '" style="flex:1" inputmode="numeric">' +
           '<button class="btn secondary" id="live-verify">' + t('verifyBtn') + '</button></div></div>' +
         '</div>' +
@@ -309,6 +319,9 @@
       '</div>';
 
     if (window.SH_API && SH_API.enabled()) {
+      document.getElementById('live-google').addEventListener('click', function () {
+        SH_API.signInWithGoogle();
+      });
       document.getElementById('live-send').addEventListener('click', function () {
         var em = document.getElementById('live-email').value.trim();
         if (!em) return;

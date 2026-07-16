@@ -116,6 +116,12 @@ window.SH_API = (function () {
       body: { email: email, create_user: true, options: { email_redirect_to: location.origin + location.pathname } }
     });
   }
+  /* Google SSO: Supabase runs the OAuth dance and redirects back with
+     tokens in the hash, which captureHashTokens() picks up on load. */
+  function signInWithGoogle() {
+    location.href = cfg.url + '/auth/v1/authorize?provider=google&redirect_to=' +
+      encodeURIComponent(location.origin + location.pathname);
+  }
   async function verifyOtp(email, token) {
     var j = await req('/auth/v1/verify', {
       method: 'POST', body: { type: 'email', email: email, token: token }
@@ -392,6 +398,7 @@ window.SH_API = (function () {
   return {
     enabled: enabled, init: init, getSession: getSession,
     sendMagicLink: sendMagicLink, verifyOtp: verifyOtp, signOut: signOut,
+    signInWithGoogle: signInWithGoogle,
     submitLead: submitLead, saveProfile: saveProfile,
     setCommissionStatus: setCommissionStatus,
     uploadPayslip: uploadPayslip, openPayslip: openPayslip, hasPayslip: hasPayslip,
