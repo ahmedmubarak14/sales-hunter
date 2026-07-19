@@ -110,7 +110,9 @@ var STORE_SHOWCASE = [
   ]}
 ];
 var SALES_OWNERS = ['Fahad Al-Otaibi', 'Sara Al-Zahrani', 'Mohammed Iqbal', 'Lama Al-Harbi'];
-var BANKS = ['Al Rajhi Bank', 'Saudi National Bank', 'Riyad Bank', 'Alinma Bank', 'SAB', 'Bank Albilad', 'Arab National Bank'];
+var BANKS = ['Al Rajhi Bank', 'Saudi National Bank', 'Riyad Bank', 'Alinma Bank', 'SAB',
+  'Bank Albilad', 'Arab National Bank', 'Banque Saudi Fransi', 'Bank AlJazira',
+  'Saudi Investment Bank', 'Gulf International Bank', 'STC Bank', 'D360 Bank', 'Other'];
 
 /* ---- Program participants (the hunters) ---- */
 var EMPLOYEES = [

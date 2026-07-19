@@ -328,16 +328,37 @@ window.SH_API = (function () {
     return id;
   }
 
+  /* Single write path for a user's own profile: identity fields on
+     app_users, contact/bank on profiles, IBAN encrypted server-side,
+     onboarded_at stamped on first save. */
   async function saveProfile(p) {
     var me = window.LIVE.me;
-    await req('/rest/v1/profiles?on_conflict=user_id', {
-      method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+    await req('/rest/v1/rpc/save_profile', {
+      method: 'POST',
       body: {
-        user_id: me.dbId, phone: p.phone || null, personal_email: p.personalEmail || null,
-        bank: p.bank || null, payout_method: p.payMethod || null, updated_at: new Date().toISOString()
+        p_name: p.name || null, p_dept: p.dept || null,
+        p_phone: p.phone || null, p_personal_email: p.personalEmail || null,
+        p_bank: p.bank || null, p_iban: p.iban || null
       }
     });
-    if (p.iban) await req('/rest/v1/rpc/set_iban', { method: 'POST', body: { p_iban: p.iban } });
+    if (p.name) me.name = p.name;
+    if (p.dept) me.dept = p.dept;
+    var u = window.LIVE.users.find(function (x) { return x.id === me.id; });
+    if (u) { u.name = me.name; u.dept = me.dept; }
+    var pr = window.LIVE.profilesByUser[me.dbId] || (window.LIVE.profilesByUser[me.dbId] = { user_id: me.dbId });
+    if (p.phone) pr.phone = p.phone;
+    if (p.personalEmail) pr.personal_email = p.personalEmail;
+    if (p.bank) pr.bank = p.bank;
+    if (p.iban) pr.iban_last4 = p.iban.slice(-4);
+    pr.onboarded_at = pr.onboarded_at || new Date().toISOString();
+  }
+
+  /* Hunters are locked to the onboarding screen until their profile
+     is complete. Other roles are never gated. */
+  function onboardingNeeded() {
+    if (!window.LIVE || window.LIVE.me.role !== 'emp') return false;
+    var pr = window.LIVE.profilesByUser[window.LIVE.me.dbId];
+    return !(pr && pr.onboarded_at);
   }
 
   async function setCommissionStatus(dealId, status) {
@@ -434,7 +455,7 @@ window.SH_API = (function () {
     enabled: enabled, init: init, getSession: getSession,
     sendMagicLink: sendMagicLink, verifyOtp: verifyOtp, signOut: signOut,
     signInWithGoogle: signInWithGoogle,
-    submitLead: submitLead, saveProfile: saveProfile,
+    submitLead: submitLead, saveProfile: saveProfile, onboardingNeeded: onboardingNeeded,
     setCommissionStatus: setCommissionStatus,
     uploadPayslip: uploadPayslip, openPayslip: openPayslip, hasPayslip: hasPayslip,
     addUser: addUser, patchUser: patchUser, saveSettings: saveSettings,

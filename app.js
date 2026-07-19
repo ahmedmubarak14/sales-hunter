@@ -243,6 +243,8 @@
   function route() {
     var h = location.hash.replace(/^#/, '') || '/';
     if (!currentUser()) { renderLogin(); return; }
+    /* hunters are locked out of the app until their profile is complete */
+    if (window.LIVE && window.SH_API && SH_API.onboardingNeeded()) { renderOnboarding(); return; }
     var home = homeOf(roleOf());
     if (!ROUTES[h]) { location.hash = '#' + home; return; }
     var r = ROUTES[h];
@@ -369,6 +371,98 @@
         location.hash = '#' + homeOf(roleOf());
         route();
       });
+    });
+  }
+
+  /* ------- Hunter onboarding: locked screen until profile complete ------- */
+  function bankSelect(id, selected) {
+    var known = selected && BANKS.indexOf(selected) >= 0;
+    var custom = selected && !known;
+    return '<select id="' + id + '" required>' +
+      '<option value="" disabled' + (selected ? '' : ' selected') + '>' + t('chooseBank') + '</option>' +
+      BANKS.map(function (b) {
+        var sel = (known && b === selected) || (custom && b === 'Other');
+        return '<option value="' + esc(b) + '"' + (sel ? ' selected' : '') + '>' + esc(trBank(b)) + '</option>';
+      }).join('') + '</select>' +
+      '<input id="' + id + '-other" type="text"' + (custom ? ' value="' + esc(selected) + '"' : ' hidden') +
+        ' placeholder="' + t('bankOtherPh') + '" style="margin-top:8px">';
+  }
+  function wireBankOther(id) {
+    var sel = document.getElementById(id), other = document.getElementById(id + '-other');
+    sel.addEventListener('change', function () {
+      other.hidden = sel.value !== 'Other';
+      other.required = sel.value === 'Other';
+    });
+  }
+  function bankValue(id) {
+    var sel = document.getElementById(id), other = document.getElementById(id + '-other');
+    return sel.value === 'Other' ? other.value.trim() : sel.value;
+  }
+
+  function renderOnboarding() {
+    var user = currentUser();
+    app.innerHTML =
+      '<div class="login-wrap">' +
+        '<div class="login-left"><div class="login-card">' +
+          '<div class="brand">' + SH_MARK + '<div><b>' + t('appName') + '</b><small>' + t('tagline') + '</small></div></div>' +
+          '<div class="card">' +
+            '<h2>' + t('obTitle') + '</h2><p class="sub">' + t('obSub') + '</p>' +
+            '<form id="ob-form" style="margin-top:14px">' +
+              '<div class="form-grid">' +
+                '<div><label class="f-label" for="ob-name">' + t('fullName') + '</label>' +
+                  '<input id="ob-name" type="text" required value="' + esc(user.name || '') + '">' +
+                  '<p class="f-hint">' + t('obNameHint') + '</p></div>' +
+                '<div><label class="f-label" for="ob-dept">' + t('deptStar') + '</label>' +
+                  '<input id="ob-dept" type="text" required value="' + esc(user.dept && user.dept !== 'General' ? user.dept : '') + '" placeholder="' + t('deptPh') + '"></div>' +
+                '<div><label class="f-label" for="ob-phone">' + t('mobileStar') + '</label>' +
+                  '<input id="ob-phone" type="tel" required placeholder="+966555555928"></div>' +
+                '<div><label class="f-label" for="ob-pemail">' + t('personalEmailStar') + '</label>' +
+                  '<input id="ob-pemail" type="email" required placeholder="personal@gmail.com"></div>' +
+                '<div><label class="f-label" for="ob-bank">' + t('bankStar') + '</label>' + bankSelect('ob-bank', null) + '</div>' +
+                '<div><label class="f-label" for="ob-iban">' + t('ibanStar') + '</label>' +
+                  '<input id="ob-iban" type="text" required placeholder="SA00 0000 0000 0000 0000 0000" autocomplete="off">' +
+                  '<p class="f-error" id="ob-err" hidden></p></div>' +
+              '</div>' +
+              '<div style="margin-top:16px; display:flex; gap:12px; align-items:center">' +
+                '<button type="submit" class="btn">' + t('obSubmit') + '</button>' +
+                '<button type="button" class="link-btn" id="ob-signout">' + t('signOut') + '</button>' +
+              '</div>' +
+            '</form>' +
+          '</div>' +
+        '</div></div>' +
+        '<div class="login-hero">' +
+          HERO_RINGS +
+          '<h2>' + t('obHeroTitle') + '</h2><p>' + t('obHeroSub') + '</p>' +
+          '<div class="hero-zid">' + t('heroBy') + ' ' + LOGO + '</div>' +
+        '</div>' +
+      '</div>';
+
+    wireBankOther('ob-bank');
+    document.getElementById('ob-signout').addEventListener('click', function () {
+      SH_API.signOut(); location.hash = ''; location.reload();
+    });
+    document.getElementById('ob-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var err = document.getElementById('ob-err');
+      var iban = document.getElementById('ob-iban').value.replace(/\s/g, '').toUpperCase();
+      if (!/^SA\d{22}$/.test(iban)) { err.textContent = t('ibanErr'); err.hidden = false; return; }
+      var bank = bankValue('ob-bank');
+      if (!bank) { err.textContent = t('bankReq'); err.hidden = false; return; }
+      err.hidden = true;
+      var btn = e.target.querySelector('button[type=submit]');
+      btn.disabled = true;
+      SH_API.saveProfile({
+        name: document.getElementById('ob-name').value.trim(),
+        dept: document.getElementById('ob-dept').value.trim(),
+        phone: document.getElementById('ob-phone').value.trim(),
+        personalEmail: document.getElementById('ob-pemail').value.trim(),
+        bank: bank,
+        iban: iban
+      }).then(function () {
+        toast(t('obDone'));
+        location.hash = '#' + homeOf(roleOf());
+        route();
+      }).catch(function (e2) { toast(String(e2.message)); btn.disabled = false; });
     });
   }
 
@@ -1683,7 +1777,7 @@
     if (!emp) return;
     var saved = window.LIVE ? (function () {
       var pr = SH_API.profileOf(emp) || {};
-      return { phone: pr.phone, personalEmail: pr.personal_email, payMethod: pr.payout_method };
+      return { phone: pr.phone, personalEmail: pr.personal_email };
     })() : LS.get('profile.' + emp.id, {});
     var pay = payoutDetailsOf(emp);
     var s = statsFor(leadsOf(emp.id));
@@ -1713,7 +1807,6 @@
             (window.LIVE
               ? esc(maskIban(pay.iban)) + (pay.iban ? ' <button class="linklike" id="reveal-iban">' + t('revealBtn') + '</button>' : '')
               : esc(fmtIbanFull(pay.iban))) + '</dd>' +
-          '<dt>' + t('payoutMethod') + '</dt><dd>' + esc(saved.payMethod || t('bankTransfer')) + '</dd>' +
           (saved.nationalId ? '<dt>' + t('nationalId') + '</dt><dd>' + esc(saved.nationalId) + '</dd>' : '') +
         '</dl>' +
         '<span class="hs-chip">' + t('fullIbanNote') + '</span>' +
@@ -1962,8 +2055,7 @@
     if (window.LIVE) {
       var pr = SH_API.profileOf(user) || {};
       saved = {
-        phone: pr.phone, personalEmail: pr.personal_email, bank: pr.bank,
-        payMethod: pr.payout_method,
+        phone: pr.phone || '', personalEmail: pr.personal_email || '', bank: pr.bank || '',
         iban: pr.iban_last4 ? ('SA000000000000000000' + pr.iban_last4) : ''
       };
     } else {
@@ -1972,7 +2064,7 @@
     var p = Object.assign({
       name: user.name, dept: user.dept, title: user.title,
       companyEmail: user.email, personalEmail: '', phone: user.phone || '',
-      bank: user.bank || BANKS[0], iban: user.iban || '', payMethod: 'Bank transfer (payroll)', nationalId: ''
+      bank: user.bank || '', iban: user.iban || '', nationalId: ''
     }, saved);
 
     function field(id, label, type, value, hint, attrs) {
@@ -1992,20 +2084,18 @@
           '<h3 class="eyebrow" style="margin-bottom:10px">' + t('contactInfo') + '</h3>' +
           '<div class="form-grid">' +
             field('p-name', t('fullName').replace(' *', ''), 'text', p.name) +
-            field('p-phone', t('mobile'), 'tel', p.phone) +
+            field('p-dept', t('deptLbl'), 'text', p.dept === 'General' ? '' : p.dept, '', 'placeholder="' + t('deptPh') + '"') +
+            field('p-phone', t('mobile'), 'tel', p.phone, '', 'placeholder="+966555555928"') +
             field('p-cemail', t('companyEmail'), 'email', p.companyEmail, t('emailHint')) +
-            field('p-pemail', t('personalEmail'), 'email', p.personalEmail, t('optional')) +
+            field('p-pemail', t('personalEmail'), 'email', p.personalEmail, '', 'placeholder="personal@gmail.com"') +
           '</div>' +
           '<h3 class="eyebrow" style="margin:20px 0 10px">' + t('payoutDetails') + '</h3>' +
           '<div class="form-grid">' +
-            '<div><label class="f-label" for="p-bank">' + t('bank') + '</label><select id="p-bank">' +
-              BANKS.map(function (b) { return '<option value="' + esc(b) + '"' + (b === p.bank ? ' selected' : '') + '>' + esc(trBank(b)) + '</option>'; }).join('') + '</select></div>' +
+            '<div><label class="f-label" for="p-bank">' + t('bank') + '</label>' + bankSelect('p-bank', p.bank) + '</div>' +
             field('p-iban', t('ibanLbl'), 'text', '',
               p.iban ? t('ibanCurrent', { last4: p.iban.slice(-4) })
                      : t('ibanHint'),
               'placeholder="SA00 0000 0000 0000 0000 0000" autocomplete="off"') +
-            '<div><label class="f-label" for="p-method">' + t('preferredMethod') + '</label><select id="p-method">' +
-              [['Bank transfer (payroll)', t('bankTransfer')], ['Separate bank transfer', t('separateTransfer')]].map(function (m) { return '<option value="' + m[0] + '"' + (m[0] === p.payMethod ? ' selected' : '') + '>' + m[1] + '</option>'; }).join('') + '</select></div>' +
             field('p-nid', t('nationalId'), 'text', p.nationalId, t('nationalIdHint')) +
           '</div>' +
           '<p class="f-hint" style="margin-top:14px">' + t('profileNote') + '</p>' +
@@ -2013,6 +2103,7 @@
         '</form>' +
       '</div>';
 
+    wireBankOther('p-bank');
     document.getElementById('profile-form').addEventListener('submit', function (e) {
       e.preventDefault();
       var iban = document.getElementById('p-iban').value.replace(/\s/g, '').toUpperCase();
@@ -2025,10 +2116,11 @@
       ibanErr.hidden = true;
       if (window.LIVE) {
         SH_API.saveProfile({
+          name: document.getElementById('p-name').value.trim(),
+          dept: document.getElementById('p-dept').value.trim(),
           phone: document.getElementById('p-phone').value,
           personalEmail: document.getElementById('p-pemail').value,
-          bank: document.getElementById('p-bank').value,
-          payMethod: document.getElementById('p-method').value,
+          bank: bankValue('p-bank'),
           iban: iban || null // blank keeps the saved one (we never resend it)
         }).then(function () { toast(t('profileSaved')); route(); })
           .catch(function (e2) { toast(String(e2.message)); });
@@ -2037,12 +2129,12 @@
       if (!iban && p.iban) iban = p.iban; // blank keeps the saved one
       LS.set('profile.' + user.id, {
         name: document.getElementById('p-name').value,
+        dept: document.getElementById('p-dept').value,
         phone: document.getElementById('p-phone').value,
         companyEmail: document.getElementById('p-cemail').value,
         personalEmail: document.getElementById('p-pemail').value,
-        bank: document.getElementById('p-bank').value,
+        bank: bankValue('p-bank'),
         iban: iban,
-        payMethod: document.getElementById('p-method').value,
         nationalId: document.getElementById('p-nid').value
       });
       toast(t('profileSaved'));

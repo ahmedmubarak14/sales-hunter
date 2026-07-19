@@ -57,7 +57,10 @@ var PLAN_AR = { 'Launch': 'الانطلاقة', 'Growth': 'النمو', 'Profess
 var BANK_AR = {
   'Al Rajhi Bank': 'مصرف الراجحي', 'Saudi National Bank': 'البنك الأهلي السعودي',
   'Riyad Bank': 'بنك الرياض', 'Alinma Bank': 'مصرف الإنماء', 'SAB': 'البنك السعودي الأول',
-  'Bank Albilad': 'بنك البلاد', 'Arab National Bank': 'البنك العربي الوطني'
+  'Bank Albilad': 'بنك البلاد', 'Arab National Bank': 'البنك العربي الوطني',
+  'Banque Saudi Fransi': 'البنك السعودي الفرنسي', 'Bank AlJazira': 'بنك الجزيرة',
+  'Saudi Investment Bank': 'البنك السعودي للاستثمار', 'Gulf International Bank': 'بنك الخليج الدولي',
+  'STC Bank': 'بنك stc', 'D360 Bank': 'بنك D360', 'Other': 'أخرى'
 };
 var DEPT_AR = {
   'Marketing': 'التسويق', 'Customer Success': 'نجاح العملاء', 'Finance': 'المالية',
@@ -309,6 +312,14 @@ en: {
   accessUpdated: 'Access updated.', switchAccess: 'Switch access',
   storesEmpty: 'No store data yet',
   storesEmptySub: 'This page fills automatically once the Metabase sync starts feeding real store data.',
+  obTitle: 'Complete your profile', obSub: 'Before you start hunting, we need a few details for payouts and contact.',
+  obNameHint: 'Double-check this is your full name as it appears on your bank account.',
+  deptStar: 'Department *', deptPh: 'e.g. Customer Success',
+  mobileStar: 'Mobile *', personalEmailStar: 'Personal email *',
+  bankStar: 'Bank *', chooseBank: 'Choose your bank…', bankOtherPh: 'Type your bank name',
+  bankReq: 'Please choose your bank (or type its name).', ibanStar: 'IBAN *',
+  obSubmit: 'Save & start hunting', obDone: 'Profile complete — welcome aboard! 🎉',
+  obHeroTitle: 'One minute of setup', obHeroSub: 'Your payout details are encrypted and visible only to finance.',
   revealBtn: 'Reveal full IBAN (logged)',
   unassigned: 'Unassigned',
   dataBtn: 'Data', chartBtn: 'Chart', leadsReached: '{n} leads reached', ofPrevStage: '{pct} of previous stage',
@@ -529,6 +540,14 @@ ar: {
   accessUpdated: '\u062a\u0645 \u062a\u062d\u062f\u064a\u062b \u0627\u0644\u0635\u0644\u0627\u062d\u064a\u0629.', switchAccess: '\u062a\u0628\u062f\u064a\u0644 \u0627\u0644\u0635\u0644\u0627\u062d\u064a\u0629',
   storesEmpty: '\u0644\u0627 \u062a\u0648\u062c\u062f \u0628\u064a\u0627\u0646\u0627\u062a \u0645\u062a\u0627\u062c\u0631 \u0628\u0639\u062f',
   storesEmptySub: '\u0633\u062a\u0645\u062a\u0644\u0626 \u0647\u0630\u0647 \u0627\u0644\u0635\u0641\u062d\u0629 \u062a\u0644\u0642\u0627\u0626\u064a\u0627\u064b \u0639\u0646\u062f\u0645\u0627 \u062a\u0628\u062f\u0623 \u0645\u0632\u0627\u0645\u0646\u0629 Metabase \u0628\u062c\u0644\u0628 \u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u0645\u062a\u0627\u062c\u0631 \u0627\u0644\u0641\u0639\u0644\u064a\u0629.',
+  obTitle: '\u0623\u0643\u0645\u0644 \u0645\u0644\u0641\u0643 \u0627\u0644\u0634\u062e\u0635\u064a', obSub: '\u0642\u0628\u0644 \u0623\u0646 \u062a\u0628\u062f\u0623\u060c \u0646\u062d\u062a\u0627\u062c \u0628\u0639\u0636 \u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a \u0644\u0635\u0631\u0641 \u0627\u0644\u0639\u0645\u0648\u0644\u0627\u062a \u0648\u0627\u0644\u062a\u0648\u0627\u0635\u0644 \u0645\u0639\u0643.',
+  obNameHint: '\u062a\u0623\u0643\u062f \u0623\u0646 \u0647\u0630\u0627 \u0627\u0633\u0645\u0643 \u0627\u0644\u0643\u0627\u0645\u0644 \u0643\u0645\u0627 \u064a\u0638\u0647\u0631 \u0641\u064a \u062d\u0633\u0627\u0628\u0643 \u0627\u0644\u0628\u0646\u0643\u064a.',
+  deptStar: '\u0627\u0644\u0625\u062f\u0627\u0631\u0629 / \u0627\u0644\u0642\u0633\u0645 *', deptPh: '\u0645\u062b\u0627\u0644: \u0646\u062c\u0627\u062d \u0627\u0644\u0639\u0645\u0644\u0627\u0621',
+  mobileStar: '\u0627\u0644\u062c\u0648\u0627\u0644 *', personalEmailStar: '\u0627\u0644\u0628\u0631\u064a\u062f \u0627\u0644\u0634\u062e\u0635\u064a *',
+  bankStar: '\u0627\u0644\u0628\u0646\u0643 *', chooseBank: '\u0627\u062e\u062a\u0631 \u0628\u0646\u0643\u0643\u2026', bankOtherPh: '\u0627\u0643\u062a\u0628 \u0627\u0633\u0645 \u0627\u0644\u0628\u0646\u0643',
+  bankReq: '\u0627\u0644\u0631\u062c\u0627\u0621 \u0627\u062e\u062a\u064a\u0627\u0631 \u0627\u0644\u0628\u0646\u0643 (\u0623\u0648 \u0643\u062a\u0627\u0628\u0629 \u0627\u0633\u0645\u0647).', ibanStar: '\u0627\u0644\u0622\u064a\u0628\u0627\u0646 *',
+  obSubmit: '\u062d\u0641\u0638 \u0648\u0628\u062f\u0621 \u0627\u0644\u0627\u0635\u0637\u064a\u0627\u062f', obDone: '\u0627\u0643\u062a\u0645\u0644 \u0645\u0644\u0641\u0643 \u2014 \u0623\u0647\u0644\u0627\u064b \u0628\u0643! \ud83c\udf89',
+  obHeroTitle: '\u062f\u0642\u064a\u0642\u0629 \u0648\u0627\u062d\u062f\u0629 \u0644\u0644\u062a\u062c\u0647\u064a\u0632', obHeroSub: '\u0628\u064a\u0627\u0646\u0627\u062a\u0643 \u0627\u0644\u0628\u0646\u0643\u064a\u0629 \u0645\u0634\u0641\u0651\u0631\u0629 \u0648\u0644\u0627 \u064a\u0637\u0651\u0644\u0639 \u0639\u0644\u064a\u0647\u0627 \u0625\u0644\u0627 \u0641\u0631\u064a\u0642 \u0627\u0644\u0645\u0627\u0644\u064a\u0629.',
   revealBtn: '\u0625\u0638\u0647\u0627\u0631 \u0627\u0644\u0622\u064a\u0628\u0627\u0646 \u0643\u0627\u0645\u0644\u0627\u064b (\u064a\u064f\u0633\u062c\u0644)',
   unassigned: 'غير مُسند بعد',
   dataBtn: 'البيانات', chartBtn: 'الرسم', leadsReached: 'وصل {n} عميلاً', ofPrevStage: '{pct} من المرحلة السابقة',
