@@ -186,6 +186,7 @@ window.SH_API = (function () {
       email: String(u.zid_email).toLowerCase(),
       role: u.role === 'management' ? 'mgr' : u.role === 'finance' ? 'fin' : 'emp',
       active: u.active !== false,
+      aliases: (u.email_aliases || []).map(function (a) { return String(a).toLowerCase(); }),
       weight: 0
     };
   }
@@ -204,7 +205,9 @@ window.SH_API = (function () {
       req('/rest/v1/payslips?select=*').catch(function () { return []; })
     ]);
     var users = results[0].map(toUser);
-    var me = users.find(function (u) { return u.email === s.email; });
+    var me = users.find(function (u) {
+      return u.email === s.email || (u.aliases && u.aliases.indexOf(s.email) >= 0);
+    });
     if (!me) {
       throw new Error('NO_APP_USER'); // signed in, but not in app_users → management must add them
     }
