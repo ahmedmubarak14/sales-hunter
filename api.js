@@ -176,6 +176,9 @@ window.SH_API = (function () {
     };
   }
 
+  function fromDbRole(r) { return r === 'management' ? 'mgr' : r === 'finance' ? 'fin' : 'emp'; }
+  function toDbRole(r) { return r === 'mgr' ? 'management' : r === 'fin' ? 'finance' : 'hunter'; }
+
   function toUser(u) {
     return {
       id: String(u.zid_email).toLowerCase(),
@@ -184,7 +187,8 @@ window.SH_API = (function () {
       dept: u.dept || 'General',
       title: u.title || '',
       email: String(u.zid_email).toLowerCase(),
-      role: u.role === 'management' ? 'mgr' : u.role === 'finance' ? 'fin' : 'emp',
+      role: fromDbRole(u.role),
+      secondaryRole: u.secondary_role ? fromDbRole(u.secondary_role) : null,
       active: u.active !== false,
       aliases: (u.email_aliases || []).map(function (a) { return String(a).toLowerCase(); }),
       weight: 0
@@ -357,10 +361,9 @@ window.SH_API = (function () {
   }
 
   async function addUser(u) {
-    var role = u.role === 'mgr' ? 'management' : u.role === 'fin' ? 'finance' : 'hunter';
     var rows = await req('/rest/v1/app_users', {
       method: 'POST', headers: { Prefer: 'return=representation' },
-      body: { zid_email: u.email.toLowerCase(), name: u.name, dept: u.dept, title: u.title, role: role }
+      body: { zid_email: u.email.toLowerCase(), name: u.name, dept: u.dept, title: u.title, role: toDbRole(u.role) }
     });
     var nu = toUser(rows[0]);
     window.LIVE.users.push(nu);
@@ -369,15 +372,21 @@ window.SH_API = (function () {
   }
   async function patchUser(email, patch) {
     var body = {};
-    if (patch.role) body.role = patch.role === 'mgr' ? 'management' : patch.role === 'fin' ? 'finance' : 'hunter';
+    if (patch.role) body.role = toDbRole(patch.role);
+    if ('secondaryRole' in patch) body.secondary_role = patch.secondaryRole ? toDbRole(patch.secondaryRole) : null;
     if (patch.active !== undefined) body.active = patch.active;
+    if (patch.name) body.name = patch.name;
+    if (patch.dept) body.dept = patch.dept;
+    if (patch.title !== undefined) body.title = patch.title;
     await req('/rest/v1/app_users?zid_email=eq.' + encodeURIComponent(email), {
       method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: body
     });
     var u = window.LIVE.users.find(function (x) { return x.email === email; });
     if (u) {
-      if (patch.role) u.role = patch.role;
-      if (patch.active !== undefined) u.active = patch.active;
+      ['role', 'active', 'name', 'dept', 'title'].forEach(function (k) {
+        if (patch[k] !== undefined) u[k] = patch[k];
+      });
+      if ('secondaryRole' in patch) u.secondaryRole = patch.secondaryRole || null;
     }
   }
 

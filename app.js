@@ -41,7 +41,15 @@
     var u = usersAll().find(function (x) { return x.id === id; });
     return u && u.active ? u : null;
   }
-  function roleOf() { return (currentUser() || {}).role || 'emp'; }
+  /* A user with a secondary access (e.g. finance who also hunts) can
+     switch which one is active; the choice sticks until sign-out. */
+  function roleOf() {
+    var u = currentUser();
+    if (!u) return 'emp';
+    var act = LS.get('activeRole', null);
+    if (act && u.secondaryRole && (act === u.role || act === u.secondaryRole)) return act;
+    return u.role;
+  }
   function isManager() { return roleOf() === 'mgr'; }
   function homeOf(role) { return role === 'mgr' ? '/manager' : role === 'fin' ? '/payouts' : '/dashboard'; }
 
@@ -273,8 +281,9 @@
         }).join('');
     }
 
+    var live = !!(window.SH_API && SH_API.enabled());
     var liveCard = '';
-    if (window.SH_API && SH_API.enabled()) {
+    if (live) {
       liveCard =
         '<div class="card" style="margin-bottom:14px">' +
           '<h2>' + t('liveTitle') + '</h2><p class="sub">' + t('liveSub') + '</p>' +
@@ -289,31 +298,36 @@
           '<div id="live-step2"' + (window.LIVE_AUTH_ERROR === 'otp_expired' ? '' : ' hidden') + ' style="margin-top:10px"><p class="f-hint">' + t('linkSent') + '</p>' +
           '<div style="display:flex; gap:8px; margin-top:6px"><input type="text" id="live-code" placeholder="' + t('codePh') + '" style="flex:1" inputmode="numeric">' +
           '<button class="btn secondary" id="live-verify">' + t('verifyBtn') + '</button></div></div>' +
-        '</div>' +
-        '<p class="eyebrow" style="margin:0 2px 8px">' + t('orDemo') + '</p>';
+        '</div>';
     }
-    var ps = statsFor(allLeads()); // program-wide, for the hero stats
+    /* On a live deployment the mock personas disappear — demo data is
+       only browsable at ?mode=mock. */
+    var demoCard = live ? '' :
+      '<div class="card">' +
+        '<h2>' + t('signIn') + '</h2>' +
+        '<p class="sub">' + t('signInSub') + '</p>' +
+        '<div class="persona-list">' + personas + '</div>' +
+      '</div>';
+    var ps = statsFor(allLeads()); // program-wide, for the hero stats (demo only)
+    var heroStats = live ? '' :
+      '<div class="hero-stats">' +
+        '<div class="hero-stat"><b>' + fmtMoneyC(ps.commission) + '</b><span>' + t('heroEarned') + '</span></div>' +
+        '<div class="hero-stat"><b>' + fmtNum(ps.won) + '</b><span>' + t('heroMerchants') + '</span></div>' +
+        '<div class="hero-stat"><b>' + fmtPct(ps.conversion, 0) + '</b><span>' + t('heroClose') + '</span></div>' +
+      '</div>';
     app.innerHTML =
       '<div class="login-wrap">' +
         '<div class="login-left"><div class="login-card">' +
           '<div class="brand">' + SH_MARK + '<div><b>' + t('appName') + '</b><small>' + t('tagline') + '</small></div></div>' +
           liveCard +
-          '<div class="card">' +
-            '<h2>' + t('signIn') + '</h2>' +
-            '<p class="sub">' + t('signInSub') + '</p>' +
-            '<div class="persona-list">' + personas + '</div>' +
-          '</div>' +
-          '<p class="login-note">' + t('loginNote') + ' · <a href="#" id="login-lang">' + t('langToggle') + '</a></p>' +
+          demoCard +
+          '<p class="login-note">' + (live ? '' : t('loginNote') + ' · ') + '<a href="#" id="login-lang">' + t('langToggle') + '</a></p>' +
         '</div></div>' +
         '<div class="login-hero">' +
           HERO_RINGS +
           '<h2>' + t('heroTitle', { rate: ratePct() }) + '</h2>' +
           '<p>' + t('heroSub') + '</p>' +
-          '<div class="hero-stats">' +
-            '<div class="hero-stat"><b>' + fmtMoneyC(ps.commission) + '</b><span>' + t('heroEarned') + '</span></div>' +
-            '<div class="hero-stat"><b>' + fmtNum(ps.won) + '</b><span>' + t('heroMerchants') + '</span></div>' +
-            '<div class="hero-stat"><b>' + fmtPct(ps.conversion, 0) + '</b><span>' + t('heroClose') + '</span></div>' +
-          '</div>' +
+          heroStats +
           '<div class="hero-zid">' + t('heroBy') + ' ' + LOGO + '</div>' +
         '</div>' +
       '</div>';
@@ -382,6 +396,10 @@
           '<div class="topbar">' +
             '<div class="crumbs"><h1>' + esc(t(r.titleKey)) + '</h1>' + (window.LIVE ? '<span class="demo-pill" style="background:var(--good);color:#fff">' + t('livePill') + '</span>' : '<span class="demo-pill">' + t('demoPill') + '</span>') + '</div>' +
             '<div class="actions">' +
+              (user.secondaryRole ? '<div class="role-switch" role="group" aria-label="' + t('switchAccess') + '">' +
+                [user.role, user.secondaryRole].map(function (rr) {
+                  return '<button class="rs-btn' + (rr === roleOf() ? ' active' : '') + '" data-role="' + rr + '">' + roleName(rr) + '</button>';
+                }).join('') + '</div>' : '') +
               '<button class="icon-btn lang-btn" id="lang-toggle" aria-label="' + t('langToggle') + '">' + (isAr() ? 'EN' : 'ع') + '</button>' +
               '<button class="icon-btn" id="theme-toggle" title="' + t('themeToggle') + '" aria-label="' + t('themeToggle') + '">' + ICONS.sun + '</button>' +
             '</div>' +
@@ -392,11 +410,21 @@
       '</div>';
 
     document.getElementById('logout').addEventListener('click', function () {
+      LS.set('activeRole', null);
       if (window.LIVE) { SH_API.signOut(); location.hash = ''; location.reload(); return; }
       LS.set('user', null); location.hash = ''; route();
     });
     document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
     document.getElementById('lang-toggle').addEventListener('click', function () { setLang(isAr() ? 'en' : 'ar'); route(); });
+    app.querySelectorAll('.rs-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var rr = btn.getAttribute('data-role');
+        if (rr === roleOf()) return;
+        LS.set('activeRole', rr);
+        location.hash = '#' + homeOf(rr);
+        route();
+      });
+    });
 
     var content = document.getElementById('content');
     r.render(content, user);
@@ -969,6 +997,8 @@
       LS.set('userOverrides', over);
     }
 
+    var editingId = null;
+
     function render() {
       var users = usersAll();
       var rows = users.map(function (u) {
@@ -983,10 +1013,15 @@
                 ['emp', 'mgr', 'fin'].map(function (r) {
                   return '<option value="' + r + '"' + (r === u.role ? ' selected' : '') + '>' + roleName(r) + '</option>';
                 }).join('') + '</select>') + '</td>' +
+          '<td><select class="status-select sec-select" data-user="' + esc(u.id) + '">' +
+            [''].concat(['emp', 'mgr', 'fin'].filter(function (r) { return r !== u.role; })).map(function (r) {
+              return '<option value="' + r + '"' + ((u.secondaryRole || '') === r ? ' selected' : '') + '>' + (r ? roleName(r) : t('noneOpt')) + '</option>';
+            }).join('') + '</select></td>' +
           '<td>' + (u.active
             ? '<span class="status-chip paid">' + t('active') + '</span>'
             : '<span class="status-chip pending">' + t('disabled') + '</span>') + '</td>' +
-          '<td>' + (isSelf ? '' : '<button class="ghost-btn toggle-active" data-user="' + esc(u.id) + '">' + (u.active ? t('disable') : t('enable')) + '</button>') + '</td>' +
+          '<td style="white-space:nowrap"><button class="ghost-btn edit-user" data-user="' + esc(u.id) + '">' + t('editBtn') + '</button> ' +
+            (isSelf ? '' : '<button class="ghost-btn toggle-active" data-user="' + esc(u.id) + '">' + (u.active ? t('disable') : t('enable')) + '</button>') + '</td>' +
         '</tr>';
       }).join('');
 
@@ -997,7 +1032,7 @@
           '<button class="btn" id="add-user-btn">' + t('addUser') + '</button>' +
         '</div>' +
         '<div class="card" id="add-user-card" hidden>' +
-          '<h3>' + t('addUserTitle') + '</h3>' +
+          '<h3 id="au-title">' + t('addUserTitle') + '</h3>' +
           '<form id="add-user-form" style="margin-top:12px">' +
             '<div class="form-grid">' +
               '<div><label class="f-label" for="nu-name">' + t('fullName') + '</label><input type="text" id="nu-name" required></div>' +
@@ -1016,17 +1051,29 @@
         '</div>' +
         '<section class="card">' +
           '<div class="tbl-wrap"><table>' +
-            '<thead><tr><th>' + t('user') + '</th><th>' + t('department') + '</th><th>' + t('contactEmail') + '</th><th>' + t('role').replace(' *', '') + '</th><th>' + t('status') + '</th><th></th></tr></thead>' +
+            '<thead><tr><th>' + t('user') + '</th><th>' + t('department') + '</th><th>' + t('contactEmail') + '</th><th>' + t('role').replace(' *', '') + '</th><th>' + t('extraAccess') + '</th><th>' + t('status') + '</th><th></th></tr></thead>' +
             '<tbody>' + rows + '</tbody>' +
           '</table></div>' +
         '</section>' +
         '<p class="sub" style="text-align:center">' + t('teamNote') + '</p>';
 
-      document.getElementById('add-user-btn').addEventListener('click', function () {
+      function openForm(u) {
+        editingId = u ? u.id : null;
+        document.getElementById('au-title').textContent = u ? t('editUserTitle', { name: u.name }) : t('addUserTitle');
+        document.getElementById('nu-name').value = u ? u.name : '';
+        document.getElementById('nu-email').value = u ? u.email : '';
+        document.getElementById('nu-email').disabled = !!u;
+        document.getElementById('nu-dept').value = u ? u.dept : '';
+        document.getElementById('nu-title').value = u ? u.title : '';
+        document.getElementById('nu-role').value = u ? u.role : 'emp';
+        document.getElementById('nu-role').disabled = !!(u && u.id === user.id);
         document.getElementById('add-user-card').hidden = false;
-      });
+        document.getElementById('nu-name').focus();
+      }
+      document.getElementById('add-user-btn').addEventListener('click', function () { openForm(null); });
       document.getElementById('add-user-cancel').addEventListener('click', function () {
         document.getElementById('add-user-card').hidden = true;
+        editingId = null;
       });
       document.getElementById('add-user-form').addEventListener('submit', function (e) {
         e.preventDefault();
@@ -1040,6 +1087,21 @@
           title: document.getElementById('nu-title').value.trim() || roleName(nuRole),
           role: nuRole
         };
+        if (editingId) {
+          var patch = { name: nu.name, dept: nu.dept, title: nu.title };
+          if (!document.getElementById('nu-role').disabled) patch.role = nuRole;
+          if (window.LIVE) {
+            SH_API.patchUser(editingId, patch).then(function () {
+              toast(t('userSavedToast', { name: name })); editingId = null; render();
+            }).catch(function (e2) { toast(String(e2.message)); });
+            return;
+          }
+          saveOverride(editingId, patch);
+          audit('Edited user ' + name);
+          toast(t('userSavedToast', { name: name }));
+          editingId = null; render();
+          return;
+        }
         if (window.LIVE) {
           SH_API.addUser(nu).then(function () {
             toast(t('userAddedToast', { name: name })); render();
@@ -1052,6 +1114,28 @@
         audit('Added user ' + name + ' (' + roleName(nuRole) + ')');
         toast(t('userAddedToast', { name: name }));
         render();
+      });
+      content.querySelectorAll('.edit-user').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var u = usersAll().find(function (x) { return x.id === btn.getAttribute('data-user'); });
+          if (u) openForm(u);
+        });
+      });
+      content.querySelectorAll('.sec-select').forEach(function (sel) {
+        sel.addEventListener('change', function () {
+          var id = sel.getAttribute('data-user');
+          var val = sel.value || null;
+          if (window.LIVE) {
+            SH_API.patchUser(id, { secondaryRole: val }).then(function () {
+              toast(t('accessUpdated')); render();
+            }).catch(function (e2) { toast(String(e2.message)); render(); });
+            return;
+          }
+          saveOverride(id, { secondaryRole: val });
+          audit('Set extra access of ' + id + ' to ' + (val ? roleName(val) : 'none'));
+          toast(t('accessUpdated'));
+          render();
+        });
       });
       content.querySelectorAll('.role-select').forEach(function (sel) {
         sel.addEventListener('change', function () {

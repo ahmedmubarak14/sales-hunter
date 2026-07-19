@@ -127,7 +127,7 @@ var EMPLOYEES = [
 ];
 
 var MANAGER = { id: 'mgr', name: 'Abdullah Al-Rashid', dept: 'Sales', title: 'Sales Director', email: 'abdullah.r@company.com' };
-var FINANCE = { id: 'fin', name: 'Maha Al-Otaibi', dept: 'Finance', title: 'Finance Operations', email: 'maha.o@company.com' };
+var FINANCE = { id: 'fin', name: 'Maha Al-Otaibi', dept: 'Finance', title: 'Finance Operations', email: 'maha.o@company.com', secondaryRole: 'emp' };
 
 /* Default payout details per employee (profile edits override these) */
 EMPLOYEES.forEach(function (e, i) {

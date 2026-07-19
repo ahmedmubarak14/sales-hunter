@@ -212,6 +212,19 @@ button { font: inherit; cursor: pointer; }
 .icon-btn:hover { background: var(--surface-2); }
 .icon-btn svg { width: 16px; height: 16px; }
 
+/* Segmented control for users holding two accesses */
+.role-switch {
+  display: inline-flex; border: 1px solid var(--hairline); border-radius: 9px;
+  overflow: hidden; margin-inline-end: 4px;
+}
+.rs-btn {
+  background: none; border: none; color: var(--ink-2); cursor: pointer;
+  padding: 6px 12px; font: inherit; font-size: 12.5px;
+}
+.rs-btn + .rs-btn { border-inline-start: 1px solid var(--hairline); }
+.rs-btn.active { background: var(--ink); color: var(--ground); }
+.rs-btn:not(.active):hover { background: var(--surface-2); }
+
 /* ---- Cards & KPI tiles ---- */
 .card {
   background: var(--surface);
