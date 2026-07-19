@@ -243,8 +243,6 @@
   function route() {
     var h = location.hash.replace(/^#/, '') || '/';
     if (!currentUser()) { renderLogin(); return; }
-    /* hunters are locked out of the app until their profile is complete */
-    if (window.LIVE && window.SH_API && SH_API.onboardingNeeded()) { renderOnboarding(); return; }
     var home = homeOf(roleOf());
     if (!ROUTES[h]) { location.hash = '#' + home; return; }
     var r = ROUTES[h];
@@ -399,48 +397,41 @@
     return sel.value === 'Other' ? other.value.trim() : sel.value;
   }
 
-  function renderOnboarding() {
+  /* The onboarding form pops over the app; hunters can dismiss it and
+     browse, but lead submission stays locked until it's completed. */
+  function openOnboardingModal() {
+    if (document.getElementById('ob-overlay')) return;
     var user = currentUser();
-    app.innerHTML =
-      '<div class="login-wrap">' +
-        '<div class="login-left"><div class="login-card">' +
-          '<div class="brand">' + SH_MARK + '<div><b>' + t('appName') + '</b><small>' + t('tagline') + '</small></div></div>' +
-          '<div class="card">' +
-            '<h2>' + t('obTitle') + '</h2><p class="sub">' + t('obSub') + '</p>' +
-            '<form id="ob-form" style="margin-top:14px">' +
-              '<div class="form-grid">' +
-                '<div><label class="f-label" for="ob-name">' + t('fullName') + '</label>' +
-                  '<input id="ob-name" type="text" required value="' + esc(user.name || '') + '">' +
-                  '<p class="f-hint">' + t('obNameHint') + '</p></div>' +
-                '<div><label class="f-label" for="ob-dept">' + t('deptStar') + '</label>' +
-                  '<input id="ob-dept" type="text" required value="' + esc(user.dept && user.dept !== 'General' ? user.dept : '') + '" placeholder="' + t('deptPh') + '"></div>' +
-                '<div><label class="f-label" for="ob-phone">' + t('mobileStar') + '</label>' +
-                  '<input id="ob-phone" type="tel" required placeholder="+966555555928"></div>' +
-                '<div><label class="f-label" for="ob-pemail">' + t('personalEmailStar') + '</label>' +
-                  '<input id="ob-pemail" type="email" required placeholder="personal@gmail.com"></div>' +
-                '<div><label class="f-label" for="ob-bank">' + t('bankStar') + '</label>' + bankSelect('ob-bank', null) + '</div>' +
-                '<div><label class="f-label" for="ob-iban">' + t('ibanStar') + '</label>' +
-                  '<input id="ob-iban" type="text" required placeholder="SA00 0000 0000 0000 0000 0000" autocomplete="off">' +
-                  '<p class="f-error" id="ob-err" hidden></p></div>' +
-              '</div>' +
-              '<div style="margin-top:16px; display:flex; gap:12px; align-items:center">' +
-                '<button type="submit" class="btn">' + t('obSubmit') + '</button>' +
-                '<button type="button" class="link-btn" id="ob-signout">' + t('signOut') + '</button>' +
-              '</div>' +
-            '</form>' +
+    var root = el('<div id="ob-overlay" class="ob-overlay" role="dialog" aria-modal="true" aria-label="' + t('obTitle') + '">' +
+      '<div class="card ob-modal">' +
+        '<h2>' + t('obTitle') + '</h2><p class="sub">' + t('obSub') + '</p>' +
+        '<form id="ob-form" style="margin-top:14px">' +
+          '<div class="form-grid">' +
+            '<div><label class="f-label" for="ob-name">' + t('fullName') + '</label>' +
+              '<input id="ob-name" type="text" required value="' + esc(user.name || '') + '">' +
+              '<p class="f-hint">' + t('obNameHint') + '</p></div>' +
+            '<div><label class="f-label" for="ob-dept">' + t('deptStar') + '</label>' +
+              '<input id="ob-dept" type="text" required value="' + esc(user.dept && user.dept !== 'General' ? user.dept : '') + '" placeholder="' + t('deptPh') + '"></div>' +
+            '<div><label class="f-label" for="ob-phone">' + t('mobileStar') + '</label>' +
+              '<input id="ob-phone" type="tel" required placeholder="+966555555928"></div>' +
+            '<div><label class="f-label" for="ob-pemail">' + t('personalEmailStar') + '</label>' +
+              '<input id="ob-pemail" type="email" required placeholder="personal@gmail.com"></div>' +
+            '<div><label class="f-label" for="ob-bank">' + t('bankStar') + '</label>' + bankSelect('ob-bank', null) + '</div>' +
+            '<div><label class="f-label" for="ob-iban">' + t('ibanStar') + '</label>' +
+              '<input id="ob-iban" type="text" required placeholder="SA00 0000 0000 0000 0000 0000" autocomplete="off">' +
+              '<p class="f-error" id="ob-err" hidden></p></div>' +
           '</div>' +
-        '</div></div>' +
-        '<div class="login-hero">' +
-          HERO_RINGS +
-          '<h2>' + t('obHeroTitle') + '</h2><p>' + t('obHeroSub') + '</p>' +
-          '<div class="hero-zid">' + t('heroBy') + ' ' + LOGO + '</div>' +
-        '</div>' +
-      '</div>';
+          '<div style="margin-top:16px; display:flex; gap:12px; align-items:center">' +
+            '<button type="submit" class="btn">' + t('obSubmit') + '</button>' +
+            '<button type="button" class="link-btn" id="ob-later">' + t('obLater') + '</button>' +
+          '</div>' +
+        '</form>' +
+      '</div>' +
+    '</div>');
+    document.body.appendChild(root);
 
     wireBankOther('ob-bank');
-    document.getElementById('ob-signout').addEventListener('click', function () {
-      SH_API.signOut(); location.hash = ''; location.reload();
-    });
+    document.getElementById('ob-later').addEventListener('click', function () { root.remove(); });
     document.getElementById('ob-form').addEventListener('submit', function (e) {
       e.preventDefault();
       var err = document.getElementById('ob-err');
@@ -459,8 +450,8 @@
         bank: bank,
         iban: iban
       }).then(function () {
+        root.remove();
         toast(t('obDone'));
-        location.hash = '#' + homeOf(roleOf());
         route();
       }).catch(function (e2) { toast(String(e2.message)); btn.disabled = false; });
     });
@@ -469,6 +460,7 @@
   /* ---------------- Shell ---------------- */
   function renderShell(path, r) {
     var user = currentUser();
+    var needsOb = !!(window.SH_API && SH_API.onboardingNeeded());
     var nav = Object.keys(ROUTES).filter(function (p) {
       return canAccess(ROUTES[p].who, roleOf());
     }).map(function (p) {
@@ -498,6 +490,8 @@
               '<button class="icon-btn" id="theme-toggle" title="' + t('themeToggle') + '" aria-label="' + t('themeToggle') + '">' + ICONS.sun + '</button>' +
             '</div>' +
           '</div>' +
+          (needsOb ? '<div class="ob-banner"><span>' + t('obBanner') + '</span>' +
+            '<button class="btn" id="ob-open" style="flex:none">' + t('obNow') + '</button></div>' : '') +
           '<div class="content" id="content"></div>' +
           '<footer class="app-foot">' + t('footer') + '</footer>' +
         '</div>' +
@@ -521,9 +515,27 @@
     });
 
     var content = document.getElementById('content');
-    r.render(content, user);
+    if (needsOb) {
+      document.getElementById('ob-open').addEventListener('click', openOnboardingModal);
+    }
+    /* the hunting action itself stays locked until the profile is done */
+    if (needsOb && path === '/submit') {
+      content.innerHTML =
+        '<div class="card" style="max-width:640px; margin:40px auto; text-align:center; padding:44px 28px">' +
+          '<h3>' + t('obTitle') + '</h3>' +
+          '<p class="sub" style="margin:8px 0 18px">' + t('obSubmitLocked') + '</p>' +
+          '<button class="btn" id="ob-open-2">' + t('obNow') + '</button>' +
+        '</div>';
+      document.getElementById('ob-open-2').addEventListener('click', openOnboardingModal);
+    } else {
+      r.render(content, user);
+    }
     initTooltip(content);
     wireCardToggles(content);
+    if (needsOb && !window.OB_PROMPTED) {
+      window.OB_PROMPTED = true;
+      openOnboardingModal();
+    }
   }
 
   /* ================= Views ================= */

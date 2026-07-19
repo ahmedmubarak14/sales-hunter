@@ -353,11 +353,15 @@ window.SH_API = (function () {
     pr.onboarded_at = pr.onboarded_at || new Date().toISOString();
   }
 
-  /* Hunters are locked to the onboarding screen until their profile
-     is complete. Other roles are never gated. */
+  /* Pure hunters are nudged (and lead submission locked) until their
+     profile is complete. Anyone holding management or finance access —
+     primary or secondary — is never gated. */
   function onboardingNeeded() {
-    if (!window.LIVE || window.LIVE.me.role !== 'emp') return false;
-    var pr = window.LIVE.profilesByUser[window.LIVE.me.dbId];
+    if (!window.LIVE) return false;
+    var me = window.LIVE.me;
+    if (me.role !== 'emp') return false;
+    if (me.secondaryRole === 'mgr' || me.secondaryRole === 'fin') return false;
+    var pr = window.LIVE.profilesByUser[me.dbId];
     return !(pr && pr.onboarded_at);
   }
 
