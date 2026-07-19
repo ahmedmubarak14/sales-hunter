@@ -1245,6 +1245,9 @@
 
   /* ---- Top Zid stores: categories first, drill into each ---- */
   function viewTopStores(content, user) {
+    /* Live mode reads the store_showcase table (Metabase-fed); the
+       bundled mock list is demo-only. */
+    var showcase = window.LIVE ? (LIVE.showcase || []) : STORE_SHOWCASE;
     var myLeads = isManager() ? [] : leadsOf(user.id);
     var mineByCat = {};
     myLeads.forEach(function (l) { mineByCat[l.industry] = (mineByCat[l.industry] || 0) + 1; });
@@ -1264,20 +1267,30 @@
     }
 
     function renderCategories() {
-      content.innerHTML =
+      var header =
         '<div class="card" style="display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; align-items:center">' +
           '<div><h2>' + t('storesTitle') + '</h2>' +
           '<p class="sub">' + t('storesSub') + '</p></div>' +
-        '</div>' +
+        '</div>';
+      if (!showcase.length) {
+        content.innerHTML = header +
+          '<div class="card" style="text-align:center; padding:44px 24px">' +
+            '<h3>' + t('storesEmpty') + '</h3>' +
+            '<p class="sub" style="margin-top:6px">' + t('storesEmptySub') + '</p>' +
+          '</div>';
+        return;
+      }
+      content.innerHTML = header +
         '<div class="store-grid">' +
-        STORE_SHOWCASE.map(function (c, i) {
+        showcase.map(function (c, i) {
           var wr = winRateOf(c.category);
           var mine = mineByCat[c.category] || 0;
           var leader = c.stores[0];
           return '<button class="card store-card cat-card" data-cat="' + i + '">' +
             '<div class="s-cat"><span class="cat-chip">' + esc(trCat(c.category)) + '</span>' +
             (wr !== null ? '<span class="s-city">' + t('catWinRate', { pct: fmtPct(wr, 0) }) + '</span>' : '') + '</div>' +
-            '<div><h3>' + t('no1', { name: esc(leader.name) }) + '</h3><span class="s-city">' + esc(trCity(leader.city)) + ' · ' + fmtNum(leader.ordersMo) + ' ' + t('ordersMo') + '</span></div>' +
+            '<div><h3>' + t('no1', { name: esc(leader.name) }) + '</h3><span class="s-city">' + esc(trCity(leader.city)) +
+              (leader.ordersMo != null ? ' · ' + fmtNum(leader.ordersMo) + ' ' + t('ordersMo') : '') + '</span></div>' +
             '<p class="s-blurb">' + t(c.stores.length === 1 ? 'topStoreCount' : 'topStoresCount', { n: c.stores.length }) +
               (mine ? ' · <span class="s-mine">' + t(mine === 1 ? 'youHaveLead' : 'youHaveLeads', { n: mine }) + '</span>' : '') + '</p>' +
             '<span class="s-open">' + t('browseCat') + '</span>' +
@@ -1286,7 +1299,7 @@
         '</div>';
       content.querySelectorAll('[data-cat]').forEach(function (btn) {
         btn.addEventListener('click', function () {
-          renderCategory(STORE_SHOWCASE[parseInt(btn.getAttribute('data-cat'), 10)]);
+          renderCategory(showcase[parseInt(btn.getAttribute('data-cat'), 10)]);
           window.scrollTo(0, 0);
         });
       });
@@ -1312,7 +1325,7 @@
             '<span class="s-city">' + esc(trCity(st.city)) + '</span></div>' +
             '<div><h3>' + esc(st.name) + '</h3></div>' +
             '<div class="s-metrics">' +
-              '<div class="s-metric"><b>' + fmtNum(st.ordersMo) + '</b><span>' + t('ordersMo') + '</span></div>' +
+              (st.ordersMo != null ? '<div class="s-metric"><b>' + fmtNum(st.ordersMo) + '</b><span>' + t('ordersMo') + '</span></div>' : '') +
               '<div class="s-metric"><b class="money-pos">+' + Math.round(st.growth * 100) + '%</b><span>' + t('growthYear') + '</span></div>' +
             '</div>' +
             '<p class="s-blurb">' + esc(st.blurb) + '</p>' +

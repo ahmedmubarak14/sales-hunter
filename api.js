@@ -206,7 +206,8 @@ window.SH_API = (function () {
       req('/rest/v1/commissions?select=*'),
       req('/rest/v1/settings?select=*'),
       req('/rest/v1/profiles?select=*'),
-      req('/rest/v1/payslips?select=*').catch(function () { return []; })
+      req('/rest/v1/payslips?select=*').catch(function () { return []; }),
+      req('/rest/v1/store_showcase?select=*').catch(function () { return []; })
     ]);
     var users = results[0].map(toUser);
     var me = users.find(function (u) {
@@ -236,12 +237,34 @@ window.SH_API = (function () {
     var profilesByUser = {};
     results[5].forEach(function (p) { profilesByUser[p.user_id] = p; });
 
+    /* store_showcase rows (fed by the Metabase sync) → the category
+       structure the Top Zid Stores page renders. Management/finance
+       read the full table; for hunters RLS returns nothing, so fall
+       back to the lite view without order volumes. */
+    var showcaseRows = results[7];
+    if (!showcaseRows.length) {
+      showcaseRows = await req('/rest/v1/store_showcase_lite?select=*').catch(function () { return []; });
+    }
+    var byCat = {};
+    showcaseRows.forEach(function (r) {
+      (byCat[r.category] = byCat[r.category] || []).push({
+        name: r.name, city: r.city || '',
+        ordersMo: r.orders_month == null ? null : Number(r.orders_month),
+        growth: Number(r.growth) || 0, blurb: r.blurb || '',
+        rank: r.rank_in_category || 999
+      });
+    });
+    var showcase = Object.keys(byCat).map(function (c) {
+      return { category: c, stores: byCat[c].sort(function (a, b) { return a.rank - b.rank; }) };
+    });
+
     return {
       me: me, users: users, leads: leads,
       commAmount: commAmount, commByDeal: commByDeal,
       payslipByComm: payslipByComm,
       profilesByUser: profilesByUser,
-      settings: settings
+      settings: settings,
+      showcase: showcase
     };
   }
 
