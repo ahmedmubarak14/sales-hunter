@@ -353,15 +353,12 @@ window.SH_API = (function () {
     pr.onboarded_at = pr.onboarded_at || new Date().toISOString();
   }
 
-  /* Pure hunters are nudged (and lead submission locked) until their
-     profile is complete. Anyone holding management or finance access —
-     primary or secondary — is never gated. */
+  /* True while the signed-in user's profile is incomplete. The app
+     blocks the hunter experience on this; management/finance access
+     is never gated (the app checks the active role, not this alone). */
   function onboardingNeeded() {
     if (!window.LIVE) return false;
-    var me = window.LIVE.me;
-    if (me.role !== 'emp') return false;
-    if (me.secondaryRole === 'mgr' || me.secondaryRole === 'fin') return false;
-    var pr = window.LIVE.profilesByUser[me.dbId];
+    var pr = window.LIVE.profilesByUser[window.LIVE.me.dbId];
     return !(pr && pr.onboarded_at);
   }
 

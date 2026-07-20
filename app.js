@@ -243,6 +243,9 @@
   function route() {
     var h = location.hash.replace(/^#/, '') || '/';
     if (!currentUser()) { renderLogin(); return; }
+    /* users holding two accesses pick which one to enter with, once per sign-in */
+    var cu = currentUser();
+    if (cu.secondaryRole && !LS.get('activeRole', null)) { renderAccessChooser(cu); return; }
     var home = homeOf(roleOf());
     if (!ROUTES[h]) { location.hash = '#' + home; return; }
     var r = ROUTES[h];
@@ -397,11 +400,60 @@
     return sel.value === 'Other' ? other.value.trim() : sel.value;
   }
 
-  /* The onboarding form pops over the app; hunters can dismiss it and
-     browse, but lead submission stays locked until it's completed. */
+  /* Two accesses → pick one at sign-in. The topbar switcher still
+     allows flipping later. */
+  function renderAccessChooser(user) {
+    var DESC = { emp: 'accessHunter', mgr: 'accessMgmt', fin: 'accessFin' };
+    var ICON = { emp: 'dash', mgr: 'manager', fin: 'money' };
+    var cards = [user.role, user.secondaryRole].map(function (rr) {
+      var dark = rr !== 'emp' ? ' style="background: var(--ink); color: var(--ground)"' : '';
+      return '<button class="persona" data-access="' + rr + '">' +
+        '<span class="avatar"' + dark + '>' + ICONS[ICON[rr]] + '</span>' +
+        '<span class="who"><b>' + esc(roleName(rr)) + '</b><span>' + t(DESC[rr]) + '</span></span>' +
+        '<span class="go">→</span></button>';
+    }).join('');
+    app.innerHTML =
+      '<div class="login-wrap">' +
+        '<div class="login-left"><div class="login-card">' +
+          '<div class="brand">' + SH_MARK + '<div><b>' + t('appName') + '</b><small>' + t('tagline') + '</small></div></div>' +
+          '<div class="card">' +
+            '<h2>' + t('chooseAccessTitle', { name: esc(user.name.split(' ')[0]) }) + '</h2>' +
+            '<p class="sub">' + t('chooseAccessSub') + '</p>' +
+            '<div class="persona-list" style="margin-top:12px">' + cards + '</div>' +
+          '</div>' +
+          '<p class="login-note"><a href="#" id="chooser-signout">' + t('signOut') + '</a></p>' +
+        '</div></div>' +
+        '<div class="login-hero">' +
+          HERO_RINGS +
+          '<h2>' + t('heroTitle', { rate: ratePct() }) + '</h2><p>' + t('heroSub') + '</p>' +
+          '<div class="hero-zid">' + t('heroBy') + ' ' + LOGO + '</div>' +
+        '</div>' +
+      '</div>';
+    app.querySelectorAll('[data-access]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var rr = btn.getAttribute('data-access');
+        LS.set('activeRole', rr);
+        location.hash = '#' + homeOf(rr);
+        route();
+      });
+    });
+    document.getElementById('chooser-signout').addEventListener('click', function (e) {
+      e.preventDefault();
+      LS.set('activeRole', null);
+      if (window.LIVE) { SH_API.signOut(); location.hash = ''; location.reload(); return; }
+      LS.set('user', null); location.hash = ''; route();
+    });
+  }
+
+  /* The onboarding form renders over the live app and cannot be
+     dismissed: a hunter must complete it before doing anything. Users
+     who also hold staff access can bail out to that access instead. */
   function openOnboardingModal() {
     if (document.getElementById('ob-overlay')) return;
     var user = currentUser();
+    /* a staff access they can fall back to instead of onboarding now */
+    var otherAccess = user.role !== 'emp' ? user.role
+      : (user.secondaryRole && user.secondaryRole !== 'emp' ? user.secondaryRole : null);
     var root = el('<div id="ob-overlay" class="ob-overlay" role="dialog" aria-modal="true" aria-label="' + t('obTitle') + '">' +
       '<div class="card ob-modal">' +
         '<h2>' + t('obTitle') + '</h2><p class="sub">' + t('obSub') + '</p>' +
@@ -421,9 +473,12 @@
               '<input id="ob-iban" type="text" required placeholder="SA00 0000 0000 0000 0000 0000" autocomplete="off">' +
               '<p class="f-error" id="ob-err" hidden></p></div>' +
           '</div>' +
-          '<div style="margin-top:16px; display:flex; gap:12px; align-items:center">' +
+          '<div style="margin-top:16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap">' +
             '<button type="submit" class="btn">' + t('obSubmit') + '</button>' +
-            '<button type="button" class="link-btn" id="ob-later">' + t('obLater') + '</button>' +
+            (otherAccess
+              ? '<button type="button" class="link-btn" id="ob-switch">' + t('useOtherAccess', { role: roleName(otherAccess) }) + '</button>'
+              : '') +
+            '<button type="button" class="link-btn" id="ob-signout">' + t('signOut') + '</button>' +
           '</div>' +
         '</form>' +
       '</div>' +
@@ -431,7 +486,17 @@
     document.body.appendChild(root);
 
     wireBankOther('ob-bank');
-    document.getElementById('ob-later').addEventListener('click', function () { root.remove(); });
+    var sw = document.getElementById('ob-switch');
+    if (sw) sw.addEventListener('click', function () {
+      LS.set('activeRole', otherAccess);
+      root.remove();
+      location.hash = '#' + homeOf(otherAccess);
+      route();
+    });
+    document.getElementById('ob-signout').addEventListener('click', function () {
+      LS.set('activeRole', null);
+      SH_API.signOut(); location.hash = ''; location.reload();
+    });
     document.getElementById('ob-form').addEventListener('submit', function (e) {
       e.preventDefault();
       var err = document.getElementById('ob-err');
@@ -460,7 +525,8 @@
   /* ---------------- Shell ---------------- */
   function renderShell(path, r) {
     var user = currentUser();
-    var needsOb = !!(window.SH_API && SH_API.onboardingNeeded());
+    /* blocking onboarding applies only when acting as a hunter, live */
+    var needsOb = !!(window.LIVE && window.SH_API && roleOf() === 'emp' && SH_API.onboardingNeeded());
     var nav = Object.keys(ROUTES).filter(function (p) {
       return canAccess(ROUTES[p].who, roleOf());
     }).map(function (p) {
@@ -490,8 +556,6 @@
               '<button class="icon-btn" id="theme-toggle" title="' + t('themeToggle') + '" aria-label="' + t('themeToggle') + '">' + ICONS.sun + '</button>' +
             '</div>' +
           '</div>' +
-          (needsOb ? '<div class="ob-banner"><span>' + t('obBanner') + '</span>' +
-            '<button class="btn" id="ob-open" style="flex:none">' + t('obNow') + '</button></div>' : '') +
           '<div class="content" id="content"></div>' +
           '<footer class="app-foot">' + t('footer') + '</footer>' +
         '</div>' +
@@ -515,26 +579,13 @@
     });
 
     var content = document.getElementById('content');
-    if (needsOb) {
-      document.getElementById('ob-open').addEventListener('click', openOnboardingModal);
-    }
-    /* the hunting action itself stays locked until the profile is done */
-    if (needsOb && path === '/submit') {
-      content.innerHTML =
-        '<div class="card" style="max-width:640px; margin:40px auto; text-align:center; padding:44px 28px">' +
-          '<h3>' + t('obTitle') + '</h3>' +
-          '<p class="sub" style="margin:8px 0 18px">' + t('obSubmitLocked') + '</p>' +
-          '<button class="btn" id="ob-open-2">' + t('obNow') + '</button>' +
-        '</div>';
-      document.getElementById('ob-open-2').addEventListener('click', openOnboardingModal);
-    } else {
-      r.render(content, user);
-    }
+    r.render(content, user);
     initTooltip(content);
     wireCardToggles(content);
-    if (needsOb && !window.OB_PROMPTED) {
-      window.OB_PROMPTED = true;
-      openOnboardingModal();
+    if (needsOb) openOnboardingModal();
+    else {
+      var ob = document.getElementById('ob-overlay');
+      if (ob) ob.remove();
     }
   }
 
