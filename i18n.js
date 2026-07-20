@@ -296,6 +296,7 @@ en: {
   bankTransfer: 'Bank transfer (payroll)', separateTransfer: 'Separate bank transfer',
   nationalId: 'National ID / Iqama (optional)', nationalIdHint: 'Only needed if finance requires it for payout',
   profileNote: 'Payout details are stored encrypted and visible only to you and finance. In this demo they stay in your browser.',
+  profileNoteLive: 'Payout details are stored encrypted and visible only to you, management, and finance.',
   saveProfile: 'Save profile', profileSaved: 'Profile saved.',
   ibanErr: 'That does not look like a Saudi IBAN — it should be SA followed by 22 digits.',
 
@@ -526,6 +527,7 @@ ar: {
   bankTransfer: 'تحويل بنكي (مع الراتب)', separateTransfer: 'تحويل بنكي مستقل',
   nationalId: 'الهوية / الإقامة (اختياري)', nationalIdHint: 'فقط إذا طلبتها المالية للصرف',
   profileNote: 'تفاصيل الصرف مشفرة ولا يراها إلا أنت والمالية. في هذه النسخة تبقى في متصفحك.',
+  profileNoteLive: 'تفاصيل الصرف مشفرة ولا يراها إلا أنت والإدارة والمالية.',
   saveProfile: 'حفظ الملف', profileSaved: 'تم حفظ الملف.',
   ibanErr: 'لا يبدو آيبان سعودياً صحيحاً — يجب أن يبدأ بـ SA يتبعها 22 رقماً.',
 

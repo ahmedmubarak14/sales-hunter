@@ -2167,7 +2167,7 @@
               'placeholder="SA00 0000 0000 0000 0000 0000" autocomplete="off"') +
             field('p-nid', t('nationalId'), 'text', p.nationalId, t('nationalIdHint')) +
           '</div>' +
-          '<p class="f-hint" style="margin-top:14px">' + t('profileNote') + '</p>' +
+          '<p class="f-hint" style="margin-top:14px">' + t(window.LIVE ? 'profileNoteLive' : 'profileNote') + '</p>' +
           '<div style="margin-top:16px"><button type="submit" class="btn">' + t('saveProfile') + '</button></div>' +
         '</form>' +
       '</div>';
