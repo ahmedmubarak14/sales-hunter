@@ -550,7 +550,7 @@
         '</aside>' +
         '<div class="main">' +
           '<div class="topbar">' +
-            '<div class="crumbs"><h1>' + esc(t(r.titleKey)) + '</h1>' + (window.LIVE ? '<span class="demo-pill" style="background:var(--good);color:#fff">' + t('livePill') + '</span>' : '<span class="demo-pill">' + t('demoPill') + '</span>') + '</div>' +
+            '<div class="crumbs"><h1>' + esc(t(r.titleKey)) + '</h1>' + (window.LIVE ? '' : '<span class="demo-pill">' + t('demoPill') + '</span>') + '</div>' +
             '<div class="actions">' +
               (user.secondaryRole ? '<div class="role-switch" role="group" aria-label="' + t('switchAccess') + '">' +
                 [user.role, user.secondaryRole].map(function (rr) {
@@ -668,7 +668,7 @@
     content.innerHTML =
       '<div class="welcome-banner">' +
         '<div><h2>' + t('welcomeBack', { name: esc(user.name.split(' ')[0]) }) + '</h2>' +
-        '<p class="w-date">' + NOW.toLocaleDateString(isAr() ? 'ar-SA-u-ca-gregory-nu-latn' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + ' · ' + t('hunterId', { code: hunterCode(user) }) + '</p></div>' +
+        '<p class="w-date">' + NOW.toLocaleDateString(isAr() ? 'ar-SA-u-ca-gregory-nu-latn' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + '</p></div>' +
         '<div class="w-chips">' +
           '<span class="wchip solid">' + esc(trRank(rank.current.name)) + '</span>' +
           (rank.next ? '<span class="wchip">' + t(winsToNext === 1 ? 'winTo' : 'winsTo', { n: winsToNext, rank: esc(trRank(rank.next.name)) }) + '</span>'
@@ -1857,7 +1857,7 @@
         '<div class="d-head"><div style="display:flex; align-items:center; gap:11px">' +
           '<span class="avatar" style="width:42px;height:42px;flex:none;font-size:15px">' + esc(initials(emp.name)) + '</span>' +
           '<div><h2>' + esc(emp.name) + '</h2>' +
-          '<p class="sub">' + esc(emp.title) + ' · ' + esc(trDept(emp.dept)) + ' · ' + t('hunterId', { code: hunterCode(emp) }) + '</p></div></div>' +
+          '<p class="sub">' + esc(emp.title) + ' · ' + esc(trDept(emp.dept)) + '</p></div></div>' +
         '<button class="icon-btn" id="drawer-close" aria-label="Close">✕</button></div>' +
 
         '<h3 class="eyebrow" style="margin-top:14px">' + t('contact') + '</h3>' +
