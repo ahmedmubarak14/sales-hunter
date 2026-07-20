@@ -207,7 +207,8 @@ window.SH_API = (function () {
       req('/rest/v1/settings?select=*'),
       req('/rest/v1/profiles?select=*'),
       req('/rest/v1/payslips?select=*').catch(function () { return []; }),
-      req('/rest/v1/store_showcase?select=*').catch(function () { return []; })
+      req('/rest/v1/store_showcase?select=*').catch(function () { return []; }),
+      req('/rest/v1/rpc/get_ibans', { method: 'POST', body: {} }).catch(function () { return []; })
     ]);
     var users = results[0].map(toUser);
     var me = users.find(function (u) {
@@ -237,6 +238,9 @@ window.SH_API = (function () {
     var profilesByUser = {};
     results[5].forEach(function (p) { profilesByUser[p.user_id] = p; });
 
+    var ibanByUser = {};
+    (results[8] || []).forEach(function (r) { ibanByUser[r.user_id] = r.iban; });
+
     /* store_showcase rows (fed by the Metabase sync) → the category
        structure the Top Zid Stores page renders. Management/finance
        read the full table; for hunters RLS returns nothing, so fall
@@ -263,6 +267,7 @@ window.SH_API = (function () {
       commAmount: commAmount, commByDeal: commByDeal,
       payslipByComm: payslipByComm,
       profilesByUser: profilesByUser,
+      ibanByUser: ibanByUser,
       settings: settings,
       showcase: showcase
     };
@@ -349,7 +354,10 @@ window.SH_API = (function () {
     if (p.phone) pr.phone = p.phone;
     if (p.personalEmail) pr.personal_email = p.personalEmail;
     if (p.bank) pr.bank = p.bank;
-    if (p.iban) pr.iban_last4 = p.iban.slice(-4);
+    if (p.iban) {
+      pr.iban_last4 = p.iban.slice(-4);
+      if (window.LIVE.ibanByUser) window.LIVE.ibanByUser[me.dbId] = p.iban;
+    }
     pr.onboarded_at = pr.onboarded_at || new Date().toISOString();
   }
 

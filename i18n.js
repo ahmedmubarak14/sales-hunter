@@ -262,7 +262,7 @@ en: {
 
   hunterProfiles: 'Hunter profiles', hunterProfilesSub: 'Click a hunter to see full profile and payout account details',
   contact: 'Contact', dealsWon: 'Deals won', bank: 'Bank',
-  fullIbanNote: '🔒 Full IBAN visible to finance only — every view is access-logged in production',
+  fullIbanNote: '🔒 IBAN visible to the hunter, management, and finance — reads are access-logged in production',
   commissionSummary: 'Commission summary', lifetime: 'Lifetime commission', notProvided: 'Not provided yet',
   payoutMethod: 'Payout method', companyEmail: 'Company email', mobile: 'Mobile', personalEmail: 'Personal email',
 
@@ -291,7 +291,8 @@ en: {
   profileManager: 'manager: {name}', contactInfo: 'Contact information',
   emailHint: 'Used for sign-in and lead notifications', optional: 'Optional',
   payoutDetails: 'Payout details', ibanLbl: 'IBAN',
-  ibanCurrent: 'Current: ···· {last4} — leave blank to keep it. Stored masked; never shown in full.',
+  ibanCurrent: 'Current: ···· {last4} — leave blank to keep it.',
+  ibanCurrentFull: 'Current: {iban} — leave blank to keep it.',
   ibanHint: 'Saudi IBAN: SA followed by 22 digits', preferredMethod: 'Preferred payout method',
   bankTransfer: 'Bank transfer (payroll)', separateTransfer: 'Separate bank transfer',
   nationalId: 'National ID / Iqama (optional)', nationalIdHint: 'Only needed if finance requires it for payout',
@@ -493,7 +494,7 @@ ar: {
 
   hunterProfiles: 'ملفات الصيادين', hunterProfilesSub: 'اضغط على صياد لرؤية ملفه الكامل وتفاصيل حساب الصرف',
   contact: 'التواصل', dealsWon: 'صفقات ناجحة', bank: 'البنك',
-  fullIbanNote: '🔒 الآيبان الكامل يظهر للمالية فقط — كل اطلاع يُسجل في الإنتاج',
+  fullIbanNote: '🔒 الآيبان يظهر للصياد والإدارة والمالية — وكل اطلاع يُسجل في الإنتاج',
   commissionSummary: 'ملخص العمولات', lifetime: 'إجمالي العمولات', notProvided: 'لم يُضف بعد',
   payoutMethod: 'طريقة الصرف', companyEmail: 'البريد الرسمي', mobile: 'الجوال', personalEmail: 'البريد الشخصي',
 
@@ -522,7 +523,8 @@ ar: {
   profileManager: 'المدير: {name}', contactInfo: 'معلومات التواصل',
   emailHint: 'يُستخدم للدخول وإشعارات العملاء', optional: 'اختياري',
   payoutDetails: 'تفاصيل الصرف', ibanLbl: 'الآيبان',
-  ibanCurrent: 'الحالي: ···· {last4} — اتركه فارغاً للإبقاء عليه. يُخزن مقنّعاً ولا يُعرض كاملاً.',
+  ibanCurrent: 'الحالي: ···· {last4} — اتركه فارغاً للإبقاء عليه.',
+  ibanCurrentFull: 'الحالي: {iban} — اتركه فارغاً للإبقاء عليه.',
   ibanHint: 'آيبان سعودي: SA يتبعها 22 رقماً', preferredMethod: 'طريقة الصرف المفضلة',
   bankTransfer: 'تحويل بنكي (مع الراتب)', separateTransfer: 'تحويل بنكي مستقل',
   nationalId: 'الهوية / الإقامة (اختياري)', nationalIdHint: 'فقط إذا طلبتها المالية للصرف',

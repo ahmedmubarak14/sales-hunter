@@ -92,7 +92,8 @@
   function payoutDetailsOf(emp) {
     if (window.LIVE) {
       var pr = SH_API.profileOf(emp) || {};
-      return { bank: pr.bank || '—', iban: pr.iban_last4 ? ('SA000000000000000000' + pr.iban_last4) : '' };
+      var full = (LIVE.ibanByUser || {})[emp.dbId];
+      return { bank: pr.bank || '—', iban: full || (pr.iban_last4 ? ('SA000000000000000000' + pr.iban_last4) : '') };
     }
     var saved = LS.get('profile.' + emp.id, {});
     return { bank: saved.bank || emp.bank, iban: saved.iban || emp.iban };
@@ -1870,9 +1871,7 @@
         '<dl class="d-kv">' +
           '<dt>' + t('bank') + '</dt><dd>' + esc(trBank(pay.bank)) + '</dd>' +
           '<dt>' + t('ibanLbl') + '</dt><dd style="font-variant-numeric:tabular-nums" id="iban-dd">' +
-            (window.LIVE
-              ? esc(maskIban(pay.iban)) + (pay.iban && roleOf() === 'fin' ? ' <button class="linklike" id="reveal-iban">' + t('revealBtn') + '</button>' : '')
-              : esc(fmtIbanFull(pay.iban))) + '</dd>' +
+            esc(fmtIbanFull(pay.iban)) + '</dd>' +
           (saved.nationalId ? '<dt>' + t('nationalId') + '</dt><dd>' + esc(saved.nationalId) + '</dd>' : '') +
         '</dl>' +
         '<span class="hs-chip">' + t('fullIbanNote') + '</span>' +
@@ -1891,12 +1890,6 @@
     root.querySelector('.drawer-backdrop').addEventListener('click', close);
     root.querySelector('#drawer-close').addEventListener('click', close);
     document.addEventListener('keydown', onKey);
-    var rb = root.querySelector('#reveal-iban');
-    if (rb) rb.addEventListener('click', function () {
-      SH_API.revealIban(emp.dbId).then(function (v) {
-        root.querySelector('#iban-dd').textContent = fmtIbanFull(String(v || ''));
-      }).catch(function (e2) { toast(String(e2.message)); });
-    });
   }
 
   /* ---- Finance: hunter directory ---- */
@@ -1925,7 +1918,7 @@
               '<td class="num">' + (owed ? '<b class="money-pos">' + fmtMoney(owed) + '</b>' : '—') + '</td>' +
               '<td class="num">' + (r.s.commissionPaid ? fmtMoney(r.s.commissionPaid) : '—') + '</td>' +
               '<td>' + esc(trBank(r.pay.bank)) + '</td>' +
-              '<td>' + esc(maskIban(r.pay.iban)) + '</td>' +
+              '<td style="font-variant-numeric:tabular-nums">' + esc(fmtIbanFull(r.pay.iban)) + '</td>' +
             '</tr>';
           }).join('') + '</tbody>' +
         '</table></div>' +
@@ -1978,7 +1971,7 @@
                 ? slipLink(l.id) + (canAct ? '<span class="cell-sub"><button class="linklike slip-up" data-deal="' + esc(l.id) + '">' + t('replace') + '</button></span>' : '')
                 : (canAct ? '<button class="ghost-btn slip-up" data-deal="' + esc(l.id) + '">' + t('uploadPayslip') + '</button>' : '<span class="cell-sub">—</span>'))
             : '<span class="cell-sub">' + t('afterPayment') + '</span>') + '</td>' +
-          '<td>' + esc(trBank(pay.bank)) + '<span class="cell-sub">' + esc(maskIban(pay.iban)) + '</span></td>' +
+          '<td>' + esc(trBank(pay.bank)) + '<span class="cell-sub" style="font-variant-numeric:tabular-nums">' + esc(fmtIbanFull(pay.iban)) + '</span></td>' +
         '</tr>';
       }).join('');
       document.getElementById('payout-table').innerHTML =
@@ -2103,7 +2096,7 @@
           '"' + l.company.replace(/"/g, '""') + '"',
           fmtDate(wonDate(l)), '"' + l.salesOwner + '"',
           l.amountNet, commissionOf(l), commissionStatus(l),
-          '"' + pay.bank + '"', maskIban(pay.iban)
+          '"' + pay.bank + '"', pay.iban || ''
         ].join(','));
       });
       var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
@@ -2125,7 +2118,7 @@
       var pr = SH_API.profileOf(user) || {};
       saved = {
         phone: pr.phone || '', personalEmail: pr.personal_email || '', bank: pr.bank || '',
-        iban: pr.iban_last4 ? ('SA000000000000000000' + pr.iban_last4) : ''
+        iban: (LIVE.ibanByUser || {})[user.dbId] || (pr.iban_last4 ? ('SA000000000000000000' + pr.iban_last4) : '')
       };
     } else {
       saved = LS.get('profile.' + user.id, {});
@@ -2162,7 +2155,9 @@
           '<div class="form-grid">' +
             '<div><label class="f-label" for="p-bank">' + t('bank') + '</label>' + bankSelect('p-bank', p.bank) + '</div>' +
             field('p-iban', t('ibanLbl'), 'text', '',
-              p.iban ? t('ibanCurrent', { last4: p.iban.slice(-4) })
+              p.iban ? (p.iban.indexOf('SA0000000000') === 0
+                          ? t('ibanCurrent', { last4: p.iban.slice(-4) })
+                          : t('ibanCurrentFull', { iban: fmtIbanFull(p.iban) }))
                      : t('ibanHint'),
               'placeholder="SA00 0000 0000 0000 0000 0000" autocomplete="off"') +
             field('p-nid', t('nationalId'), 'text', p.nationalId, t('nationalIdHint')) +
