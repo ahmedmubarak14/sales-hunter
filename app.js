@@ -112,6 +112,13 @@
   }
   function allLeads() { return customLeads().concat(LEADS); }
   function leadsOf(empId) { return allLeads().filter(function (l) { return l.hunterId === empId; }); }
+  function commThisMonthOf(leads) {
+    var mk = monthKey(NOW);
+    return leads.reduce(function (a, l) {
+      var wd = l.stage === 'won' ? wonDate(l) : null;
+      return a + (wd && monthKey(wd) === mk ? commissionOf(l) : 0);
+    }, 0);
+  }
 
   /* ---------------- Theme ---------------- */
   function applyTheme() {
@@ -684,6 +691,7 @@
         tile(t('unqualified'), fmtNum(s.unqualified), '') +
         tile(t('conversionRate'), fmtPct(s.conversion), t('convSub')) +
         tile(t('revenueGenerated'), fmtMoneyC(s.revenueNet), t('revSub')) +
+        tile(t('commMonthTile'), '<span class="money-pos">' + fmtMoneyC(commThisMonthOf(leads)) + '</span>', t('wonThisMonthSub')) +
         tile(t('commissionEarned'), '<span class="money-pos">' + fmtMoneyC(s.commission) + '</span>', t('notYetPaid', { v: fmtMoneyC(s.commissionPending + s.commissionApproved) })) +
       '</div>' +
 
@@ -1651,6 +1659,7 @@
         tile(t('programConv'), fmtPct(s.conversion), t('convSub')) +
         tile(t('revenueClosed'), fmtMoneyC(s.revenueNet), s.won ? t('avgPerStore', { v: fmtMoneyC(s.revenueNet / s.won) }) : t('exVat')) +
         tile(t('pipelineValue'), fmtMoneyC(s.pipelineValue), t('openExVat')) +
+        tile(t('commMonthTile'), fmtMoneyC(commThisMonthOf(all)), t('wonThisMonthSub')) +
         tile(t('commOwedPaid'), fmtMoneyC(s.commission), t('alreadyPaid', { v: fmtMoneyC(s.commissionPaid) })) +
         tile(t('forecastTile'), fmtMoneyC(forecast), t('forecastSub')) +
       '</div>' +
@@ -1879,6 +1888,7 @@
         '<h3 class="eyebrow" style="margin-top:16px">' + t('commissionSummary') + '</h3>' +
         '<dl class="d-kv">' +
           '<dt>' + t('dealsWon') + '</dt><dd>' + fmtNum(s.won) + '</dd>' +
+          '<dt>' + t('commMonthTile') + '</dt><dd><b class="money-pos">' + fmtMoney(commThisMonthOf(leadsOf(emp.id))) + '</b></dd>' +
           '<dt>' + t('stillToPay') + '</dt><dd><b class="money-pos">' + fmtMoney(s.commissionPending + s.commissionApproved) + '</b></dd>' +
           '<dt>' + t('paidToDate') + '</dt><dd>' + fmtMoney(s.commissionPaid) + '</dd>' +
           '<dt>' + t('lifetime') + '</dt><dd>' + fmtMoney(s.commission) + '</dd>' +
@@ -2034,6 +2044,7 @@
           t('pendingApprovedSub', { p: fmtMoneyC(s.commissionPending), a: fmtMoneyC(s.commissionApproved) })) +
         tile(t('paidToDate'), fmtMoneyC(s.commissionPaid), '') +
         tile(t('huntersAwaiting'), fmtNum(huntersOwed), t('seeProfiles')) +
+        tile(t('commMonthTile'), fmtMoneyC(commThisMonthOf(allLeads())), t('wonThisMonthSub')) +
         tile(t('totalCommission'), fmtMoneyC(s.commission), t('pctOfNet', { rate: ratePct(), v: fmtMoneyC(s.revenueNet) }));
     }
 
