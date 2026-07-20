@@ -235,9 +235,12 @@
     '/profile':    { titleKey: 'navProfile',      icon: 'person',  render: viewProfile,   who: 'emp' }
   };
 
-  // Finance sees ONLY its own views; everyone else gets role + shared views
+  // Finance sees ONLY its own views. Management additionally gets the
+  // finance views (read-only there — approvals stay a finance action).
   function canAccess(who, role) {
-    return role === 'fin' ? who === 'fin' : (who === 'all' || who === role);
+    if (role === 'fin') return who === 'fin';
+    if (role === 'mgr') return who === 'mgr' || who === 'all' || who === 'fin';
+    return who === 'all' || who === role;
   }
 
   function route() {
@@ -1868,7 +1871,7 @@
           '<dt>' + t('bank') + '</dt><dd>' + esc(trBank(pay.bank)) + '</dd>' +
           '<dt>' + t('ibanLbl') + '</dt><dd style="font-variant-numeric:tabular-nums" id="iban-dd">' +
             (window.LIVE
-              ? esc(maskIban(pay.iban)) + (pay.iban ? ' <button class="linklike" id="reveal-iban">' + t('revealBtn') + '</button>' : '')
+              ? esc(maskIban(pay.iban)) + (pay.iban && roleOf() === 'fin' ? ' <button class="linklike" id="reveal-iban">' + t('revealBtn') + '</button>' : '')
               : esc(fmtIbanFull(pay.iban))) + '</dd>' +
           (saved.nationalId ? '<dt>' + t('nationalId') + '</dt><dd>' + esc(saved.nationalId) + '</dd>' : '') +
         '</dl>' +
@@ -1950,6 +1953,7 @@
     }
 
     function renderTable() {
+      var canAct = roleOf() === 'fin'; // management views, finance acts
       var rows = rowsFor().map(function (l) {
         var hunter = (window.LIVE ? LIVE.users : EMPLOYEES).find(function (e) { return e.id === l.hunterId; });
         var pay = hunter ? payoutDetailsOf(hunter) : { bank: '—', iban: '' };
@@ -1963,14 +1967,16 @@
           '<td>' + esc(l.salesOwner) + '</td>' +
           '<td class="num">' + fmtMoney(l.amountNet) + '</td>' +
           '<td class="num"><b class="money-pos">' + fmtMoney(commissionOf(l)) + '</b></td>' +
-          '<td><select class="status-select" data-deal="' + esc(l.id) + '" aria-label="Payment status for deal ' + esc(l.id) + '">' +
-            [['pending', t('pendingApproval')], ['approved', t('approved')], ['paid', t('paid')]].map(function (o) {
-              return '<option value="' + o[0] + '"' + (o[0] === cs ? ' selected' : '') + '>' + o[1] + '</option>';
-            }).join('') + '</select></td>' +
+          '<td>' + (canAct
+            ? '<select class="status-select" data-deal="' + esc(l.id) + '" aria-label="Payment status for deal ' + esc(l.id) + '">' +
+              [['pending', t('pendingApproval')], ['approved', t('approved')], ['paid', t('paid')]].map(function (o) {
+                return '<option value="' + o[0] + '"' + (o[0] === cs ? ' selected' : '') + '>' + o[1] + '</option>';
+              }).join('') + '</select>'
+            : '<span class="status-chip ' + cs + '">' + (cs === 'paid' ? t('paid') : cs === 'approved' ? t('approved') : t('pendingApproval')) + '</span>') + '</td>' +
           '<td>' + (cs === 'paid'
             ? (hasSlip(l.id)
-                ? slipLink(l.id) + '<span class="cell-sub"><button class="linklike slip-up" data-deal="' + esc(l.id) + '">' + t('replace') + '</button></span>'
-                : '<button class="ghost-btn slip-up" data-deal="' + esc(l.id) + '">' + t('uploadPayslip') + '</button>')
+                ? slipLink(l.id) + (canAct ? '<span class="cell-sub"><button class="linklike slip-up" data-deal="' + esc(l.id) + '">' + t('replace') + '</button></span>' : '')
+                : (canAct ? '<button class="ghost-btn slip-up" data-deal="' + esc(l.id) + '">' + t('uploadPayslip') + '</button>' : '<span class="cell-sub">—</span>'))
             : '<span class="cell-sub">' + t('afterPayment') + '</span>') + '</td>' +
           '<td>' + esc(trBank(pay.bank)) + '<span class="cell-sub">' + esc(maskIban(pay.iban)) + '</span></td>' +
         '</tr>';
