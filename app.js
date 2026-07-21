@@ -1030,11 +1030,38 @@
         portalId: HS_PORTAL, formId: HS_FORM, region: HS_REGION,
         target: '#hs-form-slot',
         onFormReady: function ($form) {
-          // Prefill + lock the hunter's Zid email for attribution.
+          // Prefill + lock the hunter's Zid email into the "Lead Owner
+          // Email" field for commission attribution. The form's internal
+          // field name is unknown, so match by candidate names first,
+          // then fall back to finding the input under a label that reads
+          // like "owner email".
           try {
             var f = ($form && $form.length) ? $form[0] : $form;
-            var input = f.querySelector('input[name="lead_by__zidder_email_"]');
-            if (input) { input.value = user.email; input.readOnly = true; }
+            var input = null;
+            var names = ['lead_by__zidder_email_', 'lead_owner_email', 'owner_email',
+              'hunter_email', 'zidder_email', 'employee_email'];
+            for (var i = 0; i < names.length && !input; i++) {
+              input = f.querySelector('input[name="' + names[i] + '"]');
+            }
+            if (!input) {
+              var labels = f.querySelectorAll('label');
+              for (var j = 0; j < labels.length && !input; j++) {
+                var txt = (labels[j].textContent || '').toLowerCase();
+                if (txt.indexOf('owner') >= 0 && txt.indexOf('email') >= 0) {
+                  var forId = labels[j].getAttribute('for');
+                  if (forId) input = f.querySelector('#' + CSS.escape(forId));
+                }
+              }
+            }
+            if (input) {
+              var proto = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
+              proto.set.call(input, user.email); // React-friendly value set
+              input.dispatchEvent(new Event('input', { bubbles: true }));
+              input.dispatchEvent(new Event('change', { bubbles: true }));
+              input.dispatchEvent(new Event('blur', { bubbles: true }));
+              input.readOnly = true;
+              input.style.opacity = '0.7';
+            }
           } catch (e) {}
         },
         onFormSubmitted: function () {
