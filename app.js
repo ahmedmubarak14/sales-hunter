@@ -2298,7 +2298,7 @@
       '<div class="card" style="max-width:760px">' +
         '<div style="display:flex; align-items:center; gap:14px; margin-bottom:18px">' +
           '<span class="avatar" style="width:46px;height:46px;flex:none;font-size:16px">' + esc(initials(user.name)) + '</span>' +
-          '<div><h2>' + esc(user.name) + '</h2><p class="sub">' + esc(user.title) + ' · ' + esc(trDept(user.dept)) + ' · ' + t('profileManager', { name: esc(MANAGER.name) }) + '</p></div>' +
+          '<div><h2>' + esc(user.name) + '</h2><p class="sub">' + esc(user.title) + (user.dept ? ' · ' + esc(trDept(user.dept)) : '') + '</p></div>' +
         '</div>' +
         '<form id="profile-form">' +
           '<h3 class="eyebrow" style="margin-bottom:10px">' + t('contactInfo') + '</h3>' +
