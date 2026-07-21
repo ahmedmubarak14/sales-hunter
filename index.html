@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>Sales Hunter — Zid employee referral program</title>
+  <script>
+    /* Set theme before first paint to avoid a flash. Default light;
+       dark only if the user previously chose it. */
+    try {
+      var _t = localStorage.getItem('sh.theme');
+      document.documentElement.setAttribute('data-theme', _t ? JSON.parse(_t) : 'light');
+    } catch (e) { document.documentElement.setAttribute('data-theme', 'light'); }
+  </script>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">

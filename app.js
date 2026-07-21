@@ -122,13 +122,12 @@
 
   /* ---------------- Theme ---------------- */
   function applyTheme() {
-    var t = LS.get('theme', null);
-    if (t) document.documentElement.setAttribute('data-theme', t);
-    else document.documentElement.removeAttribute('data-theme');
+    // Default to light for everyone; dark is opt-in via the toggle.
+    var t = LS.get('theme', null) || 'light';
+    document.documentElement.setAttribute('data-theme', t);
   }
   function toggleTheme() {
-    var cur = LS.get('theme', null);
-    if (!cur) cur = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    var cur = LS.get('theme', null) || 'light';
     LS.set('theme', cur === 'dark' ? 'light' : 'dark');
     applyTheme();
   }
