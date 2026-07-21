@@ -1449,24 +1449,28 @@
           '<input type="search" id="tbl-search" class="tbl-search" placeholder="' + t('searchUsers') + '" value="' + esc(query) + '">' +
           '<button class="btn" id="add-user-btn">' + t('addUser') + '</button>' +
         '</div>' +
-        '<div class="card" id="add-user-card" hidden>' +
-          '<h3 id="au-title">' + t('addUserTitle') + '</h3>' +
-          '<form id="add-user-form" style="margin-top:12px">' +
-            '<div class="form-grid">' +
-              '<div><label class="f-label" for="nu-name">' + t('fullName') + '</label><input type="text" id="nu-name" required></div>' +
-              '<div><label class="f-label" for="nu-email">' + t('emailReq') + '</label><input type="email" id="nu-email" required placeholder="name@zid.sa"></div>' +
-              '<div><label class="f-label" for="nu-dept">' + t('deptLbl') + '</label><input type="text" id="nu-dept"></div>' +
-              '<div><label class="f-label" for="nu-title">' + t('jobTitle') + '</label><input type="text" id="nu-title"></div>' +
-              '<div id="nu-role-group"><label class="f-label" for="nu-role">' + t('role') + '</label><select id="nu-role">' +
-                '<option value="emp">' + t('roleHunter') + '</option><option value="mgr">' + t('roleMgmt') + '</option><option value="fin">' + t('roleFin') + '</option>' +
-              '</select><p class="f-hint">' + t('ssoHint') + '</p></div>' +
-              '<div id="nu-sec-group"><label class="f-label" for="nu-sec">' + t('extraAccess') + '</label><select id="nu-sec">' + secOptions('emp', '') + '</select></div>' +
-            '</div>' +
-            '<div style="margin-top:14px; display:flex; gap:10px">' +
-              '<button type="submit" class="btn" id="au-submit">' + t('createUser') + '</button>' +
-              '<button type="button" class="btn secondary" id="add-user-cancel">' + t('cancel') + '</button>' +
-            '</div>' +
-          '</form>' +
+        '<div id="au-overlay" hidden>' +
+          '<div class="drawer-backdrop" id="au-backdrop"></div>' +
+          '<div class="drawer au-drawer" role="dialog" aria-modal="true">' +
+            '<div class="d-head"><h3 id="au-title">' + t('addUserTitle') + '</h3>' +
+              '<button class="icon-btn" id="au-close" aria-label="' + t('cancel') + '">✕</button></div>' +
+            '<form id="add-user-form" style="margin-top:14px">' +
+              '<div class="au-fields">' +
+                '<div><label class="f-label" for="nu-name">' + t('fullName') + '</label><input type="text" id="nu-name" required></div>' +
+                '<div><label class="f-label" for="nu-email">' + t('emailReq') + '</label><input type="email" id="nu-email" required placeholder="name@zid.sa"></div>' +
+                '<div><label class="f-label" for="nu-dept">' + t('deptLbl') + '</label><input type="text" id="nu-dept"></div>' +
+                '<div><label class="f-label" for="nu-title">' + t('jobTitle') + '</label><input type="text" id="nu-title"></div>' +
+                '<div id="nu-role-group"><label class="f-label" for="nu-role">' + t('role') + '</label><select id="nu-role">' +
+                  '<option value="emp">' + t('roleHunter') + '</option><option value="mgr">' + t('roleMgmt') + '</option><option value="fin">' + t('roleFin') + '</option>' +
+                '</select><p class="f-hint">' + t('ssoHint') + '</p></div>' +
+                '<div id="nu-sec-group"><label class="f-label" for="nu-sec">' + t('extraAccess') + '</label><select id="nu-sec">' + secOptions('emp', '') + '</select></div>' +
+              '</div>' +
+              '<div class="au-actions">' +
+                '<button type="button" class="btn secondary" id="add-user-cancel">' + t('cancel') + '</button>' +
+                '<button type="submit" class="btn" id="au-submit">' + t('createUser') + '</button>' +
+              '</div>' +
+            '</form>' +
+          '</div>' +
         '</div>' +
         '<section class="card">' +
           '<div class="tbl-wrap"><table>' +
@@ -1510,15 +1514,15 @@
         // only sets them when creating a new user.
         document.getElementById('nu-role-group').hidden = !!u;
         document.getElementById('nu-sec-group').hidden = !!u;
-        document.getElementById('add-user-card').hidden = false;
+        document.getElementById('au-overlay').hidden = false;
         document.getElementById('nu-name').focus();
       }
+      function closeForm() { document.getElementById('au-overlay').hidden = true; editingId = null; }
       document.getElementById('nu-role').addEventListener('change', syncSec);
       document.getElementById('add-user-btn').addEventListener('click', function () { openForm(null); });
-      document.getElementById('add-user-cancel').addEventListener('click', function () {
-        document.getElementById('add-user-card').hidden = true;
-        editingId = null;
-      });
+      document.getElementById('add-user-cancel').addEventListener('click', closeForm);
+      document.getElementById('au-close').addEventListener('click', closeForm);
+      document.getElementById('au-backdrop').addEventListener('click', closeForm);
       document.getElementById('add-user-form').addEventListener('submit', function (e) {
         e.preventDefault();
         var name = document.getElementById('nu-name').value.trim();

@@ -306,6 +306,13 @@ button { font: inherit; cursor: pointer; }
 }
 .pager { display: flex; align-items: center; justify-content: space-between; padding: 12px 2px 2px; }
 .pager .btn { padding: 6px 14px; }
+/* Add/Edit user slide-over */
+.au-drawer { width: min(440px, 94vw); display: flex; flex-direction: column; }
+.au-fields { display: flex; flex-direction: column; gap: 14px; }
+.au-actions {
+  display: flex; justify-content: flex-end; gap: 10px;
+  margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--hairline);
+}
 .access-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .mini-select {
   font: inherit; font-size: 12px; padding: 4px 8px; border-radius: 7px;
