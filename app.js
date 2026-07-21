@@ -2249,7 +2249,7 @@
             field('p-name', t('fullName').replace(' *', ''), 'text', p.name) +
             field('p-dept', t('deptLbl'), 'text', p.dept === 'General' ? '' : p.dept, '', 'placeholder="' + t('deptPh') + '"') +
             field('p-phone', t('mobile'), 'tel', p.phone, '', 'placeholder="+966555555928"') +
-            field('p-cemail', t('companyEmail'), 'email', p.companyEmail, t('emailHint')) +
+            field('p-cemail', t('companyEmail'), 'email', p.companyEmail, t('emailHint'), 'readonly style="opacity:.7"') +
             field('p-pemail', t('personalEmail'), 'email', p.personalEmail, '', 'placeholder="personal@gmail.com"') +
           '</div>' +
           '<h3 class="eyebrow" style="margin:20px 0 10px">' + t('payoutDetails') + '</h3>' +
