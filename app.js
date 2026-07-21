@@ -428,6 +428,54 @@
     return sel.value === 'Other' ? other.value.trim() : sel.value;
   }
 
+  /* Reusable drag-and-drop file field. Wraps a real <input type=file>
+     (kept by id so existing validation still works) with a dropzone
+     and a selected-file card. */
+  var DZ_CLOUD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="width:22px;height:22px"><path d="M12 15V4m0 0-3.5 3.5M12 4l3.5 3.5"/><path d="M4 15v2.5A2.5 2.5 0 0 0 6.5 20h11a2.5 2.5 0 0 0 2.5-2.5V15"/></svg>';
+  var DZ_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:15px;height:15px"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m2 0v12a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V7"/></svg>';
+  function fileDrop(id, accept, hint) {
+    return '<div class="dropzone" id="' + id + '-zone" tabindex="0" role="button" aria-label="' + t('dzClick') + '">' +
+        '<input type="file" id="' + id + '" accept="' + accept + '" hidden>' +
+        '<span class="dz-cloud">' + DZ_CLOUD + '</span>' +
+        '<p class="dz-text"><span class="dz-link">' + t('dzClick') + '</span> ' + t('dzOrDrag') + '</p>' +
+        '<p class="dz-hint">' + esc(hint) + '</p>' +
+      '</div>' +
+      '<div class="dz-file" id="' + id + '-card" hidden>' +
+        '<span class="dz-badge" id="' + id + '-badge"></span>' +
+        '<div class="dz-meta"><b class="dz-name" id="' + id + '-name"></b><span class="dz-size" id="' + id + '-size"></span></div>' +
+        '<button type="button" class="dz-remove" id="' + id + '-remove" aria-label="' + t('remove') + '">' + DZ_TRASH + '</button>' +
+      '</div>';
+  }
+  function wireFileDrop(id) {
+    var input = document.getElementById(id);
+    var zone = document.getElementById(id + '-zone');
+    var card = document.getElementById(id + '-card');
+    if (!input || !zone) return;
+    function fmtSize(n) { return n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(0) + ' KB' : (n / 1048576).toFixed(1) + ' MB'; }
+    function show() {
+      var f = input.files[0];
+      if (!f) { card.hidden = true; zone.hidden = false; return; }
+      var ext = (f.name.split('.').pop() || '').toUpperCase().slice(0, 4);
+      document.getElementById(id + '-badge').textContent = ext || 'FILE';
+      document.getElementById(id + '-name').textContent = f.name;
+      document.getElementById(id + '-size').textContent = fmtSize(f.size);
+      card.hidden = false; zone.hidden = true;
+    }
+    zone.addEventListener('click', function () { input.click(); });
+    zone.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
+    input.addEventListener('change', show);
+    ['dragenter', 'dragover'].forEach(function (ev) {
+      zone.addEventListener(ev, function (e) { e.preventDefault(); zone.classList.add('drag'); });
+    });
+    ['dragleave', 'drop'].forEach(function (ev) {
+      zone.addEventListener(ev, function (e) { e.preventDefault(); zone.classList.remove('drag'); });
+    });
+    zone.addEventListener('drop', function (e) {
+      if (e.dataTransfer && e.dataTransfer.files.length) { input.files = e.dataTransfer.files; show(); }
+    });
+    document.getElementById(id + '-remove').addEventListener('click', function () { input.value = ''; show(); });
+  }
+
   /* IBAN section on the profile page: the saved IBAN shows read-only
      with an Edit toggle; editing reveals the input + a required
      certificate upload. Any existing certificate is viewable. */
@@ -446,9 +494,8 @@
         '<input type="text" id="p-iban" placeholder="SA00 0000 0000 0000 0000 0000" autocomplete="off">' +
         '<p class="f-error" id="p-iban-err" hidden></p>' +
         (window.LIVE
-          ? '<label class="f-label" for="p-cert" style="margin-top:10px">' + t('ibanCertLbl') + '</label>' +
-            '<input type="file" id="p-cert" accept=".pdf,.png,.jpg,.jpeg,image/*,application/pdf">' +
-            '<p class="f-hint">' + t('ibanCertRequired') + '</p>'
+          ? '<label class="f-label" style="margin-top:10px">' + t('ibanCertLbl') + '</label>' +
+            fileDrop('p-cert', '.pdf,.png,.jpg,.jpeg,image/*,application/pdf', t('ibanCertRequired'))
           : '') +
       '</div>' +
       (window.LIVE && certPath
@@ -530,9 +577,8 @@
             '<div><label class="f-label" for="ob-iban">' + t('ibanStar') + '</label>' +
               '<input id="ob-iban" type="text" required placeholder="SA00 0000 0000 0000 0000 0000" autocomplete="off">' +
               '<p class="f-error" id="ob-err" hidden></p></div>' +
-            '<div><label class="f-label" for="ob-cert">' + t('ibanCertStar') + '</label>' +
-              '<input id="ob-cert" type="file" required accept=".pdf,.png,.jpg,.jpeg,image/*,application/pdf">' +
-              '<p class="f-hint">' + t('ibanCertHint') + '</p></div>' +
+            '<div><label class="f-label">' + t('ibanCertStar') + '</label>' +
+              fileDrop('ob-cert', '.pdf,.png,.jpg,.jpeg,image/*,application/pdf', t('ibanCertHint')) + '</div>' +
           '</div>' +
           '<div style="margin-top:16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap">' +
             '<button type="submit" class="btn">' + t('obSubmit') + '</button>' +
@@ -547,6 +593,7 @@
     document.body.appendChild(root);
 
     wireBankOther('ob-bank');
+    wireFileDrop('ob-cert');
     var sw = document.getElementById('ob-switch');
     if (sw) sw.addEventListener('click', function () {
       LS.set('activeRole', otherAccess);
@@ -2354,6 +2401,7 @@
       '</div>';
 
     wireBankOther('p-bank');
+    if (window.LIVE && document.getElementById('p-cert')) wireFileDrop('p-cert');
     var editBtn = document.getElementById('iban-edit');
     if (editBtn) editBtn.addEventListener('click', function () {
       document.getElementById('iban-view').hidden = true;
