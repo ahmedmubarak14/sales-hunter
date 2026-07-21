@@ -2140,40 +2140,70 @@
   /* ---- Finance: hunter directory ---- */
   function viewHunters(content) {
     var hunterList = window.LIVE ? LIVE.users.filter(function (u) { return u.role === 'emp' && u.active; }) : EMPLOYEES;
-    var rows = hunterList.map(function (e) {
+    var all = hunterList.map(function (e) {
       var s = statsFor(leadsOf(e.id));
-      var pay = payoutDetailsOf(e);
-      return { e: e, s: s, pay: pay };
+      return { e: e, s: s, pay: payoutDetailsOf(e) };
     }).sort(function (a, b) {
       return (b.s.commissionPending + b.s.commissionApproved) - (a.s.commissionPending + a.s.commissionApproved);
     });
+    var page = 1, PER = 10, query = '';
 
-    content.innerHTML =
-      '<section class="card">' +
-        '<div class="card-head"><div><h3>' + t('hunterProfiles') + '</h3>' +
-        '<p class="sub">' + t('hunterProfilesSub') + '</p></div></div>' +
-        '<div class="tbl-wrap"><table>' +
-          '<thead><tr><th>' + t('hunter') + '</th><th>' + t('contact') + '</th><th class="num">' + t('dealsWon') + '</th><th class="num">' + t('stillToPay') + '</th><th class="num">' + t('paidToDate') + '</th><th>' + t('bank') + '</th><th>' + t('ibanLbl') + '</th></tr></thead>' +
-          '<tbody>' + rows.map(function (r) {
-            var owed = r.s.commissionPending + r.s.commissionApproved;
-            return '<tr class="rowlink" data-hunter="' + r.e.id + '" tabindex="0">' +
-              '<td><b>' + esc(r.e.name) + '</b><span class="cell-sub">' + esc(r.e.title) + ' · ' + esc(trDept(r.e.dept)) + '</span></td>' +
-              '<td>' + esc(r.e.email) + '<span class="cell-sub">' + esc(r.e.phone || '') + '</span></td>' +
-              '<td class="num">' + fmtNum(r.s.won) + '</td>' +
-              '<td class="num">' + (owed ? '<b class="money-pos">' + fmtMoney(owed) + '</b>' : '—') + '</td>' +
-              '<td class="num">' + (r.s.commissionPaid ? fmtMoney(r.s.commissionPaid) : '—') + '</td>' +
-              '<td>' + esc(trBank(r.pay.bank)) + '</td>' +
-              '<td style="font-variant-numeric:tabular-nums">' + esc(fmtIbanFull(r.pay.iban)) + '</td>' +
-            '</tr>';
-          }).join('') + '</tbody>' +
-        '</table></div>' +
-      '</section>';
+    function render(focusSearch) {
+      var q = query.trim().toLowerCase();
+      var filtered = q ? all.filter(function (r) {
+        return (r.e.name + ' ' + (r.e.email || '') + ' ' + (r.e.dept || '')).toLowerCase().indexOf(q) >= 0;
+      }) : all;
+      var totalPages = Math.max(1, Math.ceil(filtered.length / PER));
+      if (page > totalPages) page = totalPages;
+      var pageRows = filtered.slice((page - 1) * PER, page * PER);
 
-    content.querySelectorAll('[data-hunter]').forEach(function (tr) {
-      function open() { openHunterDrawer(tr.getAttribute('data-hunter')); }
-      tr.addEventListener('click', open);
-      tr.addEventListener('keydown', function (e) { if (e.key === 'Enter') open(); });
-    });
+      var rows = pageRows.map(function (r) {
+        var owed = r.s.commissionPending + r.s.commissionApproved;
+        return '<tr class="rowlink" data-hunter="' + r.e.id + '" tabindex="0">' +
+          '<td><div class="u-cell"><span class="avatar u-av">' + esc(initials(r.e.name)) + '</span>' +
+            '<div class="u-meta"><b>' + esc(r.e.name) + '</b><span class="cell-sub">' + esc(r.e.email || '—') + '</span></div></div></td>' +
+          '<td class="num">' + fmtNum(r.s.won) + '</td>' +
+          '<td class="num">' + (owed ? '<b class="money-pos">' + fmtMoney(owed) + '</b>' : '—') + '</td>' +
+          '<td class="num">' + (r.s.commissionPaid ? fmtMoney(r.s.commissionPaid) : '—') + '</td>' +
+          '<td style="white-space:nowrap">' + esc(trBank(r.pay.bank)) + '</td>' +
+          '<td style="font-variant-numeric:tabular-nums; white-space:nowrap">' + esc(fmtIbanFull(r.pay.iban)) + '</td>' +
+        '</tr>';
+      }).join('');
+
+      content.innerHTML =
+        '<div class="filter-row">' +
+          '<div style="display:flex; align-items:center; gap:10px"><h2>' + t('hunterProfiles') + '</h2>' +
+            '<span class="count-badge">' + t('usersCount', { n: all.length }) + '</span></div>' +
+          '<div class="spacer"></div>' +
+          '<input type="search" id="h-search" class="tbl-search" placeholder="' + t('searchUsers') + '" value="' + esc(query) + '">' +
+        '</div>' +
+        '<section class="card">' +
+          '<div class="tbl-wrap"><table>' +
+            '<thead><tr><th>' + t('hunter') + '</th><th class="num">' + t('dealsWon') + '</th><th class="num">' + t('stillToPay') + '</th><th class="num">' + t('paidToDate') + '</th><th>' + t('bank') + '</th><th>' + t('ibanLbl') + '</th></tr></thead>' +
+            '<tbody>' + (rows || '<tr><td colspan="6"><div class="empty">' + t('noneFound') + '</div></td></tr>') + '</tbody>' +
+          '</table></div>' +
+          '<div class="pager">' +
+            '<span class="sub">' + t('pageOf', { p: page, n: totalPages }) + '</span>' +
+            '<div style="display:flex; gap:8px">' +
+              '<button class="btn secondary" id="hp-prev"' + (page <= 1 ? ' disabled' : '') + '>' + t('prev') + '</button>' +
+              '<button class="btn secondary" id="hp-next"' + (page >= totalPages ? ' disabled' : '') + '>' + t('next') + '</button>' +
+            '</div>' +
+          '</div>' +
+        '</section>' +
+        '<p class="sub" style="text-align:center">' + t('hunterProfilesSub') + '</p>';
+
+      var se = document.getElementById('h-search');
+      se.addEventListener('input', function () { query = this.value; page = 1; render(true); });
+      if (focusSearch) { se.focus(); se.setSelectionRange(se.value.length, se.value.length); }
+      document.getElementById('hp-prev').addEventListener('click', function () { if (page > 1) { page--; render(); } });
+      document.getElementById('hp-next').addEventListener('click', function () { if (page < totalPages) { page++; render(); } });
+      content.querySelectorAll('[data-hunter]').forEach(function (tr) {
+        function open() { openHunterDrawer(tr.getAttribute('data-hunter')); }
+        tr.addEventListener('click', open);
+        tr.addEventListener('keydown', function (e) { if (e.key === 'Enter') open(); });
+      });
+    }
+    render();
   }
 
   /* ---- Finance: commission payouts ---- */
