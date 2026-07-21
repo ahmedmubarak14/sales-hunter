@@ -294,7 +294,7 @@ en: {
   rulesRange: 'Enter a commission between 1–50% and VAT between 0–30%.',
   rulesSaved: 'Rules saved — commission is now {rate} everywhere.', resetToast: 'Demo reset to original mock data.',
 
-  profileManager: 'manager: {name}', contactInfo: 'Contact information',
+  profileManager: 'manager: {name}', contactInfo: 'Contact information', contactInfoSub: 'How the program reaches you.',
   emailHint: 'Used for sign-in and lead notifications', optional: 'Optional',
   payoutDetails: 'Payout details', ibanLbl: 'IBAN',
   ibanCurrent: 'Current: ···· {last4} — leave blank to keep it.',
@@ -541,7 +541,7 @@ ar: {
   rulesRange: 'أدخل عمولة بين 1–50% وضريبة بين 0–30%.',
   rulesSaved: 'حُفظت القواعد — العمولة الآن {rate} في كل مكان.', resetToast: 'أُعيد ضبط البيانات التجريبية.',
 
-  profileManager: 'المدير: {name}', contactInfo: 'معلومات التواصل',
+  profileManager: 'المدير: {name}', contactInfo: 'معلومات التواصل', contactInfoSub: 'كيف يصل إليك البرنامج.',
   emailHint: 'يُستخدم للدخول وإشعارات العملاء', optional: 'اختياري',
   payoutDetails: 'تفاصيل الصرف', ibanLbl: 'الآيبان',
   ibanCurrent: 'الحالي: ···· {last4} — اتركه فارغاً للإبقاء عليه.',

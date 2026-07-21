@@ -2468,29 +2468,42 @@
         '<p class="f-error" id="' + id + '-err" hidden></p></div>';
     }
 
+    var roleTag = '<span class="role-badge ' + user.role + '">' + roleName(user.role) + '</span>' +
+      (user.secondaryRole ? ' <span class="role-badge ' + user.secondaryRole + '">' + roleName(user.secondaryRole) + '</span>' : '');
     content.innerHTML =
-      '<div class="card" style="max-width:760px">' +
-        '<div style="display:flex; align-items:center; gap:14px; margin-bottom:18px">' +
-          avatarHtml(user, '', 'width:46px;height:46px;flex:none;font-size:16px') +
-          '<div><h2>' + esc(user.name) + '</h2><p class="sub">' + esc(user.title) + (user.dept ? ' · ' + esc(trDept(user.dept)) : '') + '</p></div>' +
+      '<div class="profile-page">' +
+        '<div class="card profile-header">' +
+          '<div class="ph-band"></div>' +
+          '<div class="ph-main">' +
+            avatarHtml(user, 'ph-avatar') +
+            '<div class="ph-id"><h2>' + esc(user.name) + '</h2>' +
+              '<p>' + esc(user.title || '') + (user.dept ? ' · ' + esc(trDept(user.dept)) : '') + '</p></div>' +
+            '<div class="ph-badges">' + roleTag +
+              '<span class="dot-badge active"><i></i>' + t('active') + '</span></div>' +
+          '</div>' +
         '</div>' +
         '<form id="profile-form">' +
-          '<h3 class="eyebrow" style="margin-bottom:10px">' + t('contactInfo') + '</h3>' +
-          '<div class="form-grid">' +
-            field('p-name', t('fullName').replace(' *', ''), 'text', p.name) +
-            field('p-dept', t('deptLbl'), 'text', p.dept === 'General' ? '' : p.dept, '', 'placeholder="' + t('deptPh') + '"') +
-            field('p-phone', t('mobile'), 'tel', p.phone, '', 'placeholder="+966555555928"') +
-            field('p-cemail', t('companyEmail'), 'email', p.companyEmail, t('emailHint'), 'readonly style="opacity:.7"') +
-            field('p-pemail', t('personalEmail'), 'email', p.personalEmail, '', 'placeholder="personal@gmail.com"') +
-          '</div>' +
-          '<h3 class="eyebrow" style="margin:20px 0 10px">' + t('payoutDetails') + '</h3>' +
-          '<div class="form-grid">' +
-            '<div><label class="f-label" for="p-bank">' + t('bank') + '</label>' + bankSelect('p-bank', p.bank) + '</div>' +
-            ibanBlock(p, certPath) +
-            field('p-nid', t('nationalId'), 'text', p.nationalId, t('nationalIdHint')) +
-          '</div>' +
-          '<p class="f-hint" style="margin-top:14px">' + t(window.LIVE ? 'profileNoteLive' : 'profileNote') + '</p>' +
-          '<div style="margin-top:16px"><button type="submit" class="btn">' + t('saveProfile') + '</button></div>' +
+          '<section class="card">' +
+            '<div class="card-head"><div><h3>' + t('contactInfo') + '</h3>' +
+              '<p class="sub">' + t('contactInfoSub') + '</p></div></div>' +
+            '<div class="form-grid">' +
+              field('p-name', t('fullName').replace(' *', ''), 'text', p.name) +
+              field('p-dept', t('deptLbl'), 'text', p.dept === 'General' ? '' : p.dept, '', 'placeholder="' + t('deptPh') + '"') +
+              field('p-phone', t('mobile'), 'tel', p.phone, '', 'placeholder="+966555555928"') +
+              field('p-cemail', t('companyEmail'), 'email', p.companyEmail, t('emailHint'), 'readonly style="opacity:.7"') +
+              field('p-pemail', t('personalEmail'), 'email', p.personalEmail, '', 'placeholder="personal@gmail.com"') +
+            '</div>' +
+          '</section>' +
+          '<section class="card">' +
+            '<div class="card-head"><div><h3>' + t('payoutDetails') + '</h3>' +
+              '<p class="sub">' + t(window.LIVE ? 'profileNoteLive' : 'profileNote') + '</p></div></div>' +
+            '<div class="form-grid">' +
+              '<div><label class="f-label" for="p-bank">' + t('bank') + '</label>' + bankSelect('p-bank', p.bank) + '</div>' +
+              ibanBlock(p, certPath) +
+              field('p-nid', t('nationalId'), 'text', p.nationalId, t('nationalIdHint')) +
+            '</div>' +
+          '</section>' +
+          '<div class="profile-actions"><button type="submit" class="btn">' + t('saveProfile') + '</button></div>' +
         '</form>' +
       '</div>';
 
