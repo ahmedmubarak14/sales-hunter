@@ -568,7 +568,7 @@
             '</div>' +
           '</div>' +
           '<div class="content" id="content"></div>' +
-          '<footer class="app-foot">' + t('footer') + '</footer>' +
+          (window.LIVE ? '' : '<footer class="app-foot">' + t('footer') + '</footer>') +
         '</div>' +
       '</div>';
 
@@ -1052,9 +1052,7 @@
         }
       }
       if (!input) return false;
-      setNativeValue(input, email);
-      input.readOnly = true;
-      input.style.opacity = '0.7';
+      setNativeValue(input, email); // prefilled but editable
       return true;
     } catch (e) { return false; }
   }
@@ -1062,11 +1060,8 @@
   function renderHubspotForm(content, user) {
     content.innerHTML =
       '<div class="card" style="max-width:760px">' +
-        '<h2>' + t('submitTitle') + '</h2>' +
-        '<p class="sub">' + t('submitSub') + '</p>' +
-        '<div id="hs-form-slot" style="margin-top:18px; min-height:120px">' +
+        '<div id="hs-form-slot" style="min-height:120px">' +
           '<p class="sub" id="hs-loading">' + t('hsLoading') + '</p></div>' +
-        '<p class="f-hint" style="margin-top:14px">' + t('hsAppearNote') + '</p>' +
       '</div>';
 
     function build() {
