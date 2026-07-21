@@ -2148,41 +2148,49 @@
     var old = document.getElementById('drawer-root');
     if (old) old.remove();
 
+    var owed = s.commissionPending + s.commissionApproved;
+    var roleTag = '<span class="role-badge ' + emp.role + '">' + roleName(emp.role) + '</span>' +
+      (emp.secondaryRole ? ' <span class="role-badge ' + emp.secondaryRole + '">' + roleName(emp.secondaryRole) + '</span>' : '');
+    function kv(label, val, cls) { return '<dt>' + label + '</dt><dd' + (cls ? ' class="' + cls + '"' : '') + '>' + val + '</dd>'; }
     var root = el('<div id="drawer-root">' +
       '<div class="drawer-backdrop"></div>' +
-      '<div class="drawer" role="dialog" aria-label="Hunter profile">' +
-        '<div class="d-head"><div style="display:flex; align-items:center; gap:11px">' +
-          avatarHtml(emp, '', 'width:42px;height:42px;flex:none;font-size:15px') +
-          '<div><h2>' + esc(emp.name) + '</h2>' +
-          '<p class="sub">' + esc(emp.title) + ' · ' + esc(trDept(emp.dept)) + '</p></div></div>' +
-        '<button class="icon-btn" id="drawer-close" aria-label="Close">✕</button></div>' +
+      '<div class="drawer hunter-drawer" role="dialog" aria-label="Hunter profile">' +
+        '<button class="icon-btn hd-close" id="drawer-close" aria-label="Close">✕</button>' +
+        '<div class="hd-top">' +
+          avatarHtml(emp, 'hd-avatar') +
+          '<div class="hd-id"><h2>' + esc(emp.name) + '</h2>' +
+            '<p class="sub">' + esc(emp.title || '') + (emp.dept ? ' · ' + esc(trDept(emp.dept)) : '') + '</p>' +
+            '<div class="hd-badges">' + roleTag + '<span class="dot-badge active"><i></i>' + t('active') + '</span></div></div>' +
+        '</div>' +
 
-        '<h3 class="eyebrow" style="margin-top:14px">' + t('contact') + '</h3>' +
-        '<dl class="d-kv">' +
-          '<dt>' + t('companyEmail') + '</dt><dd>' + esc(saved.companyEmail || emp.email) + '</dd>' +
-          '<dt>' + t('mobile') + '</dt><dd>' + esc(saved.phone || emp.phone || '—') + '</dd>' +
-          (saved.personalEmail ? '<dt>' + t('personalEmail') + '</dt><dd>' + esc(saved.personalEmail) + '</dd>' : '') +
-        '</dl>' +
+        '<div class="hd-stats">' +
+          '<div class="hd-stat"><span>' + t('stillToPay') + '</span><b class="money-pos">' + fmtMoneyC(owed) + '</b></div>' +
+          '<div class="hd-stat"><span>' + t('lifetime') + '</span><b>' + fmtMoneyC(s.commission) + '</b></div>' +
+        '</div>' +
 
-        '<h3 class="eyebrow">' + t('payoutAccount') + '</h3>' +
-        '<dl class="d-kv">' +
-          '<dt>' + t('bank') + '</dt><dd>' + esc(trBank(pay.bank)) + '</dd>' +
-          '<dt>' + t('ibanLbl') + '</dt><dd style="font-variant-numeric:tabular-nums" id="iban-dd">' +
-            esc(fmtIbanFull(pay.iban)) + '</dd>' +
-          '<dt>' + t('ibanCertLbl') + '</dt><dd>' +
-            (drawerCert ? '<button class="linklike" id="drawer-cert-view">' + t('viewDownload') + '</button>' : '<span class="cell-sub">' + t('notProvided') + '</span>') + '</dd>' +
-          (saved.nationalId ? '<dt>' + t('nationalId') + '</dt><dd>' + esc(saved.nationalId) + '</dd>' : '') +
-        '</dl>' +
-        '<span class="hs-chip">' + t('fullIbanNote') + '</span>' +
+        '<div class="hd-section"><h4 class="hd-h">' + t('commissionSummary') + '</h4>' +
+          '<dl class="hd-kv">' +
+            kv(t('dealsWon'), fmtNum(s.won)) +
+            kv(t('commMonthTile'), fmtMoneyC(commThisMonthOf(leadsOf(emp.id))), 'money-pos') +
+            kv(t('paidToDate'), fmtMoneyC(s.commissionPaid)) +
+          '</dl></div>' +
 
-        '<h3 class="eyebrow" style="margin-top:16px">' + t('commissionSummary') + '</h3>' +
-        '<dl class="d-kv">' +
-          '<dt>' + t('dealsWon') + '</dt><dd>' + fmtNum(s.won) + '</dd>' +
-          '<dt>' + t('commMonthTile') + '</dt><dd><b class="money-pos">' + fmtMoney(commThisMonthOf(leadsOf(emp.id))) + '</b></dd>' +
-          '<dt>' + t('stillToPay') + '</dt><dd><b class="money-pos">' + fmtMoney(s.commissionPending + s.commissionApproved) + '</b></dd>' +
-          '<dt>' + t('paidToDate') + '</dt><dd>' + fmtMoney(s.commissionPaid) + '</dd>' +
-          '<dt>' + t('lifetime') + '</dt><dd>' + fmtMoney(s.commission) + '</dd>' +
-        '</dl>' +
+        '<div class="hd-section"><h4 class="hd-h">' + t('contact') + '</h4>' +
+          '<dl class="hd-kv">' +
+            kv(t('companyEmail'), esc(saved.companyEmail || emp.email)) +
+            kv(t('mobile'), esc(saved.phone || emp.phone || '—')) +
+            (saved.personalEmail ? kv(t('personalEmail'), esc(saved.personalEmail)) : '') +
+          '</dl></div>' +
+
+        '<div class="hd-section"><h4 class="hd-h">' + t('payoutAccount') + '</h4>' +
+          '<dl class="hd-kv">' +
+            kv(t('bank'), esc(trBank(pay.bank))) +
+            kv(t('ibanLbl'), '<span style="font-variant-numeric:tabular-nums">' + esc(fmtIbanFull(pay.iban)) + '</span>') +
+            kv(t('ibanCertLbl'), drawerCert ? '<button class="linklike" id="drawer-cert-view">' + t('viewDownload') + '</button>' : '<span class="cell-sub">' + t('notProvided') + '</span>') +
+            (saved.nationalId ? kv(t('nationalId'), esc(saved.nationalId)) : '') +
+          '</dl>' +
+          '<p class="hd-note">' + t('fullIbanNote') + '</p>' +
+        '</div>' +
       '</div></div>');
     document.body.appendChild(root);
     function close() { root.remove(); document.removeEventListener('keydown', onKey); }

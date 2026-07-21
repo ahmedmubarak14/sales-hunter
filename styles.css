@@ -313,6 +313,32 @@ button { font: inherit; cursor: pointer; }
 }
 .pager { display: flex; align-items: center; justify-content: space-between; padding: 12px 2px 2px; }
 .pager .btn { padding: 6px 14px; }
+/* Hunter drawer — polished slide-over */
+.hunter-drawer { padding: 0; position: relative; }
+.hd-close { position: absolute; top: 16px; inset-inline-end: 16px; z-index: 1; }
+.hd-top {
+  padding: 24px 22px 18px; text-align: center;
+  background: linear-gradient(180deg, var(--brand-soft) 0%, transparent 100%);
+  border-bottom: 1px solid var(--hairline);
+}
+.hd-avatar { width: 68px !important; height: 68px !important; flex: 0 0 68px !important; font-size: 23px !important; margin: 0 auto 12px; box-shadow: var(--shadow); }
+.hd-id h2 { font-size: 19px; }
+.hd-id .sub { color: var(--muted); font-size: 13px; margin-top: 3px; }
+.hd-badges { display: flex; justify-content: center; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.hd-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 16px 22px 8px; }
+.hd-stat { border: 1px solid var(--hairline); border-radius: 11px; padding: 12px 14px; background: var(--surface-2); }
+.hd-stat span { color: var(--muted); font-size: 11.5px; display: block; }
+.hd-stat b { font-size: 18px; display: block; margin-top: 4px; letter-spacing: -0.01em; }
+.hd-section { padding: 12px 22px; }
+.hd-h { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 700; margin: 0 0 10px; }
+.hd-kv { display: grid; grid-template-columns: auto 1fr; gap: 9px 12px; margin: 0; font-size: 13px; align-items: baseline; }
+.hd-kv dt { color: var(--muted); white-space: nowrap; }
+.hd-kv dd { margin: 0; font-weight: 600; text-align: end; }
+.hd-note {
+  font-size: 11.5px; color: var(--muted); margin: 12px 0 0;
+  padding: 9px 11px; background: var(--surface-2); border-radius: 9px; line-height: 1.4;
+}
+
 /* Add/Edit user slide-over */
 .au-drawer { width: min(440px, 94vw); display: flex; flex-direction: column; }
 .au-fields { display: flex; flex-direction: column; gap: 14px; }
