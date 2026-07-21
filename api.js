@@ -44,10 +44,12 @@ window.SH_API = (function () {
     if (params.access_token && params.refresh_token) {
       var payload = {};
       try { payload = JSON.parse(atob(params.access_token.split('.')[1])); } catch (e) {}
+      var meta = payload.user_metadata || {};
       setSession({
         access_token: params.access_token,
         refresh_token: params.refresh_token,
         email: (payload.email || '').toLowerCase(),
+        avatar: meta.avatar_url || meta.picture || null,
         expires_at: payload.exp ? payload.exp * 1000 : Date.now() + 3600 * 1000
       });
       history.replaceState(null, '', location.pathname + location.search);
@@ -190,6 +192,7 @@ window.SH_API = (function () {
       role: fromDbRole(u.role),
       secondaryRole: u.secondary_role ? fromDbRole(u.secondary_role) : null,
       active: u.active !== false,
+      avatar: u.avatar_url || null,
       aliases: (u.email_aliases || []).map(function (a) { return String(a).toLowerCase(); }),
       weight: 0
     };
@@ -216,6 +219,11 @@ window.SH_API = (function () {
     });
     if (!me) {
       throw new Error('NO_APP_USER'); // signed in, but not in app_users → management must add them
+    }
+    // Sync the Google profile photo to this user's row when it changes.
+    if (s.avatar && me.avatar !== s.avatar) {
+      me.avatar = s.avatar;
+      req('/rest/v1/rpc/set_avatar', { method: 'POST', body: { p_url: s.avatar } }).catch(function () {});
     }
     var eventsByDeal = {};
     results[2].forEach(function (e) {

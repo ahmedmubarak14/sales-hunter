@@ -141,6 +141,16 @@
   function initials(name) {
     return name.split(' ').filter(Boolean).slice(0, 2).map(function (w) { return w[0]; }).join('').toUpperCase();
   }
+  /* Avatar = Google photo if synced, else initials. The photo overlays
+     the initials and reveals them again if the image fails to load. */
+  function avatarHtml(u, cls, style) {
+    var ini = esc(initials(u.name || '?'));
+    var s = style ? ' style="' + style + '"' : '';
+    var inner = u && u.avatar
+      ? ini + '<img class="av-img" src="' + esc(u.avatar) + '" alt="" referrerpolicy="no-referrer" onerror="this.remove()">'
+      : ini;
+    return '<span class="avatar' + (cls ? ' ' + cls : '') + '"' + s + '>' + inner + '</span>';
+  }
   function toast(msg) {
     var t = el('<div class="toast" role="status">' + esc(msg) + '</div>');
     document.body.appendChild(t);
@@ -664,7 +674,7 @@
           '</div>' +
           '<nav class="nav">' + nav + '</nav>' +
           '<div class="side-foot">' +
-            '<div class="userchip"><span class="avatar">' + esc(initials(user.name)) + '</span>' +
+            '<div class="userchip">' + avatarHtml(user) + '' +
             '<span class="who"><b>' + esc(user.name) + '</b><span>' + esc(trDept(user.dept)) + '</span></span></div>' +
             '<button class="link-btn" id="logout">' + t('signOut') + '</button>' +
           '</div>' +
@@ -1410,7 +1420,7 @@
       var rows = pageUsers.map(function (u) {
         var isSelf = u.id === user.id;
         return '<tr>' +
-          '<td><div class="u-cell"><span class="avatar u-av">' + esc(initials(u.name)) + '</span>' +
+          '<td><div class="u-cell">' + avatarHtml(u, 'u-av') + '' +
             '<div class="u-meta"><b>' + esc(u.name) + (isSelf ? ' · ' + t('you') : '') + '</b>' +
             '<span class="cell-sub">' + esc(u.email || '—') + '</span></div></div></td>' +
           '<td>' + (u.active
@@ -2059,7 +2069,7 @@
           '<div class="card-head"><div><h3>' + t('coaching') + '</h3>' +
           '<p class="sub">' + t('coachingSub', { pct: fmtPct(avgConv, 0) }) + '</p></div></div>' +
           (coach.length ? coach.map(function (r) {
-            return '<div class="coach-item"><span class="avatar">' + esc(initials(r.emp.name)) + '</span>' +
+            return '<div class="coach-item">' + avatarHtml(r.emp) + '' +
               '<span><b>' + esc(r.emp.name) + '</b><span class="cell-sub">' + esc(trDept(r.emp.dept)) + ' · ' + fmtNum(r.s.total) + ' ' + t('leadsUnit') + '</span></span>' +
               '<span class="why">' + t('coachConv', { pct: fmtPct(r.s.conversion, 0) }) + '<br>' + t('coachUnq', { n: fmtNum(r.s.unqualified) }) + '</span></div>';
           }).join('') : '<div class="empty">' + t('nobodyFlagged') + '</div>') +
@@ -2093,7 +2103,7 @@
       '<div class="drawer-backdrop"></div>' +
       '<div class="drawer" role="dialog" aria-label="Hunter profile">' +
         '<div class="d-head"><div style="display:flex; align-items:center; gap:11px">' +
-          '<span class="avatar" style="width:42px;height:42px;flex:none;font-size:15px">' + esc(initials(emp.name)) + '</span>' +
+          avatarHtml(emp, '', 'width:42px;height:42px;flex:none;font-size:15px') +
           '<div><h2>' + esc(emp.name) + '</h2>' +
           '<p class="sub">' + esc(emp.title) + ' · ' + esc(trDept(emp.dept)) + '</p></div></div>' +
         '<button class="icon-btn" id="drawer-close" aria-label="Close">✕</button></div>' +
@@ -2160,7 +2170,7 @@
       var rows = pageRows.map(function (r) {
         var owed = r.s.commissionPending + r.s.commissionApproved;
         return '<tr class="rowlink" data-hunter="' + r.e.id + '" tabindex="0">' +
-          '<td><div class="u-cell"><span class="avatar u-av">' + esc(initials(r.e.name)) + '</span>' +
+          '<td><div class="u-cell">' + avatarHtml(r.e, 'u-av') + '' +
             '<div class="u-meta"><b>' + esc(r.e.name) + '</b><span class="cell-sub">' + esc(r.e.email || '—') + '</span></div></div></td>' +
           '<td class="num">' + fmtNum(r.s.won) + '</td>' +
           '<td class="num">' + (owed ? '<b class="money-pos">' + fmtMoney(owed) + '</b>' : '—') + '</td>' +
@@ -2416,7 +2426,7 @@
     content.innerHTML =
       '<div class="card" style="max-width:760px">' +
         '<div style="display:flex; align-items:center; gap:14px; margin-bottom:18px">' +
-          '<span class="avatar" style="width:46px;height:46px;flex:none;font-size:16px">' + esc(initials(user.name)) + '</span>' +
+          avatarHtml(user, '', 'width:46px;height:46px;flex:none;font-size:16px') +
           '<div><h2>' + esc(user.name) + '</h2><p class="sub">' + esc(user.title) + (user.dept ? ' · ' + esc(trDept(user.dept)) : '') + '</p></div>' +
         '</div>' +
         '<form id="profile-form">' +
