@@ -1012,6 +1012,53 @@
   var HS_FORM = '220db1da-0224-436d-bc30-06381a1f1a55';
   var HS_REGION = 'na1';
 
+  /* Set an input's value so HubSpot's validation registers it. */
+  function setNativeValue(input, value) {
+    var proto = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
+    if (proto && proto.set) proto.set.call(input, value); else input.value = value;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    input.dispatchEvent(new Event('blur', { bubbles: true }));
+  }
+
+  /* Find the "Lead Owner Email" field on the HubSpot form and lock the
+     hunter's Zid email into it. onFormReady may hand us a jQuery object
+     OR the raw <form> element — and a <form> has a numeric .length (its
+     field count), so we must detect jQuery by its .jquery marker, not by
+     .length. The field's internal name is unknown, so match by candidate
+     names, then by any label/placeholder reading like "owner email". */
+  function prefillOwnerEmail($form, email) {
+    try {
+      var f = ($form && $form.jquery) ? $form[0] : $form;
+      if (!f || !f.querySelector) return false;
+      var input = null;
+      var names = ['lead_owner_email', 'lead_by__zidder_email_', 'owner_email',
+        'hunter_email', 'zidder_email', 'employee_email'];
+      for (var i = 0; i < names.length && !input; i++) {
+        input = f.querySelector('input[name="' + names[i] + '"]');
+      }
+      if (!input) {
+        var labels = f.querySelectorAll('label');
+        for (var j = 0; j < labels.length && !input; j++) {
+          var txt = ((labels[j].textContent || '') + ' ' + (labels[j].getAttribute('placeholder') || '')).toLowerCase();
+          if (txt.indexOf('owner') >= 0 && txt.indexOf('email') >= 0) {
+            var forId = labels[j].getAttribute('for');
+            if (forId) input = f.querySelector('#' + CSS.escape(forId));
+            if (!input) {
+              var box = labels[j].closest('.hs-form-field') || labels[j].parentElement;
+              if (box) input = box.querySelector('input[type="email"], input[type="text"]');
+            }
+          }
+        }
+      }
+      if (!input) return false;
+      setNativeValue(input, email);
+      input.readOnly = true;
+      input.style.opacity = '0.7';
+      return true;
+    } catch (e) { return false; }
+  }
+
   function renderHubspotForm(content, user) {
     content.innerHTML =
       '<div class="card" style="max-width:760px">' +
@@ -1030,39 +1077,7 @@
         portalId: HS_PORTAL, formId: HS_FORM, region: HS_REGION,
         target: '#hs-form-slot',
         onFormReady: function ($form) {
-          // Prefill + lock the hunter's Zid email into the "Lead Owner
-          // Email" field for commission attribution. The form's internal
-          // field name is unknown, so match by candidate names first,
-          // then fall back to finding the input under a label that reads
-          // like "owner email".
-          try {
-            var f = ($form && $form.length) ? $form[0] : $form;
-            var input = null;
-            var names = ['lead_by__zidder_email_', 'lead_owner_email', 'owner_email',
-              'hunter_email', 'zidder_email', 'employee_email'];
-            for (var i = 0; i < names.length && !input; i++) {
-              input = f.querySelector('input[name="' + names[i] + '"]');
-            }
-            if (!input) {
-              var labels = f.querySelectorAll('label');
-              for (var j = 0; j < labels.length && !input; j++) {
-                var txt = (labels[j].textContent || '').toLowerCase();
-                if (txt.indexOf('owner') >= 0 && txt.indexOf('email') >= 0) {
-                  var forId = labels[j].getAttribute('for');
-                  if (forId) input = f.querySelector('#' + CSS.escape(forId));
-                }
-              }
-            }
-            if (input) {
-              var proto = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
-              proto.set.call(input, user.email); // React-friendly value set
-              input.dispatchEvent(new Event('input', { bubbles: true }));
-              input.dispatchEvent(new Event('change', { bubbles: true }));
-              input.dispatchEvent(new Event('blur', { bubbles: true }));
-              input.readOnly = true;
-              input.style.opacity = '0.7';
-            }
-          } catch (e) {}
+          prefillOwnerEmail($form, user.email);
         },
         onFormSubmitted: function () {
           toast(t('hsSubmitted'));
