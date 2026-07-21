@@ -16,10 +16,10 @@
   --surface-2: #f1edf6;
   --ink: #1f0433;
   --ink-2: #544666;
-  --muted: #8b7f9b;
+  --muted: #6b6178;          /* AA on light surfaces (was #8b7f9b) */
   --hairline: #e7e1ee;
-  --brand: #8f54db;          /* accent: links, active nav, logo highlights */
-  --brand-strong: #7a3fc4;
+  --brand: #7c40c8;          /* accent: links, active nav, logo highlights (AA as text) */
+  --brand-strong: #6a34ad;
   --brand-ink: #ffffff;
   --brand-soft: #efe6fb;
   --cta: #1f0433;            /* primary buttons — Zid aubergine */
@@ -58,7 +58,7 @@
 
     --s1: #9d5cf0; --s2: #21a5a5;
     --f1: #e9dcff; --f2: #cfb0ff; --f3: #ae72ff; --f4: #9159e0; --f5: #7a45c9; --f6: #6636ad;
-    --good: #0ca30c; --good-text: #0ca30c;
+    --good: #0ca30c; --good-text: #0ca30c; --critical: #ef6461;
     --grid: #2e2438; --axis-ink: #95889f; --mark-muted: #4d4160;
   }
 }
@@ -66,8 +66,8 @@
 /* Explicit theme override (viewer toggle) must win in both directions */
 :root[data-theme="light"] {
   --ground: #f4f2f5; --surface: #fdfcfe; --surface-2: #f1edf6;
-  --ink: #1f0433; --ink-2: #544666; --muted: #8b7f9b; --hairline: #e7e1ee;
-  --brand: #8f54db; --brand-strong: #7a3fc4; --brand-ink: #ffffff; --brand-soft: #efe6fb;
+  --ink: #1f0433; --ink-2: #544666; --muted: #6b6178; --hairline: #e7e1ee;
+  --brand: #7c40c8; --brand-strong: #6a34ad; --brand-ink: #ffffff; --brand-soft: #efe6fb;
   --cta: #1f0433; --cta-strong: #3c1c54; --cta-ink: #ffffff;
   --focus: #8f54db;
   --shadow: 0 1px 2px rgba(31, 4, 51, 0.05), 0 4px 16px rgba(31, 4, 51, 0.05);
@@ -85,7 +85,7 @@
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.3);
   --s1: #9d5cf0; --s2: #21a5a5;
   --f1: #e9dcff; --f2: #cfb0ff; --f3: #ae72ff; --f4: #9159e0; --f5: #7a45c9; --f6: #6636ad;
-  --good: #0ca30c; --good-text: #0ca30c;
+  --good: #0ca30c; --good-text: #0ca30c; --critical: #ef6461;
   --grid: #2e2438; --axis-ink: #95889f; --mark-muted: #4d4160;
 }
 
@@ -248,6 +248,11 @@ button { font: inherit; cursor: pointer; }
 }
 .icon-btn:hover { background: var(--surface-2); }
 .icon-btn svg { width: 16px; height: 16px; }
+
+/* HubSpot embed always sits on a light panel so its dark form labels
+   stay legible regardless of app theme */
+.hs-panel { background: #ffffff; color: #1f0433; border: 1px solid #e7e1ee; }
+.hs-panel .sub, .hs-panel #hs-loading { color: #6b6178; }
 
 /* Drag-and-drop file upload */
 .dropzone {
@@ -444,7 +449,7 @@ td .cell-sub { display: block; color: var(--muted); font-size: 11.5px; }
   font-size: 11.5px; font-weight: 600; border-radius: 99px; padding: 2px 9px;
 }
 .status-chip.paid { background: color-mix(in srgb, var(--good) 14%, transparent); color: var(--good-text); }
-.status-chip.approved { background: color-mix(in srgb, var(--s1) 14%, transparent); color: var(--s1); }
+.status-chip.approved { background: color-mix(in srgb, var(--s1) 14%, transparent); color: var(--brand-strong); }
 .status-chip.pending { background: color-mix(in srgb, var(--warning) 20%, transparent); color: var(--ink-2); }
 
 .status-select {
@@ -585,10 +590,10 @@ fieldset { border: none; margin: 0; padding: 0; }
 .persona {
   display: flex; align-items: center; gap: 11px; width: 100%;
   background: var(--surface); border: 1px solid var(--hairline);
-  border-radius: 10px; padding: 9px 12px; text-align: left;
+  border-radius: 10px; padding: 9px 12px; text-align: left; color: var(--ink);
 }
 .persona:hover { border-color: var(--brand); background: var(--brand-soft); }
-.persona .who b { display: block; font-size: 13.5px; }
+.persona .who b { display: block; font-size: 13.5px; color: var(--ink); }
 .persona .who span { font-size: 11.5px; color: var(--muted); display: block; }
 .persona .who .p-as { color: var(--brand); font-weight: 500; margin-top: 2px; }
 .persona .avatar svg { width: 16px; height: 16px; }

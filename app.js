@@ -1178,7 +1178,7 @@
 
   function renderHubspotForm(content, user) {
     content.innerHTML =
-      '<div class="card" style="max-width:760px">' +
+      '<div class="card hs-panel" style="max-width:760px">' +
         '<div id="hs-form-slot" style="min-height:120px">' +
           '<p class="sub" id="hs-loading">' + t('hsLoading') + '</p></div>' +
       '</div>';
