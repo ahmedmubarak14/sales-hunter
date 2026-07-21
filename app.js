@@ -161,6 +161,7 @@
   }
 
   var ICONS = {
+    pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
     dash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
     leads: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="3.5" cy="18" r="1.4" fill="currentColor" stroke="none"/></svg>',
     plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>',
@@ -411,6 +412,36 @@
     return sel.value === 'Other' ? other.value.trim() : sel.value;
   }
 
+  /* IBAN section on the profile page: the saved IBAN shows read-only
+     with an Edit toggle; editing reveals the input + a required
+     certificate upload. Any existing certificate is viewable. */
+  function ibanBlock(p, certPath) {
+    var hasIban = !!p.iban;
+    return '<div>' +
+      '<label class="f-label" for="p-iban">' + t('ibanLbl') + '</label>' +
+      (hasIban
+        ? '<div id="iban-view" style="display:flex; gap:8px; align-items:center">' +
+            '<input type="text" value="' + esc(fmtIbanFull(p.iban)) + '" readonly ' +
+              'style="flex:1; opacity:.75; font-variant-numeric:tabular-nums">' +
+            '<button type="button" class="ghost-btn" id="iban-edit" style="flex:none">' + ICONS.pencil + ' ' + t('editBtn') + '</button>' +
+          '</div>'
+        : '') +
+      '<div id="iban-edit-wrap"' + (hasIban ? ' hidden' : '') + (hasIban ? ' style="margin-top:8px"' : '') + '>' +
+        '<input type="text" id="p-iban" placeholder="SA00 0000 0000 0000 0000 0000" autocomplete="off">' +
+        '<p class="f-error" id="p-iban-err" hidden></p>' +
+        (window.LIVE
+          ? '<label class="f-label" for="p-cert" style="margin-top:10px">' + t('ibanCertLbl') + '</label>' +
+            '<input type="file" id="p-cert" accept=".pdf,.png,.jpg,.jpeg,image/*,application/pdf">' +
+            '<p class="f-hint">' + t('ibanCertRequired') + '</p>'
+          : '') +
+      '</div>' +
+      (window.LIVE && certPath
+        ? '<p class="f-hint" style="margin-top:8px">' + t('ibanCertOnFile') +
+          ' <button type="button" class="linklike" id="iban-cert-view">' + t('viewDownload') + '</button></p>'
+        : (window.LIVE && hasIban ? '<p class="f-hint" style="margin-top:8px">' + t('ibanCertMissing') + '</p>' : '')) +
+    '</div>';
+  }
+
   /* Two accesses → pick one at sign-in. The topbar switcher still
      allows flipping later. */
   function renderAccessChooser(user) {
@@ -483,6 +514,9 @@
             '<div><label class="f-label" for="ob-iban">' + t('ibanStar') + '</label>' +
               '<input id="ob-iban" type="text" required placeholder="SA00 0000 0000 0000 0000 0000" autocomplete="off">' +
               '<p class="f-error" id="ob-err" hidden></p></div>' +
+            '<div><label class="f-label" for="ob-cert">' + t('ibanCertStar') + '</label>' +
+              '<input id="ob-cert" type="file" required accept=".pdf,.png,.jpg,.jpeg,image/*,application/pdf">' +
+              '<p class="f-hint">' + t('ibanCertHint') + '</p></div>' +
           '</div>' +
           '<div style="margin-top:16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap">' +
             '<button type="submit" class="btn">' + t('obSubmit') + '</button>' +
@@ -515,16 +549,21 @@
       if (!/^SA\d{22}$/.test(iban)) { err.textContent = t('ibanErr'); err.hidden = false; return; }
       var bank = bankValue('ob-bank');
       if (!bank) { err.textContent = t('bankReq'); err.hidden = false; return; }
+      var certFile = document.getElementById('ob-cert').files[0];
+      if (!certFile) { err.textContent = t('ibanCertNeeded'); err.hidden = false; return; }
       err.hidden = true;
       var btn = e.target.querySelector('button[type=submit]');
       btn.disabled = true;
-      SH_API.saveProfile({
-        name: document.getElementById('ob-name').value.trim(),
-        dept: document.getElementById('ob-dept').value.trim(),
-        phone: document.getElementById('ob-phone').value.trim(),
-        personalEmail: document.getElementById('ob-pemail').value.trim(),
-        bank: bank,
-        iban: iban
+      SH_API.uploadIbanCert(certFile).then(function (path) {
+        return SH_API.saveProfile({
+          name: document.getElementById('ob-name').value.trim(),
+          dept: document.getElementById('ob-dept').value.trim(),
+          phone: document.getElementById('ob-phone').value.trim(),
+          personalEmail: document.getElementById('ob-pemail').value.trim(),
+          bank: bank,
+          iban: iban,
+          ibanCertPath: path
+        });
       }).then(function () {
         root.remove();
         toast(t('obDone'));
@@ -1957,6 +1996,7 @@
     })() : LS.get('profile.' + emp.id, {});
     var pay = payoutDetailsOf(emp);
     var s = statsFor(leadsOf(emp.id));
+    var drawerCert = window.LIVE ? ((SH_API.profileOf(emp) || {}).iban_cert_path || '') : '';
     var old = document.getElementById('drawer-root');
     if (old) old.remove();
 
@@ -1981,6 +2021,8 @@
           '<dt>' + t('bank') + '</dt><dd>' + esc(trBank(pay.bank)) + '</dd>' +
           '<dt>' + t('ibanLbl') + '</dt><dd style="font-variant-numeric:tabular-nums" id="iban-dd">' +
             esc(fmtIbanFull(pay.iban)) + '</dd>' +
+          '<dt>' + t('ibanCertLbl') + '</dt><dd>' +
+            (drawerCert ? '<button class="linklike" id="drawer-cert-view">' + t('viewDownload') + '</button>' : '<span class="cell-sub">' + t('notProvided') + '</span>') + '</dd>' +
           (saved.nationalId ? '<dt>' + t('nationalId') + '</dt><dd>' + esc(saved.nationalId) + '</dd>' : '') +
         '</dl>' +
         '<span class="hs-chip">' + t('fullIbanNote') + '</span>' +
@@ -2000,6 +2042,10 @@
     root.querySelector('.drawer-backdrop').addEventListener('click', close);
     root.querySelector('#drawer-close').addEventListener('click', close);
     document.addEventListener('keydown', onKey);
+    var dcv = root.querySelector('#drawer-cert-view');
+    if (dcv) dcv.addEventListener('click', function () {
+      SH_API.openIbanCert(drawerCert).catch(function (e2) { toast(String(e2.message)); });
+    });
   }
 
   /* ---- Finance: hunter directory ---- */
@@ -2239,6 +2285,7 @@
       companyEmail: user.email, personalEmail: '', phone: user.phone || '',
       bank: user.bank || '', iban: user.iban || '', nationalId: ''
     }, saved);
+    var certPath = window.LIVE ? ((SH_API.profileOf(user) || {}).iban_cert_path || '') : '';
 
     function field(id, label, type, value, hint, attrs) {
       return '<div><label class="f-label" for="' + id + '">' + esc(label) + '</label>' +
@@ -2265,12 +2312,7 @@
           '<h3 class="eyebrow" style="margin:20px 0 10px">' + t('payoutDetails') + '</h3>' +
           '<div class="form-grid">' +
             '<div><label class="f-label" for="p-bank">' + t('bank') + '</label>' + bankSelect('p-bank', p.bank) + '</div>' +
-            field('p-iban', t('ibanLbl'), 'text', '',
-              p.iban ? (p.iban.indexOf('SA0000000000') === 0
-                          ? t('ibanCurrent', { last4: p.iban.slice(-4) })
-                          : t('ibanCurrentFull', { iban: fmtIbanFull(p.iban) }))
-                     : t('ibanHint'),
-              'placeholder="SA00 0000 0000 0000 0000 0000" autocomplete="off"') +
+            ibanBlock(p, certPath) +
             field('p-nid', t('nationalId'), 'text', p.nationalId, t('nationalIdHint')) +
           '</div>' +
           '<p class="f-hint" style="margin-top:14px">' + t(window.LIVE ? 'profileNoteLive' : 'profileNote') + '</p>' +
@@ -2279,29 +2321,53 @@
       '</div>';
 
     wireBankOther('p-bank');
+    var editBtn = document.getElementById('iban-edit');
+    if (editBtn) editBtn.addEventListener('click', function () {
+      document.getElementById('iban-view').hidden = true;
+      document.getElementById('iban-edit-wrap').hidden = false;
+      document.getElementById('p-iban').focus();
+    });
+    var certView = document.getElementById('iban-cert-view');
+    if (certView) certView.addEventListener('click', function () {
+      SH_API.openIbanCert(certPath).catch(function (e2) { toast(String(e2.message)); });
+    });
+
     document.getElementById('profile-form').addEventListener('submit', function (e) {
       e.preventDefault();
-      var iban = document.getElementById('p-iban').value.replace(/\s/g, '').toUpperCase();
+      var ibanInput = document.getElementById('p-iban');
+      var editing = !document.getElementById('iban-edit-wrap').hidden;
+      var iban = ibanInput ? ibanInput.value.replace(/\s/g, '').toUpperCase() : '';
       var ibanErr = document.getElementById('p-iban-err');
-      if (iban && !/^SA\d{22}$/.test(iban)) {
-        ibanErr.textContent = t('ibanErr');
-        ibanErr.hidden = false;
-        return;
+      // a new/changed IBAN must be valid and (live) accompanied by a certificate
+      if (editing && iban && !/^SA\d{22}$/.test(iban)) {
+        ibanErr.textContent = t('ibanErr'); ibanErr.hidden = false; return;
       }
-      ibanErr.hidden = true;
+      var certFile = document.getElementById('p-cert') ? document.getElementById('p-cert').files[0] : null;
+      if (window.LIVE && editing && iban && !certFile) {
+        ibanErr.textContent = t('ibanCertNeeded'); ibanErr.hidden = false; return;
+      }
+      if (ibanErr) ibanErr.hidden = true;
+
       if (window.LIVE) {
-        SH_API.saveProfile({
+        var payload = {
           name: document.getElementById('p-name').value.trim(),
           dept: document.getElementById('p-dept').value.trim(),
           phone: document.getElementById('p-phone').value,
           personalEmail: document.getElementById('p-pemail').value,
           bank: bankValue('p-bank'),
-          iban: iban || null // blank keeps the saved one (we never resend it)
-        }).then(function () { toast(t('profileSaved')); route(); })
-          .catch(function (e2) { toast(String(e2.message)); });
+          iban: (editing && iban) ? iban : null // blank keeps the saved one
+        };
+        var btn = e.target.querySelector('button[type=submit]');
+        btn.disabled = true;
+        var chain = (editing && iban && certFile)
+          ? SH_API.uploadIbanCert(certFile).then(function (path) { payload.ibanCertPath = path; })
+          : Promise.resolve();
+        chain.then(function () { return SH_API.saveProfile(payload); })
+          .then(function () { toast(t('profileSaved')); route(); })
+          .catch(function (e2) { toast(String(e2.message)); btn.disabled = false; });
         return;
       }
-      if (!iban && p.iban) iban = p.iban; // blank keeps the saved one
+      if (!iban && p.iban) iban = p.iban; // demo: blank keeps the saved one
       LS.set('profile.' + user.id, {
         name: document.getElementById('p-name').value,
         dept: document.getElementById('p-dept').value,

@@ -343,7 +343,8 @@ window.SH_API = (function () {
       body: {
         p_name: p.name || null, p_dept: p.dept || null,
         p_phone: p.phone || null, p_personal_email: p.personalEmail || null,
-        p_bank: p.bank || null, p_iban: p.iban || null
+        p_bank: p.bank || null, p_iban: p.iban || null,
+        p_iban_cert_path: p.ibanCertPath || null
       }
     });
     if (p.name) me.name = p.name;
@@ -358,6 +359,7 @@ window.SH_API = (function () {
       pr.iban_last4 = p.iban.slice(-4);
       if (window.LIVE.ibanByUser) window.LIVE.ibanByUser[me.dbId] = p.iban;
     }
+    if (p.ibanCertPath) pr.iban_cert_path = p.ibanCertPath;
     pr.onboarded_at = pr.onboarded_at || new Date().toISOString();
   }
 
@@ -396,6 +398,28 @@ window.SH_API = (function () {
       body: { commission_id: c.id, storage_path: path, uploaded_by: window.LIVE.me.dbId }
     });
     window.LIVE.payslipByComm[c.id] = row[0];
+  }
+
+  /* IBAN certificate: upload to the private iban-certs bucket under the
+     user's own id, return the storage path to store on the profile. */
+  async function uploadIbanCert(file) {
+    var me = window.LIVE.me;
+    var path = me.dbId + '/' + Date.now() + '-' + file.name.replace(/[^\w.\-]/g, '_');
+    var s = getSession();
+    var up = await fetch(cfg.url + '/storage/v1/object/iban-certs/' + path, {
+      method: 'POST',
+      headers: { apikey: cfg.key, Authorization: 'Bearer ' + s.access_token, 'Content-Type': file.type || 'application/octet-stream' },
+      body: file
+    });
+    if (!up.ok) throw new Error('Certificate upload failed: HTTP ' + up.status);
+    return path;
+  }
+  async function openIbanCert(path) {
+    if (!path) return;
+    var j = await req('/storage/v1/object/sign/iban-certs/' + path, {
+      method: 'POST', body: { expiresIn: 300 }
+    });
+    window.open(cfg.url + '/storage/v1' + j.signedURL, '_blank', 'noopener');
   }
 
   async function openPayslip(dealId) {
@@ -467,6 +491,7 @@ window.SH_API = (function () {
     submitLead: submitLead, saveProfile: saveProfile, onboardingNeeded: onboardingNeeded,
     setCommissionStatus: setCommissionStatus,
     uploadPayslip: uploadPayslip, openPayslip: openPayslip, hasPayslip: hasPayslip,
+    uploadIbanCert: uploadIbanCert, openIbanCert: openIbanCert,
     addUser: addUser, patchUser: patchUser, saveSettings: saveSettings,
     revealIban: revealIban, profileOf: profileOf
   };
