@@ -1427,7 +1427,13 @@
             ? '<span class="dot-badge active"><i></i>' + t('active') + '</span>'
             : '<span class="dot-badge off"><i></i>' + t('disabled') + '</span>') + '</td>' +
           '<td>' + esc(trDept(u.dept) || '—') + '</td>' +
-          '<td>' + roleBadge(u.role) + (u.secondaryRole ? ' ' + roleBadge(u.secondaryRole) : '') + '</td>' +
+          '<td><div class="access-cell">' +
+            (isSelf
+              ? roleBadge(u.role)
+              : '<select class="mini-select role-select" data-user="' + esc(u.id) + '" aria-label="' + t('role').replace(' *', '') + '">' +
+                  ROLE_OPTS.map(function (r) { return '<option value="' + r + '"' + (r === u.role ? ' selected' : '') + '>' + roleName(r) + '</option>'; }).join('') + '</select>') +
+            '<select class="mini-select sec-select" data-user="' + esc(u.id) + '" aria-label="' + t('extraAccess') + '">' + secOptions(u.role, u.secondaryRole) + '</select>' +
+          '</div></td>' +
           '<td style="white-space:nowrap; text-align:end">' +
             '<button class="tbl-icon edit-user" data-user="' + esc(u.id) + '" title="' + t('editBtn') + '" aria-label="' + t('editBtn') + '">' + ICONS.pencil + '</button>' +
             (isSelf ? '' : '<button class="tbl-icon toggle-active" data-user="' + esc(u.id) + '" title="' + (u.active ? t('disable') : t('enable')) + '" aria-label="' + (u.active ? t('disable') : t('enable')) + '">' + (u.active ? ICONS.ban : ICONS.check) + '</button>') +
@@ -1451,13 +1457,13 @@
               '<div><label class="f-label" for="nu-email">' + t('emailReq') + '</label><input type="email" id="nu-email" required placeholder="name@zid.sa"></div>' +
               '<div><label class="f-label" for="nu-dept">' + t('deptLbl') + '</label><input type="text" id="nu-dept"></div>' +
               '<div><label class="f-label" for="nu-title">' + t('jobTitle') + '</label><input type="text" id="nu-title"></div>' +
-              '<div><label class="f-label" for="nu-role">' + t('role') + '</label><select id="nu-role">' +
+              '<div id="nu-role-group"><label class="f-label" for="nu-role">' + t('role') + '</label><select id="nu-role">' +
                 '<option value="emp">' + t('roleHunter') + '</option><option value="mgr">' + t('roleMgmt') + '</option><option value="fin">' + t('roleFin') + '</option>' +
               '</select><p class="f-hint">' + t('ssoHint') + '</p></div>' +
-              '<div><label class="f-label" for="nu-sec">' + t('extraAccess') + '</label><select id="nu-sec">' + secOptions('emp', '') + '</select></div>' +
+              '<div id="nu-sec-group"><label class="f-label" for="nu-sec">' + t('extraAccess') + '</label><select id="nu-sec">' + secOptions('emp', '') + '</select></div>' +
             '</div>' +
             '<div style="margin-top:14px; display:flex; gap:10px">' +
-              '<button type="submit" class="btn">' + t('createUser') + '</button>' +
+              '<button type="submit" class="btn" id="au-submit">' + t('createUser') + '</button>' +
               '<button type="button" class="btn secondary" id="add-user-cancel">' + t('cancel') + '</button>' +
             '</div>' +
           '</form>' +
@@ -1492,14 +1498,18 @@
       function openForm(u) {
         editingId = u ? u.id : null;
         document.getElementById('au-title').textContent = u ? t('editUserTitle', { name: u.name }) : t('addUserTitle');
+        document.getElementById('au-submit').textContent = u ? t('saveChanges') : t('createUser');
         document.getElementById('nu-name').value = u ? u.name : '';
         document.getElementById('nu-email').value = u ? u.email : '';
         document.getElementById('nu-email').disabled = !!u;
         document.getElementById('nu-dept').value = u ? u.dept : '';
         document.getElementById('nu-title').value = u ? u.title : '';
         document.getElementById('nu-role').value = u ? u.role : 'emp';
-        document.getElementById('nu-role').disabled = !!(u && u.id === user.id);
         document.getElementById('nu-sec').innerHTML = secOptions(u ? u.role : 'emp', u ? u.secondaryRole : '');
+        // role + extra access are edited inline in the table; the form
+        // only sets them when creating a new user.
+        document.getElementById('nu-role-group').hidden = !!u;
+        document.getElementById('nu-sec-group').hidden = !!u;
         document.getElementById('add-user-card').hidden = false;
         document.getElementById('nu-name').focus();
       }
@@ -1524,8 +1534,8 @@
           role: nuRole
         };
         if (editingId) {
-          var patch = { name: nu.name, dept: nu.dept, title: nu.title, secondaryRole: nuSec };
-          if (!document.getElementById('nu-role').disabled) patch.role = nuRole;
+          // role + extra access are edited inline, not in the form
+          var patch = { name: nu.name, dept: nu.dept, title: nu.title };
           if (window.LIVE) {
             SH_API.patchUser(editingId, patch).then(function () {
               toast(t('userSavedToast', { name: name })); editingId = null; render();
@@ -1557,6 +1567,41 @@
         btn.addEventListener('click', function () {
           var u = usersAll().find(function (x) { return x.id === btn.getAttribute('data-user'); });
           if (u) openForm(u);
+        });
+      });
+      content.querySelectorAll('.role-select').forEach(function (sel) {
+        sel.addEventListener('change', function () {
+          var id = sel.getAttribute('data-user');
+          var u = usersAll().find(function (x) { return x.id === id; });
+          // if the new primary role collides with the extra access, clear the extra
+          var patch = { role: sel.value };
+          if (u && u.secondaryRole === sel.value) patch.secondaryRole = null;
+          if (window.LIVE) {
+            SH_API.patchUser(id, patch).then(function () {
+              toast(t('roleUpdated', { role: roleName(sel.value) })); render();
+            }).catch(function (e2) { toast(String(e2.message)); render(); });
+            return;
+          }
+          saveOverride(id, patch);
+          audit('Changed role of ' + (u ? u.name : id) + ' to ' + roleName(sel.value));
+          toast(t('roleUpdated', { role: roleName(sel.value) }));
+          render();
+        });
+      });
+      content.querySelectorAll('.sec-select').forEach(function (sel) {
+        sel.addEventListener('change', function () {
+          var id = sel.getAttribute('data-user');
+          var val = sel.value || null;
+          if (window.LIVE) {
+            SH_API.patchUser(id, { secondaryRole: val }).then(function () {
+              toast(t('accessUpdated')); render();
+            }).catch(function (e2) { toast(String(e2.message)); render(); });
+            return;
+          }
+          saveOverride(id, { secondaryRole: val });
+          audit('Set extra access of ' + id + ' to ' + (val ? roleName(val) : 'none'));
+          toast(t('accessUpdated'));
+          render();
         });
       });
       content.querySelectorAll('.toggle-active').forEach(function (btn) {

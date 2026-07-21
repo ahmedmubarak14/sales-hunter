@@ -290,6 +290,13 @@ button { font: inherit; cursor: pointer; }
 }
 .pager { display: flex; align-items: center; justify-content: space-between; padding: 12px 2px 2px; }
 .pager .btn { padding: 6px 14px; }
+.access-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mini-select {
+  font: inherit; font-size: 12px; padding: 4px 8px; border-radius: 7px;
+  border: 1px solid var(--hairline); background: var(--surface); color: var(--ink); cursor: pointer;
+}
+.mini-select:hover { border-color: var(--brand); }
+.mini-select:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 
 /* HubSpot embed always sits on a light panel so its dark form labels
    stay legible regardless of app theme */
