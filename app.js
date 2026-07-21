@@ -913,6 +913,12 @@
 
   /* ---- Submit lead (mirrors the real referral form) ---- */
   function viewSubmit(content, user) {
+    /* Live: embed the real HubSpot form — same form the program already
+       uses, so submissions land in the existing pipeline and workflow.
+       The hunter's Zid email is prefilled for commission attribution.
+       Demo mode keeps the native form so the showcase never writes to
+       HubSpot. */
+    if (window.LIVE) { renderHubspotForm(content, user); return; }
     var radios = PLATFORMS.map(function (p, i) {
       return '<label class="radio-row"><input type="radio" name="f-platform" value="' + esc(p) + '"' + (i === -1 ? ' checked' : '') + '><span>' + esc(p) + '</span></label>';
     }).join('');
@@ -999,6 +1005,63 @@
       toast(t('submittedToast'));
       location.hash = '#/leads';
     });
+  }
+
+  /* HubSpot form config (portal 4731529 → the Sales Hunter lead form) */
+  var HS_PORTAL = '4731529';
+  var HS_FORM = '220db1da-0224-436d-bc30-06381a1f1a55';
+  var HS_REGION = 'na1';
+
+  function renderHubspotForm(content, user) {
+    content.innerHTML =
+      '<div class="card" style="max-width:760px">' +
+        '<h2>' + t('submitTitle') + '</h2>' +
+        '<p class="sub">' + t('submitSub') + '</p>' +
+        '<div id="hs-form-slot" style="margin-top:18px; min-height:120px">' +
+          '<p class="sub" id="hs-loading">' + t('hsLoading') + '</p></div>' +
+        '<p class="f-hint" style="margin-top:14px">' + t('hsAppearNote') + '</p>' +
+      '</div>';
+
+    function build() {
+      if (!(window.hbspt && window.hbspt.forms)) return false;
+      var loading = document.getElementById('hs-loading');
+      if (loading) loading.remove();
+      window.hbspt.forms.create({
+        portalId: HS_PORTAL, formId: HS_FORM, region: HS_REGION,
+        target: '#hs-form-slot',
+        onFormReady: function ($form) {
+          // Prefill + lock the hunter's Zid email for attribution.
+          try {
+            var f = ($form && $form.length) ? $form[0] : $form;
+            var input = f.querySelector('input[name="lead_by__zidder_email_"]');
+            if (input) { input.value = user.email; input.readOnly = true; }
+          } catch (e) {}
+        },
+        onFormSubmitted: function () {
+          toast(t('hsSubmitted'));
+        }
+      });
+      return true;
+    }
+
+    if (build()) return;
+    // load the embed script once, then build
+    if (!document.getElementById('hs-embed-js')) {
+      var sc = document.createElement('script');
+      sc.id = 'hs-embed-js';
+      sc.src = 'https://js.hsforms.net/forms/embed/v2.js';
+      sc.charset = 'utf-8';
+      document.head.appendChild(sc);
+    }
+    var tries = 0;
+    var iv = setInterval(function () {
+      tries++;
+      if (build() || tries > 60) clearInterval(iv);
+      if (tries > 60) {
+        var slot = document.getElementById('hs-form-slot');
+        if (slot) slot.innerHTML = '<p class="f-error">' + t('hsFailed') + '</p>';
+      }
+    }, 250);
   }
 
   /* ---- Commission ---- */
