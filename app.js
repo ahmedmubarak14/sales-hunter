@@ -2474,19 +2474,25 @@
 
     var roleTag = '<span class="role-badge ' + user.role + '">' + roleName(user.role) + '</span>' +
       (user.secondaryRole ? ' <span class="role-badge ' + user.secondaryRole + '">' + roleName(user.secondaryRole) + '</span>' : '');
+    var st = statsFor(leadsOf(user.id));
+    var owed = st.commissionPending + st.commissionApproved;
+    var summary =
+      '<aside class="card profile-summary">' +
+        avatarHtml(user, 'ps-avatar') +
+        '<h2>' + esc(user.name) + '</h2>' +
+        '<p class="sub">' + esc(user.title || '') + (user.dept ? ' · ' + esc(trDept(user.dept)) : '') + '</p>' +
+        '<div class="ps-badges">' + roleTag + '<span class="dot-badge active"><i></i>' + t('active') + '</span></div>' +
+        '<div class="ps-divider"></div>' +
+        '<dl class="ps-stats">' +
+          '<div><dt>' + t('dealsWon') + '</dt><dd>' + fmtNum(st.won) + '</dd></div>' +
+          '<div><dt>' + t('lifetime') + '</dt><dd class="money-pos">' + fmtMoneyC(st.commission) + '</dd></div>' +
+          '<div><dt>' + t('stillToPay') + '</dt><dd>' + (owed ? fmtMoneyC(owed) : '—') + '</dd></div>' +
+        '</dl>' +
+      '</aside>';
     content.innerHTML =
-      '<div class="profile-page">' +
-        '<div class="card profile-header">' +
-          '<div class="ph-band"></div>' +
-          '<div class="ph-main">' +
-            avatarHtml(user, 'ph-avatar') +
-            '<div class="ph-id"><h2>' + esc(user.name) + '</h2>' +
-              '<p>' + esc(user.title || '') + (user.dept ? ' · ' + esc(trDept(user.dept)) : '') + '</p></div>' +
-            '<div class="ph-badges">' + roleTag +
-              '<span class="dot-badge active"><i></i>' + t('active') + '</span></div>' +
-          '</div>' +
-        '</div>' +
-        '<form id="profile-form">' +
+      '<div class="profile-grid">' +
+        summary +
+        '<form id="profile-form" class="profile-form-col">' +
           '<section class="card">' +
             '<div class="card-head"><div><h3>' + t('contactInfo') + '</h3>' +
               '<p class="sub">' + t('contactInfoSub') + '</p></div></div>' +
