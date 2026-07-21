@@ -251,8 +251,13 @@ button { font: inherit; cursor: pointer; }
 
 /* HubSpot embed always sits on a light panel so its dark form labels
    stay legible regardless of app theme */
-.hs-panel { background: #ffffff; color: #1f0433; border: 1px solid #e7e1ee; }
-.hs-panel .sub, .hs-panel #hs-loading { color: #6b6178; }
+/* !important + descendant color force: the HubSpot embed inherits our
+   dark theme otherwise, and .card (defined later) would win the tie. */
+.hs-panel { background: #ffffff !important; color: #1f0433 !important; border: 1px solid #e7e1ee !important; }
+.hs-panel .sub, .hs-panel #hs-loading { color: #6b6178 !important; }
+.hs-panel label, .hs-panel legend, .hs-panel span,
+.hs-panel .hs-form-field label, .hs-panel .hs-field-desc { color: #3c1c54 !important; }
+.hs-panel .hs-form-required, .hs-panel .hs-error-msg { color: #d03b3b !important; }
 
 /* Drag-and-drop file upload */
 .dropzone {
