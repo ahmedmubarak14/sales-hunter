@@ -100,6 +100,7 @@ function trRank(s) { return tr(RANK_AR, s); }
 var I18N = {
 en: {
   appName: 'Sales Hunter', byZid: 'by Zid · internal', tagline: 'Zid employee referral program',
+  navSecWork: 'Workspace', navSecInsights: 'Insights', navSecAccount: 'Account', collapseNav: 'Collapse / expand menu',
   demoPill: 'Demo · mock data',
   footer: 'Sales Hunter — an internal Zid program · demo with mock data · HubSpot becomes the backend in production',
   signIn: 'Sign in', signOut: 'Sign out',
@@ -343,6 +344,7 @@ en: {
 },
 ar: {
   appName: 'صياد المبيعات', byZid: 'من زد · داخلي', tagline: 'برنامج إحالات موظفي زد',
+  navSecWork: 'مساحة العمل', navSecInsights: 'رؤى', navSecAccount: 'الحساب', collapseNav: 'طي / توسيع القائمة',
   demoPill: 'تجريبي · بيانات وهمية',
   footer: 'صياد المبيعات — برنامج داخلي من زد · نسخة تجريبية ببيانات وهمية · هبسبوت هو النظام الأساسي في الإنتاج',
   signIn: 'تسجيل الدخول', signOut: 'تسجيل الخروج',

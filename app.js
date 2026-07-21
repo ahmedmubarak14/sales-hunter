@@ -162,6 +162,7 @@
 
   var ICONS = {
     pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+    chevronLeft: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 18l-6-6 6-6"/></svg>',
     dash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
     leads: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="3.5" cy="18" r="1.4" fill="currentColor" stroke="none"/></svg>',
     plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>',
@@ -230,19 +231,34 @@
 
   /* ---------------- Router ---------------- */
   var ROUTES = {
-    '/dashboard':  { titleKey: 'navDashboard',   icon: 'dash',    render: viewDashboard, who: 'emp' },
-    '/leads':      { titleKey: 'navLeads',        icon: 'leads',   render: viewLeads,     who: 'emp' },
-    '/submit':     { titleKey: 'navSubmit',       icon: 'plus',    render: viewSubmit,    who: 'emp' },
-    '/commission': { titleKey: 'navCommission',   icon: 'money',   render: viewCommission,who: 'emp' },
-    '/stores':     { titleKey: 'navStores',       icon: 'store',   render: viewTopStores, who: 'all' },
-    '/manager':    { titleKey: 'navOverview',     icon: 'manager', render: viewManager,   who: 'mgr' },
-    '/performance':{ titleKey: 'navPerformance',  icon: 'trophy',  render: viewPerformance, who: 'mgr' },
-    '/team':       { titleKey: 'navTeam',         icon: 'team',    render: viewTeam,      who: 'mgr' },
-    '/settings':   { titleKey: 'navSettings',     icon: 'gear',    render: viewSettings,  who: 'mgr' },
-    '/payouts':    { titleKey: 'navPayouts',      icon: 'money',   render: viewPayouts,   who: 'fin' },
-    '/hunters':    { titleKey: 'navHunters',      icon: 'person',  render: viewHunters,   who: 'fin' },
-    '/profile':    { titleKey: 'navProfile',      icon: 'person',  render: viewProfile,   who: 'emp' }
+    '/dashboard':  { titleKey: 'navDashboard',   icon: 'dash',    render: viewDashboard, who: 'emp', section: 'main' },
+    '/leads':      { titleKey: 'navLeads',        icon: 'leads',   render: viewLeads,     who: 'emp', section: 'work' },
+    '/submit':     { titleKey: 'navSubmit',       icon: 'plus',    render: viewSubmit,    who: 'emp', section: 'work' },
+    '/commission': { titleKey: 'navCommission',   icon: 'money',   render: viewCommission,who: 'emp', section: 'work' },
+    '/stores':     { titleKey: 'navStores',       icon: 'store',   render: viewTopStores, who: 'all', section: 'insights' },
+    '/manager':    { titleKey: 'navOverview',     icon: 'manager', render: viewManager,   who: 'mgr', section: 'main' },
+    '/performance':{ titleKey: 'navPerformance',  icon: 'trophy',  render: viewPerformance, who: 'mgr', section: 'work' },
+    '/team':       { titleKey: 'navTeam',         icon: 'team',    render: viewTeam,      who: 'mgr', section: 'work' },
+    '/payouts':    { titleKey: 'navPayouts',      icon: 'money',   render: viewPayouts,   who: 'fin', section: 'main' },
+    '/hunters':    { titleKey: 'navHunters',      icon: 'person',  render: viewHunters,   who: 'fin', section: 'work' },
+    '/settings':   { titleKey: 'navSettings',     icon: 'gear',    render: viewSettings,  who: 'mgr', section: 'account' },
+    '/profile':    { titleKey: 'navProfile',      icon: 'person',  render: viewProfile,   who: 'emp', section: 'account' }
   };
+  // Sidebar section order + headers (null header = no label, just a divider)
+  var NAV_SECTIONS = [
+    { key: 'main', label: null },
+    { key: 'work', label: 'navSecWork' },
+    { key: 'insights', label: 'navSecInsights' },
+    { key: 'account', label: 'navSecAccount' }
+  ];
+  // Small live badges next to certain items
+  function navBadge(p) {
+    try {
+      if (p === '/leads') { var n = statsFor(leadsOf(currentUser().id)).open; return n > 0 ? n : 0; }
+      if (p === '/payouts') { var s = statsFor(allLeads()); return (s.commissionPending > 0) ? allLeads().filter(function (l) { return l.stage === 'won' && commissionStatus(l) === 'pending'; }).length : 0; }
+    } catch (e) {}
+    return 0;
+  }
 
   // Finance sees ONLY its own views. Management additionally gets the
   // finance views (read-only there — approvals stay a finance action).
@@ -577,16 +593,27 @@
     var user = currentUser();
     /* blocking onboarding applies only when acting as a hunter, live */
     var needsOb = !!(window.LIVE && window.SH_API && roleOf() === 'emp' && SH_API.onboardingNeeded());
-    var nav = Object.keys(ROUTES).filter(function (p) {
-      return canAccess(ROUTES[p].who, roleOf());
-    }).map(function (p) {
-      return '<a href="#' + p + '" class="' + (p === path ? 'active' : '') + '">' + ICONS[ROUTES[p].icon] + esc(t(ROUTES[p].titleKey)) + '</a>';
+    var collapsed = LS.get('navCollapsed', false);
+    var accessible = Object.keys(ROUTES).filter(function (p) { return canAccess(ROUTES[p].who, roleOf()); });
+    var nav = NAV_SECTIONS.map(function (sec, si) {
+      var items = accessible.filter(function (p) { return ROUTES[p].section === sec.key; });
+      if (!items.length) return '';
+      var links = items.map(function (p) {
+        var b = navBadge(p);
+        return '<a href="#' + p + '" class="' + (p === path ? 'active' : '') + '" title="' + esc(t(ROUTES[p].titleKey)) + '">' +
+          ICONS[ROUTES[p].icon] + '<span class="nav-label">' + esc(t(ROUTES[p].titleKey)) + '</span>' +
+          (b ? '<span class="nav-badge">' + b + '</span>' : '') + '</a>';
+      }).join('');
+      return (si > 0 ? '<div class="nav-divider"></div>' : '') +
+        (sec.label ? '<p class="nav-sec">' + t(sec.label) + '</p>' : '') + links;
     }).join('');
 
     app.innerHTML =
-      '<div class="shell">' +
+      '<div class="shell' + (collapsed ? ' nav-collapsed' : '') + '">' +
         '<aside class="sidebar">' +
-          '<div class="brand">' + SH_MARK + '<div><b>' + t('appName') + '</b><small>' + t('byZid') + '</small></div></div>' +
+          '<div class="brand">' + SH_MARK + '<div class="brand-txt"><b>' + t('appName') + '</b><small>' + t('byZid') + '</small></div>' +
+            '<button class="nav-toggle" id="nav-toggle" aria-label="' + t('collapseNav') + '" title="' + t('collapseNav') + '">' + ICONS.chevronLeft + '</button>' +
+          '</div>' +
           '<nav class="nav">' + nav + '</nav>' +
           '<div class="side-foot">' +
             '<div class="userchip"><span class="avatar">' + esc(initials(user.name)) + '</span>' +
@@ -618,6 +645,12 @@
     });
     document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
     document.getElementById('lang-toggle').addEventListener('click', function () { setLang(isAr() ? 'en' : 'ar'); route(); });
+    document.getElementById('nav-toggle').addEventListener('click', function () {
+      var shell = app.querySelector('.shell');
+      var now = !shell.classList.contains('nav-collapsed');
+      shell.classList.toggle('nav-collapsed', now);
+      LS.set('navCollapsed', now);
+    });
     app.querySelectorAll('.rs-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var rr = btn.getAttribute('data-role');

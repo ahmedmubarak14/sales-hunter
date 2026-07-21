@@ -140,6 +140,7 @@ button { font: inherit; cursor: pointer; }
 
 .nav { padding: 6px 10px; display: flex; flex-direction: column; gap: 2px; }
 .nav a {
+  position: relative;
   display: flex; align-items: center; gap: 10px;
   padding: 8px 10px; border-radius: 8px;
   color: #c8b5e9; text-decoration: none; font-weight: 500;
@@ -147,7 +148,43 @@ button { font: inherit; cursor: pointer; }
 .nav a svg { width: 17px; height: 17px; flex: 0 0 17px; opacity: 0.85; }
 .nav a:hover { background: rgba(255, 255, 255, 0.07); color: #ffffff; }
 .nav a.active { background: rgba(174, 114, 255, 0.22); color: #dcc6ff; font-weight: 600; }
-.nav .nav-sec { margin: 10px 10px 2px; }
+.nav .nav-label { flex: 1; white-space: nowrap; overflow: hidden; }
+.nav-sec {
+  margin: 12px 12px 4px; font-size: 10.5px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase; color: #8f74c4;
+}
+.nav-divider { height: 1px; background: rgba(255,255,255,0.09); margin: 8px 12px; }
+.nav-badge {
+  flex: none; min-width: 20px; height: 20px; padding: 0 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 10px; font-size: 11px; font-weight: 700;
+  background: #ae72ff; color: #1f0433;
+}
+
+/* Collapse toggle + icon-rail state */
+.nav-toggle {
+  margin-inline-start: auto; flex: none;
+  background: none; border: none; color: #a98fd6; cursor: pointer;
+  width: 26px; height: 26px; border-radius: 7px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.nav-toggle:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.nav-toggle svg { width: 16px; height: 16px; transition: transform .15s; }
+.nav-collapsed .sidebar { width: 66px; flex-basis: 66px; }
+.nav-collapsed .brand-txt, .nav-collapsed .nav-label,
+.nav-collapsed .nav-sec, .nav-collapsed .side-foot .who,
+.nav-collapsed .side-foot .link-btn { display: none; }
+.nav-collapsed .brand { flex-direction: column; justify-content: center; padding: 16px 8px 12px; gap: 8px; }
+.nav-collapsed .nav-toggle { margin: 0; position: static; background: rgba(255,255,255,0.07); }
+.nav-collapsed .nav-toggle svg { transform: rotate(180deg); }
+.nav-collapsed .nav a { justify-content: center; padding: 9px; }
+.nav-collapsed .nav-divider { margin: 8px 14px; }
+.nav-collapsed .nav-badge {
+  position: absolute; top: 3px; inset-inline-end: 3px;
+  min-width: 8px; height: 8px; padding: 0; font-size: 0; border-radius: 50%;
+}
+.nav-collapsed .side-foot { display: flex; justify-content: center; padding: 12px 8px; }
+.nav-collapsed .userchip { gap: 0; }
 
 .side-foot { margin-top: auto; padding: 12px; border-top: 1px solid rgba(255, 255, 255, 0.12); }
 .side-foot .userchip .who b { color: #ffffff; }
