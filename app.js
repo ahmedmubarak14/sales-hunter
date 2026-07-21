@@ -162,6 +162,8 @@
   var ICONS = {
     pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
     chevronLeft: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 18l-6-6 6-6"/></svg>',
+    ban: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg>',
     dash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
     leads: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="3.5" cy="18" r="1.4" fill="currentColor" stroke="none"/></svg>',
     plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>',
@@ -1384,38 +1386,51 @@
       LS.set('userOverrides', over);
     }
 
-    var editingId = null;
+    var editingId = null, page = 1, PER = 10, query = '';
+    var ROLE_OPTS = ['emp', 'mgr', 'fin'];
 
-    function render() {
-      var users = usersAll();
-      var rows = users.map(function (u) {
+    function roleBadge(r) { return '<span class="role-badge ' + r + '">' + roleName(r) + '</span>'; }
+
+    function secOptions(primary, current) {
+      return [''].concat(ROLE_OPTS.filter(function (r) { return r !== primary; })).map(function (r) {
+        return '<option value="' + r + '"' + ((current || '') === r ? ' selected' : '') + '>' + (r ? roleName(r) : t('noneOpt')) + '</option>';
+      }).join('');
+    }
+
+    function render(focusSearch) {
+      var all = usersAll();
+      var q = query.trim().toLowerCase();
+      var filtered = q ? all.filter(function (u) {
+        return (u.name + ' ' + (u.email || '') + ' ' + (u.dept || '')).toLowerCase().indexOf(q) >= 0;
+      }) : all;
+      var totalPages = Math.max(1, Math.ceil(filtered.length / PER));
+      if (page > totalPages) page = totalPages;
+      var pageUsers = filtered.slice((page - 1) * PER, page * PER);
+
+      var rows = pageUsers.map(function (u) {
         var isSelf = u.id === user.id;
         return '<tr>' +
-          '<td><b>' + esc(u.name) + (isSelf ? ' · ' + t('you') : '') + '</b><span class="cell-sub">' + esc(u.title || '') + '</span></td>' +
-          '<td>' + esc(trDept(u.dept) || '—') + '</td>' +
-          '<td>' + esc(u.email || '—') + '</td>' +
-          '<td>' + (isSelf
-            ? '<span class="cat-chip">' + roleName(u.role) + '</span>'
-            : '<select class="status-select role-select" data-user="' + esc(u.id) + '">' +
-                ['emp', 'mgr', 'fin'].map(function (r) {
-                  return '<option value="' + r + '"' + (r === u.role ? ' selected' : '') + '>' + roleName(r) + '</option>';
-                }).join('') + '</select>') + '</td>' +
-          '<td><select class="status-select sec-select" data-user="' + esc(u.id) + '">' +
-            [''].concat(['emp', 'mgr', 'fin'].filter(function (r) { return r !== u.role; })).map(function (r) {
-              return '<option value="' + r + '"' + ((u.secondaryRole || '') === r ? ' selected' : '') + '>' + (r ? roleName(r) : t('noneOpt')) + '</option>';
-            }).join('') + '</select></td>' +
+          '<td><div class="u-cell"><span class="avatar u-av">' + esc(initials(u.name)) + '</span>' +
+            '<div class="u-meta"><b>' + esc(u.name) + (isSelf ? ' · ' + t('you') : '') + '</b>' +
+            '<span class="cell-sub">' + esc(u.email || '—') + '</span></div></div></td>' +
           '<td>' + (u.active
-            ? '<span class="status-chip paid">' + t('active') + '</span>'
-            : '<span class="status-chip pending">' + t('disabled') + '</span>') + '</td>' +
-          '<td style="white-space:nowrap"><button class="ghost-btn edit-user" data-user="' + esc(u.id) + '">' + t('editBtn') + '</button> ' +
-            (isSelf ? '' : '<button class="ghost-btn toggle-active" data-user="' + esc(u.id) + '">' + (u.active ? t('disable') : t('enable')) + '</button>') + '</td>' +
+            ? '<span class="dot-badge active"><i></i>' + t('active') + '</span>'
+            : '<span class="dot-badge off"><i></i>' + t('disabled') + '</span>') + '</td>' +
+          '<td>' + esc(trDept(u.dept) || '—') + '</td>' +
+          '<td>' + roleBadge(u.role) + (u.secondaryRole ? ' ' + roleBadge(u.secondaryRole) : '') + '</td>' +
+          '<td style="white-space:nowrap; text-align:end">' +
+            '<button class="tbl-icon edit-user" data-user="' + esc(u.id) + '" title="' + t('editBtn') + '" aria-label="' + t('editBtn') + '">' + ICONS.pencil + '</button>' +
+            (isSelf ? '' : '<button class="tbl-icon toggle-active" data-user="' + esc(u.id) + '" title="' + (u.active ? t('disable') : t('enable')) + '" aria-label="' + (u.active ? t('disable') : t('enable')) + '">' + (u.active ? ICONS.ban : ICONS.check) + '</button>') +
+          '</td>' +
         '</tr>';
       }).join('');
 
       content.innerHTML =
         '<div class="filter-row">' +
-          '<div><h2>' + t('teamTitle') + '</h2><p class="sub">' + t('teamSub', { n: users.filter(function (u) { return u.active; }).length }) + '</p></div>' +
+          '<div style="display:flex; align-items:center; gap:10px"><h2>' + t('teamTitle') + '</h2>' +
+            '<span class="count-badge">' + t('usersCount', { n: all.length }) + '</span></div>' +
           '<div class="spacer"></div>' +
+          '<input type="search" id="tbl-search" class="tbl-search" placeholder="' + t('searchUsers') + '" value="' + esc(query) + '">' +
           '<button class="btn" id="add-user-btn">' + t('addUser') + '</button>' +
         '</div>' +
         '<div class="card" id="add-user-card" hidden>' +
@@ -1429,6 +1444,7 @@
               '<div><label class="f-label" for="nu-role">' + t('role') + '</label><select id="nu-role">' +
                 '<option value="emp">' + t('roleHunter') + '</option><option value="mgr">' + t('roleMgmt') + '</option><option value="fin">' + t('roleFin') + '</option>' +
               '</select><p class="f-hint">' + t('ssoHint') + '</p></div>' +
+              '<div><label class="f-label" for="nu-sec">' + t('extraAccess') + '</label><select id="nu-sec">' + secOptions('emp', '') + '</select></div>' +
             '</div>' +
             '<div style="margin-top:14px; display:flex; gap:10px">' +
               '<button type="submit" class="btn">' + t('createUser') + '</button>' +
@@ -1438,12 +1454,31 @@
         '</div>' +
         '<section class="card">' +
           '<div class="tbl-wrap"><table>' +
-            '<thead><tr><th>' + t('user') + '</th><th>' + t('department') + '</th><th>' + t('contactEmail') + '</th><th>' + t('role').replace(' *', '') + '</th><th>' + t('extraAccess') + '</th><th>' + t('status') + '</th><th></th></tr></thead>' +
-            '<tbody>' + rows + '</tbody>' +
+            '<thead><tr><th>' + t('user') + '</th><th>' + t('status') + '</th><th>' + t('department') + '</th><th>' + t('accessCol') + '</th><th></th></tr></thead>' +
+            '<tbody>' + (rows || '<tr><td colspan="5"><div class="empty">' + t('noneFound') + '</div></td></tr>') + '</tbody>' +
           '</table></div>' +
+          '<div class="pager">' +
+            '<span class="sub">' + t('pageOf', { p: page, n: totalPages }) + '</span>' +
+            '<div style="display:flex; gap:8px">' +
+              '<button class="btn secondary" id="pg-prev"' + (page <= 1 ? ' disabled' : '') + '>' + t('prev') + '</button>' +
+              '<button class="btn secondary" id="pg-next"' + (page >= totalPages ? ' disabled' : '') + '>' + t('next') + '</button>' +
+            '</div>' +
+          '</div>' +
         '</section>' +
         '<p class="sub" style="text-align:center">' + t('teamNote') + '</p>';
 
+      var searchEl = document.getElementById('tbl-search');
+      searchEl.addEventListener('input', function () { query = this.value; page = 1; render(true); });
+      if (focusSearch) { searchEl.focus(); searchEl.setSelectionRange(searchEl.value.length, searchEl.value.length); }
+      document.getElementById('pg-prev').addEventListener('click', function () { if (page > 1) { page--; render(); } });
+      document.getElementById('pg-next').addEventListener('click', function () { if (page < totalPages) { page++; render(); } });
+
+      function syncSec() {
+        var primary = document.getElementById('nu-role').value;
+        var sec = document.getElementById('nu-sec');
+        var cur = sec.value;
+        sec.innerHTML = secOptions(primary, cur === primary ? '' : cur);
+      }
       function openForm(u) {
         editingId = u ? u.id : null;
         document.getElementById('au-title').textContent = u ? t('editUserTitle', { name: u.name }) : t('addUserTitle');
@@ -1454,9 +1489,11 @@
         document.getElementById('nu-title').value = u ? u.title : '';
         document.getElementById('nu-role').value = u ? u.role : 'emp';
         document.getElementById('nu-role').disabled = !!(u && u.id === user.id);
+        document.getElementById('nu-sec').innerHTML = secOptions(u ? u.role : 'emp', u ? u.secondaryRole : '');
         document.getElementById('add-user-card').hidden = false;
         document.getElementById('nu-name').focus();
       }
+      document.getElementById('nu-role').addEventListener('change', syncSec);
       document.getElementById('add-user-btn').addEventListener('click', function () { openForm(null); });
       document.getElementById('add-user-cancel').addEventListener('click', function () {
         document.getElementById('add-user-card').hidden = true;
@@ -1468,6 +1505,8 @@
         var email = document.getElementById('nu-email').value.trim();
         if (!name || !email) return;
         var nuRole = document.getElementById('nu-role').value;
+        var nuSec = document.getElementById('nu-sec').value || null;
+        if (nuSec === nuRole) nuSec = null;
         var nu = {
           name: name, email: email,
           dept: document.getElementById('nu-dept').value.trim() || 'General',
@@ -1475,7 +1514,7 @@
           role: nuRole
         };
         if (editingId) {
-          var patch = { name: nu.name, dept: nu.dept, title: nu.title };
+          var patch = { name: nu.name, dept: nu.dept, title: nu.title, secondaryRole: nuSec };
           if (!document.getElementById('nu-role').disabled) patch.role = nuRole;
           if (window.LIVE) {
             SH_API.patchUser(editingId, patch).then(function () {
@@ -1490,13 +1529,15 @@
           return;
         }
         if (window.LIVE) {
-          SH_API.addUser(nu).then(function () {
+          SH_API.addUser(nu).then(function (created) {
+            if (nuSec && created) return SH_API.patchUser(created.email, { secondaryRole: nuSec });
+          }).then(function () {
             toast(t('userAddedToast', { name: name })); render();
           }).catch(function (e2) { toast(String(e2.message)); });
           return;
         }
         var custom = LS.get('users', []);
-        custom.push(Object.assign({ id: 'u' + (100 + custom.length), code: String(8681849300 + custom.length) }, nu));
+        custom.push(Object.assign({ id: 'u' + (100 + custom.length), code: String(8681849300 + custom.length), secondaryRole: nuSec }, nu));
         LS.set('users', custom);
         audit('Added user ' + name + ' (' + roleName(nuRole) + ')');
         toast(t('userAddedToast', { name: name }));
@@ -1506,37 +1547,6 @@
         btn.addEventListener('click', function () {
           var u = usersAll().find(function (x) { return x.id === btn.getAttribute('data-user'); });
           if (u) openForm(u);
-        });
-      });
-      content.querySelectorAll('.sec-select').forEach(function (sel) {
-        sel.addEventListener('change', function () {
-          var id = sel.getAttribute('data-user');
-          var val = sel.value || null;
-          if (window.LIVE) {
-            SH_API.patchUser(id, { secondaryRole: val }).then(function () {
-              toast(t('accessUpdated')); render();
-            }).catch(function (e2) { toast(String(e2.message)); render(); });
-            return;
-          }
-          saveOverride(id, { secondaryRole: val });
-          audit('Set extra access of ' + id + ' to ' + (val ? roleName(val) : 'none'));
-          toast(t('accessUpdated'));
-          render();
-        });
-      });
-      content.querySelectorAll('.role-select').forEach(function (sel) {
-        sel.addEventListener('change', function () {
-          var u = usersAll().find(function (x) { return x.id === sel.getAttribute('data-user'); });
-          if (window.LIVE) {
-            SH_API.patchUser(sel.getAttribute('data-user'), { role: sel.value }).then(function () {
-              toast(t('roleUpdated', { role: roleName(sel.value) })); render();
-            }).catch(function (e2) { toast(String(e2.message)); render(); });
-            return;
-          }
-          saveOverride(sel.getAttribute('data-user'), { role: sel.value });
-          audit('Changed role of ' + (u ? u.name : sel.getAttribute('data-user')) + ' to ' + roleName(sel.value));
-          toast(t('roleUpdated', { role: roleName(sel.value) }));
-          render();
         });
       });
       content.querySelectorAll('.toggle-active').forEach(function (btn) {
