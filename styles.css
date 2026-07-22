@@ -313,23 +313,6 @@ button { font: inherit; cursor: pointer; }
 }
 .pager { display: flex; align-items: center; justify-content: space-between; padding: 12px 2px 2px; }
 .pager .btn { padding: 6px 14px; }
-/* Integrations page */
-.intg-card { margin-bottom: 16px; }
-.intg-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-.intg-title { display: flex; align-items: center; gap: 12px; }
-.intg-logo {
-  width: 40px; height: 40px; flex: none; border-radius: 10px;
-  display: inline-flex; align-items: center; justify-content: center;
-  font-weight: 800; font-size: 18px; color: #fff;
-}
-.intg-logo.hs { background: #ff7a59; }
-.intg-logo.mb { background: #509ee3; }
-.intg-body { display: flex; flex-direction: column; gap: 14px; }
-.intg-actions {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding-top: 14px; border-top: 1px solid var(--hairline); flex-wrap: wrap;
-}
-
 /* Hunter drawer — polished slide-over */
 .hunter-drawer { padding: 0; position: relative; }
 .hd-close { position: absolute; top: 16px; inset-inline-end: 16px; z-index: 1; }
