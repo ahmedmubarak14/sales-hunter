@@ -17,7 +17,6 @@ type HSSettings = {
   hunter_prop?: string;
   amount_prop?: string;
   close_date_prop?: string;
-  owner_prop?: string;
   lost_reason_prop?: string;
   unqualified_reason_prop?: string;
   extra_properties?: string[];
@@ -48,24 +47,6 @@ async function fetchStageLabels(token: string): Promise<Record<string, Record<st
     map[p.id] = {};
     for (const s of p.stages ?? []) map[p.id][s.id] = s.label;
   }
-  return map;
-}
-
-async function fetchOwnerNames(token: string): Promise<Record<string, string>> {
-  const map: Record<string, string> = {};
-  let after: string | undefined;
-  do {
-    const url = new URL("https://api.hubapi.com/crm/v3/owners");
-    url.searchParams.set("limit", "200");
-    if (after) url.searchParams.set("after", after);
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) break;
-    const body = await res.json();
-    for (const o of body.results ?? []) {
-      map[o.id] = [o.firstName, o.lastName].filter(Boolean).join(" ") || o.email;
-    }
-    after = body.paging?.next?.after;
-  } while (after);
   return map;
 }
 
@@ -113,7 +94,6 @@ Deno.serve(async () => {
     const hunterProp = settings.hunter_prop || "hunter_email";
     const amountProp = settings.amount_prop || "amount";
     const closeProp = settings.close_date_prop || "closedate";
-    const ownerProp = settings.owner_prop || "";
     const lostProp = settings.lost_reason_prop || "";
     const unqualProp = settings.unqualified_reason_prop || "";
     const extraProps = settings.extra_properties ?? [];
@@ -121,7 +101,6 @@ Deno.serve(async () => {
     const properties = Array.from(new Set([
       "dealname", "dealstage", "pipeline", "hs_lastmodifieddate", "createdate", "closedate",
       hunterProp, amountProp, closeProp,
-      ...(ownerProp ? [ownerProp] : []),
       ...(lostProp ? [lostProp] : []),
       ...(unqualProp ? [unqualProp] : []),
       ...extraProps,
@@ -134,12 +113,13 @@ Deno.serve(async () => {
       ? await fetchModifiedDeals(conn.token, settings, properties, bookmark)
       : mockDeals(hunterProp);
     const stageLabels = conn.configured ? await fetchStageLabels(conn.token) : {};
-    const ownerNames = conn.configured && ownerProp ? await fetchOwnerNames(conn.token) : {};
 
-    // Metabase is the source of truth for amount/owner once a deal has a
-    // real invoiced purchase — don't let this HubSpot poll (which only
-    // sees the deal's quoted amount and a raw, unresolved owner ID) stomp
-    // back over what sync-metabase already corrected.
+    // Metabase is the source of truth for amount once a deal has a real
+    // invoiced purchase — don't let this HubSpot poll (which only sees
+    // the deal's quoted amount) stomp back over what sync-metabase
+    // already corrected. Owner names are entirely sync-metabase's job
+    // now (the HubSpot token isn't scoped for crm.objects.owners.read,
+    // so this sync never had a real name to offer anyway).
     const { data: subRows } = await supabase.from("subscriptions").select("hubspot_deal_id");
     const metabaseOwned = new Set((subRows ?? []).map((r) => r.hubspot_deal_id));
 
@@ -165,7 +145,6 @@ Deno.serve(async () => {
       };
       if (!metabaseOwned.has(d.id)) {
         patch.amount_net = p[amountProp] != null ? Number(p[amountProp]) : null;
-        patch.sales_owner = ownerProp ? (ownerNames[p[ownerProp]] ?? p[ownerProp] ?? null) : null;
       }
 
       await supabase.from("deals").upsert(patch);

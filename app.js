@@ -1930,7 +1930,6 @@
               fieldRow('hs-prop', t('intgHunterProp'), hsS.hunter_prop || '', 'lead_by__zidder_email_') +
               fieldRow('hs-amount', t('intgAmountProp'), hsS.amount_prop || '', 'amount_without_vat') +
               fieldRow('hs-close', t('intgCloseProp'), hsS.close_date_prop || '', 'closedate') +
-              fieldRow('hs-owner', t('intgOwnerProp'), hsS.owner_prop || '', 'hubspot_owner_id') +
               fieldRow('hs-lost', t('intgLostProp'), hsS.lost_reason_prop || '', 'closed_lost_reasons') +
               fieldRow('hs-unqual', t('intgUnqualProp'), hsS.unqualified_reason_prop || '', 'unqualified_reason__asbab_dm_altahl') +
             '</div>' +
@@ -1997,7 +1996,6 @@
           target_type: document.getElementById('hs-target').value.trim(),
           amount_prop: document.getElementById('hs-amount').value.trim(),
           close_date_prop: document.getElementById('hs-close').value.trim(),
-          owner_prop: document.getElementById('hs-owner').value.trim(),
           lost_reason_prop: document.getElementById('hs-lost').value.trim(),
           unqualified_reason_prop: document.getElementById('hs-unqual').value.trim(),
           extra_properties: (document.getElementById('hs-extra-props').value || '').split(',').filter(Boolean)
