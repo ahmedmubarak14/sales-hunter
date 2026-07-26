@@ -990,3 +990,8 @@ fieldset { border: none; margin: 0; padding: 0; }
    with the plus sign on the wrong end. */
 [dir="rtl"] td, [dir="rtl"] .cell-sub, [dir="rtl"] .hd-kv dd,
 [dir="rtl"] .ps-stats dd, [dir="rtl"] .d-kv dd, [dir="rtl"] .u-meta { unicode-bidi: plaintext; }
+
+/* Searchable pipeline picker: fixed height, scrolls (up to 47 items) */
+.pipeline-grid { max-height: 280px; overflow-y: auto; border: 1px solid var(--hairline); border-radius: 10px; padding: 6px; }
+.pipeline-grid .pipeline-chk { border: none; border-radius: 6px; padding: 7px 8px; }
+.pipeline-grid .pipeline-chk:has(input:checked) { background: var(--brand-soft); border: none; }

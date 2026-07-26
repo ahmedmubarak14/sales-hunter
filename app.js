@@ -1733,23 +1733,33 @@
 
   /* ---- Management backoffice: program settings + audit log ---- */
   /* ---- Management: self-service integrations (HubSpot / Metabase) ---- */
-  /* HubSpot pipelines worth offering by default — the ones actually in
-     play for the referral program plus the handful of adjacent ones
-     you're most likely to also want deals from. Anything else can be
-     added by ID via the "other pipelines" chip list below. */
-  var HS_KNOWN_PIPELINES = [
-    { id: '39948135', label: 'Sales Pipeline' },
-    { id: '39707223', label: 'Nurturing' },
-    { id: '897552273', label: 'Pre-Sales' },
-    { id: '78432319', label: 'Growth Pipeline' },
-    { id: '26669937', label: 'PLG' },
-    { id: '4104812', label: 'Enterprise Pipeline' }
-  ];
-  /* Commonly-useful deal properties, offered as a starting point for
-     "extra properties to sync" — management can add any others by name. */
-  var HS_SUGGESTED_PROPS = [
-    'amount_without_vat', 'closedate', 'hubspot_owner_id', 'closed_lost_reason',
-    'dealtype', 'hs_analytics_source', 'dealname', 'createdate'
+  /* Every pipeline in the connected HubSpot portal (id + real name),
+     pulled live from the account. Nothing here is pre-selected for
+     you — pick whichever pipelines your deals actually live in. */
+  var HS_ALL_PIPELINES = [
+    { id: '4104812', label: 'Enterprise Pipeline' }, { id: '12664947', label: "NGO's Pipeline" },
+    { id: '20116133', label: 'ZidPOS Pipeline' }, { id: '77452599', label: 'Pre-Sales 2025' },
+    { id: '891587615', label: 'SDR - Whatsapp Qualification' }, { id: '897552273', label: 'Pre-Sales' },
+    { id: '78432319', label: 'Growth Pipeline' }, { id: '113684560', label: 'Enterprise Pipeline Revamp' },
+    { id: '26669937', label: 'PLG' }, { id: '653632624', label: 'ZidHub  Deals Pipeline' },
+    { id: '672915820', label: 'Financing' }, { id: '686408229', label: 'MR Mazeed Packages' },
+    { id: '39948135', label: 'Sales Pipeline' }, { id: '686111358', label: 'Mazeed Package Pipeline' },
+    { id: '820236450', label: 'GCC- Oman' }, { id: '820236454', label: 'GCC- Kuwait' },
+    { id: '831963487', label: 'GCC - UAE' }, { id: '833718609', label: 'Zammit' },
+    { id: '888536756', label: 'GCC' }, { id: '894816055', label: 'Western Region' },
+    { id: '895151464', label: 'Syria Pipeline' }, { id: '39707223', label: 'Nurturing' },
+    { id: '699701572', label: 'ZAD(NGO) Pipeline' }, { id: '705217563', label: 'Up/Cross-selling' },
+    { id: '44886956', label: 'Sales Ops Data' }, { id: '726721931', label: 'DEALS TEST' },
+    { id: '45594763', label: 'Potential Spam Deals' }, { id: '748832880', label: 'POS 2025 Deals' },
+    { id: '47634448', label: 'D50' }, { id: '753706630', label: 'Wanted Stores - Pipeline' },
+    { id: '49585481', label: 'Sales Affiliate Pipeline' }, { id: '52441191', label: 'Renewals (Temporary)' },
+    { id: '779938187', label: 'Growth Services 2025' }, { id: '813044005', label: 'Samara Event Deals' },
+    { id: '53471929', label: 'Renewal / Cross Selling' }, { id: '59564674', label: 'Special Projects' },
+    { id: '60753172', label: 'External Data - Western Region' }, { id: '62384003', label: 'External Data (Marketing leads)' },
+    { id: '65306130', label: 'ZidPos - Resellers' }, { id: '836000575', label: 'Rising Stars - High Touch Deals' },
+    { id: '65412645', label: 'Archive' }, { id: '876728344', label: 'Elite Pipeline' },
+    { id: '894137123', label: 'Zammit Sales Renewal' }, { id: '894137124', label: 'Zammit Renewal' },
+    { id: '907190433', label: 'PLG 2026' }, { id: '920783183', label: 'WinBack' }
   ];
 
   /* Small reusable chip/tag input: add via Enter or comma, remove via ×
@@ -1826,11 +1836,24 @@
     function render() {
       var hs = cfg.hubspot, mb = cfg.metabase;
       var hsS = (hs && hs.settings) || {}, mbS = (mb && mb.settings) || {};
-      var selectedPipelines = hsS.pipelines || ['39948135', '39707223'];
-      var otherPipelines = selectedPipelines.filter(function (id) {
-        return !HS_KNOWN_PIPELINES.some(function (p) { return p.id === id; });
-      });
-      var extraProps = (hsS.extra_properties && hsS.extra_properties.length) ? hsS.extra_properties : HS_SUGGESTED_PROPS;
+      // Nothing pre-selected — an unconfigured integration starts empty
+      // and you choose every pipeline and property yourself.
+      var selectedPipelines = hsS.pipelines || [];
+      var extraProps = hsS.extra_properties || [];
+      var pipelineQuery = '';
+
+      function pipelineListHtml(q) {
+        q = (q || '').trim().toLowerCase();
+        var items = HS_ALL_PIPELINES.filter(function (p) {
+          return !q || p.label.toLowerCase().indexOf(q) >= 0 || p.id.indexOf(q) >= 0;
+        });
+        if (!items.length) return '<p class="f-hint" style="padding:10px">' + t('intgNoPipelineMatch') + '</p>';
+        return items.map(function (p) {
+          var checked = selectedPipelines.indexOf(p.id) >= 0;
+          return '<label class="pipeline-chk"><input type="checkbox" class="hs-pipeline-cb" value="' + p.id + '"' + (checked ? ' checked' : '') + '>' +
+            '<span>' + esc(p.label) + '</span><span class="cell-sub">' + p.id + '</span></label>';
+        }).join('');
+      }
 
       content.innerHTML =
         '<div class="filter-row"><div><h2>' + t('navIntegrations') + '</h2>' +
@@ -1848,25 +1871,19 @@
 
             '<h4 class="intg-sub-h">' + t('intgSecPipelines') + '</h4>' +
             '<p class="f-hint" style="margin-bottom:8px">' + t('intgPipelinesHint') + '</p>' +
-            '<div class="pipeline-grid">' +
-              HS_KNOWN_PIPELINES.map(function (p) {
-                var checked = selectedPipelines.indexOf(p.id) >= 0;
-                return '<label class="pipeline-chk"><input type="checkbox" class="hs-pipeline-cb" value="' + p.id + '"' + (checked ? ' checked' : '') + '>' +
-                  '<span>' + esc(p.label) + '</span><span class="cell-sub">' + p.id + '</span></label>';
-              }).join('') +
-            '</div>' +
-            '<div style="margin-top:10px"><label class="f-label" for="hs-other-pipelines">' + t('intgOtherPipelines') + '</label>' +
-              chipInput('hs-other-pipelines', otherPipelines, t('intgPipelineIdPh')) +
-              '<p class="f-hint">' + t('intgOtherPipelinesHint') + '</p></div>' +
+            '<input type="search" id="hs-pipeline-search" class="tbl-search" style="width:100%; margin-bottom:8px" placeholder="' + t('intgPipelineSearchPh') + '">' +
+            '<div class="pipeline-grid" id="hs-pipeline-list">' + pipelineListHtml('') + '</div>' +
+            '<p class="f-hint" id="hs-pipeline-count" style="margin-top:6px">' + t('intgPipelinesSelected', { n: selectedPipelines.length }) + '</p>' +
 
             '<h4 class="intg-sub-h">' + t('intgSecFields') + '</h4>' +
+            '<p class="f-hint" style="margin-bottom:8px">' + t('intgFieldsHint') + '</p>' +
             '<div class="form-grid">' +
-              fieldRow('hs-target', t('intgTargetType'), hsS.target_type || 'Sales Hunter', 'Sales Hunter', 'text', t('intgTargetTypeHint')) +
-              fieldRow('hs-prop', t('intgHunterProp'), hsS.hunter_prop || 'lead_by__zidder_email_', 'lead_by__zidder_email_') +
-              fieldRow('hs-amount', t('intgAmountProp'), hsS.amount_prop || 'amount_without_vat', 'amount_without_vat') +
-              fieldRow('hs-close', t('intgCloseProp'), hsS.close_date_prop || 'closedate', 'closedate') +
-              fieldRow('hs-owner', t('intgOwnerProp'), hsS.owner_prop || 'hubspot_owner_id', 'hubspot_owner_id') +
-              fieldRow('hs-lost', t('intgLostProp'), hsS.lost_reason_prop || 'closed_lost_reason', 'closed_lost_reason') +
+              fieldRow('hs-target', t('intgTargetType'), hsS.target_type || '', 'Sales Hunter', 'text', t('intgTargetTypeHint')) +
+              fieldRow('hs-prop', t('intgHunterProp'), hsS.hunter_prop || '', 'lead_by__zidder_email_') +
+              fieldRow('hs-amount', t('intgAmountProp'), hsS.amount_prop || '', 'amount_without_vat') +
+              fieldRow('hs-close', t('intgCloseProp'), hsS.close_date_prop || '', 'closedate') +
+              fieldRow('hs-owner', t('intgOwnerProp'), hsS.owner_prop || '', 'hubspot_owner_id') +
+              fieldRow('hs-lost', t('intgLostProp'), hsS.lost_reason_prop || '', 'closed_lost_reason') +
             '</div>' +
 
             '<div style="margin-top:14px"><label class="f-label" for="hs-extra-props">' + t('intgExtraProps') + '</label>' +
@@ -1895,17 +1912,38 @@
         '</section>' +
         '<p class="sub" style="text-align:center">' + t('intgSecurityNote') + '</p>';
 
-      wireChipInput('hs-other-pipelines');
       wireChipInput('hs-extra-props');
+
+      // Selection survives search filtering (re-rendering the list on
+      // every keystroke would otherwise drop unchecked-off-screen picks).
+      var selectedSet = {};
+      selectedPipelines.forEach(function (id) { selectedSet[id] = true; });
+      var pipelineList = document.getElementById('hs-pipeline-list');
+      var pipelineCount = document.getElementById('hs-pipeline-count');
+      function refreshCount() {
+        pipelineCount.textContent = t('intgPipelinesSelected', { n: Object.keys(selectedSet).filter(function (k) { return selectedSet[k]; }).length });
+      }
+      pipelineList.addEventListener('change', function (e) {
+        if (!e.target.classList.contains('hs-pipeline-cb')) return;
+        selectedSet[e.target.value] = e.target.checked;
+        refreshCount();
+      });
+      document.getElementById('hs-pipeline-search').addEventListener('input', function () {
+        var q = this.value;
+        pipelineList.innerHTML = HS_ALL_PIPELINES.filter(function (p) {
+          var ql = q.trim().toLowerCase();
+          return !ql || p.label.toLowerCase().indexOf(ql) >= 0 || p.id.indexOf(ql) >= 0;
+        }).map(function (p) {
+          return '<label class="pipeline-chk"><input type="checkbox" class="hs-pipeline-cb" value="' + p.id + '"' + (selectedSet[p.id] ? ' checked' : '') + '>' +
+            '<span>' + esc(p.label) + '</span><span class="cell-sub">' + p.id + '</span></label>';
+        }).join('') || '<p class="f-hint" style="padding:10px">' + t('intgNoPipelineMatch') + '</p>';
+      });
 
       document.getElementById('hs-form').addEventListener('submit', function (e) {
         e.preventDefault();
-        var picked = Array.prototype.map.call(
-          content.querySelectorAll('.hs-pipeline-cb:checked'), function (cb) { return cb.value; }
-        );
-        var other = (document.getElementById('hs-other-pipelines').value || '').split(',').filter(Boolean);
+        var picked = Object.keys(selectedSet).filter(function (k) { return selectedSet[k]; });
         save('hubspot', {
-          pipelines: picked.concat(other),
+          pipelines: picked,
           hunter_prop: document.getElementById('hs-prop').value.trim(),
           target_type: document.getElementById('hs-target').value.trim(),
           amount_prop: document.getElementById('hs-amount').value.trim(),
