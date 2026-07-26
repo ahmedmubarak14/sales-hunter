@@ -178,6 +178,7 @@
     chevronLeft: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 18l-6-6 6-6"/></svg>',
     ban: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>',
     camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.2l1.1-1.8A1 1 0 0 1 8.7 4.7h6.6a1 1 0 0 1 .9.5L17.3 7h2.2A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-9Z"/><circle cx="12" cy="12.8" r="3.3"/></svg>',
+    menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
     refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 4v4.5h-4.5"/></svg>',
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg>',
     dash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
@@ -608,6 +609,9 @@
       '</div>' +
     '</div>');
     document.body.appendChild(root);
+    var obRelease = trapOverlay(root.querySelector('.ob-modal'), function () {}, false);
+    var obRemove = root.remove.bind(root);
+    root.remove = function () { obRelease(); obRemove(); };
 
     wireBankOther('ob-bank');
     wireFileDrop('ob-cert');
@@ -677,6 +681,7 @@
         '<aside class="sidebar">' +
           '<div class="brand">' + SH_MARK + '<div class="brand-txt"><b>' + t('appName') + '</b><small>' + t('byZid') + '</small></div>' +
             '<button class="nav-toggle" id="nav-toggle" aria-label="' + t('collapseNav') + '" title="' + t('collapseNav') + '">' + ICONS.chevronLeft + '</button>' +
+            '<button class="mobile-menu-btn" id="mobile-menu" aria-label="' + t('menu') + '" aria-expanded="false">' + ICONS.menu + '</button>' +
           '</div>' +
           '<nav class="nav">' + nav + '</nav>' +
           '<div class="side-foot">' +
@@ -714,6 +719,20 @@
     updateFreshness();
     document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
     document.getElementById('lang-toggle').addEventListener('click', function () { setLang(isAr() ? 'en' : 'ar'); route(); });
+    var mm = document.getElementById('mobile-menu');
+    if (mm) mm.addEventListener('click', function () {
+      var shell = app.querySelector('.shell');
+      var open = !shell.classList.contains('nav-open');
+      shell.classList.toggle('nav-open', open);
+      this.setAttribute('aria-expanded', String(open));
+    });
+    // picking a destination closes the mobile menu
+    app.querySelectorAll('.nav a').forEach(function (a) {
+      a.addEventListener('click', function () {
+        var shell = app.querySelector('.shell');
+        if (shell) shell.classList.remove('nav-open');
+      });
+    });
     document.getElementById('nav-toggle').addEventListener('click', function () {
       var shell = app.querySelector('.shell');
       var now = !shell.classList.contains('nav-collapsed');
@@ -745,6 +764,34 @@
 
   function trFunnel(rows) {
     return rows.map(function (f) { return { stage: trStage(f.stage), count: f.count }; });
+  }
+
+  /* Keep keyboard focus inside an overlay while it's open, and route
+     Escape to its close action. Returns a teardown function.
+     `closable: false` (the blocking onboarding modal) traps Tab but
+     ignores Escape. */
+  var FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  function trapOverlay(root, onClose, closable) {
+    var prev = document.activeElement;
+    function visible(el) { return el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement; }
+    function items() { return Array.prototype.filter.call(root.querySelectorAll(FOCUSABLE), visible); }
+    function onKey(e) {
+      if (e.key === 'Escape' && closable !== false) { e.preventDefault(); onClose(); return; }
+      if (e.key !== 'Tab') return;
+      var f = items();
+      if (!f.length) return;
+      var first = f[0], last = f[f.length - 1];
+      if (!root.contains(document.activeElement)) { e.preventDefault(); first.focus(); return; }
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+    document.addEventListener('keydown', onKey, true);
+    var f0 = items()[0];
+    if (f0) f0.focus();
+    return function release() {
+      document.removeEventListener('keydown', onKey, true);
+      if (prev && prev.focus && document.contains(prev)) prev.focus();
+    };
   }
 
   /* First-run / zero-data state. Every hunter starts here, so it should
@@ -1076,11 +1123,10 @@
         '<ul class="timeline">' + timeline + '</ul>' +
       '</div></div>');
     document.body.appendChild(root);
-    function close() { root.remove(); document.removeEventListener('keydown', onKey); }
-    function onKey(e) { if (e.key === 'Escape') close(); }
+    var release = trapOverlay(root.querySelector('.drawer'), function () { close(); });
+    function close() { release(); root.remove(); }
     root.querySelector('.drawer-backdrop').addEventListener('click', close);
     root.querySelector('#drawer-close').addEventListener('click', close);
-    document.addEventListener('keydown', onKey);
   }
 
   /* ---- Submit lead (mirrors the real referral form) ---- */
@@ -1563,9 +1609,16 @@
         document.getElementById('nu-role-group').hidden = !!u;
         document.getElementById('nu-sec-group').hidden = !!u;
         document.getElementById('au-overlay').hidden = false;
+        if (auRelease) auRelease();
+        auRelease = trapOverlay(document.querySelector('.au-drawer'), closeForm);
         document.getElementById('nu-name').focus();
       }
-      function closeForm() { document.getElementById('au-overlay').hidden = true; editingId = null; }
+      var auRelease = null;
+      function closeForm() {
+        if (auRelease) { auRelease(); auRelease = null; }
+        document.getElementById('au-overlay').hidden = true;
+        editingId = null;
+      }
       document.getElementById('nu-role').addEventListener('change', syncSec);
       document.getElementById('add-user-btn').addEventListener('click', function () { openForm(null); });
       document.getElementById('add-user-cancel').addEventListener('click', closeForm);
@@ -2275,11 +2328,10 @@
         '</div>' +
       '</div></div>');
     document.body.appendChild(root);
-    function close() { root.remove(); document.removeEventListener('keydown', onKey); }
-    function onKey(e) { if (e.key === 'Escape') close(); }
+    var release = trapOverlay(root.querySelector('.drawer'), function () { close(); });
+    function close() { release(); root.remove(); }
     root.querySelector('.drawer-backdrop').addEventListener('click', close);
     root.querySelector('#drawer-close').addEventListener('click', close);
-    document.addEventListener('keydown', onKey);
     var dcv = root.querySelector('#drawer-cert-view');
     if (dcv) dcv.addEventListener('click', function () {
       SH_API.openIbanCert(drawerCert).catch(function (e2) { toast(String(e2.message)); });
