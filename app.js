@@ -173,6 +173,7 @@
     pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
     chevronLeft: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 18l-6-6 6-6"/></svg>',
     ban: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>',
+    camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.2l1.1-1.8A1 1 0 0 1 8.7 4.7h6.6a1 1 0 0 1 .9.5L17.3 7h2.2A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-9Z"/><circle cx="12" cy="12.8" r="3.3"/></svg>',
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg>',
     dash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
     leads: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="3.5" cy="18" r="1.4" fill="currentColor" stroke="none"/></svg>',
@@ -2484,9 +2485,24 @@
       (user.secondaryRole ? ' <span class="role-badge ' + user.secondaryRole + '">' + roleName(user.secondaryRole) + '</span>' : '');
     var st = statsFor(leadsOf(user.id));
     var owed = st.commissionPending + st.commissionApproved;
+    // photo controls are live-mode only (they need storage)
+    var canEditPhoto = !!window.LIVE;
+    var googleAvail = canEditPhoto && SH_API.googleAvatarAvailable();
+    var photoLinks = [];
+    if (canEditPhoto) {
+      if (user.avatar) photoLinks.push('<button type="button" class="linklike" id="av-remove">' + t('avRemove') + '</button>');
+      if (googleAvail && user.avatarSource !== 'google') photoLinks.push('<button type="button" class="linklike" id="av-google">' + t('avUseGoogle') + '</button>');
+    }
     var summary =
       '<aside class="card profile-summary">' +
-        avatarHtml(user, 'ps-avatar') +
+        '<div class="ps-photo">' +
+          avatarHtml(user, 'ps-avatar') +
+          (canEditPhoto
+            ? '<button type="button" class="ps-cam" id="av-pick" title="' + t('avChange') + '" aria-label="' + t('avChange') + '">' + ICONS.camera + '</button>' +
+              '<input type="file" id="av-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>'
+            : '') +
+        '</div>' +
+        (photoLinks.length ? '<p class="ps-photo-links">' + photoLinks.join('<span class="ps-sep">·</span>') + '</p>' : '') +
         '<h2>' + esc(user.name) + '</h2>' +
         '<p class="sub">' + esc(user.title || '') + (user.dept ? ' · ' + esc(trDept(user.dept)) : '') + '</p>' +
         '<div class="ps-badges">' + roleTag + '<span class="dot-badge active"><i></i>' + t('active') + '</span></div>' +
@@ -2526,6 +2542,28 @@
       '</div>';
 
     wireBankOther('p-bank');
+    if (canEditPhoto) {
+      var avFile = document.getElementById('av-file');
+      document.getElementById('av-pick').addEventListener('click', function () { avFile.click(); });
+      avFile.addEventListener('change', function () {
+        var f = this.files[0];
+        if (!f) return;
+        if (f.size > 2 * 1024 * 1024) { toast(t('avTooBig')); this.value = ''; return; }
+        toast(t('avUploading'));
+        SH_API.uploadAvatar(f).then(function () { toast(t('avUpdated')); route(); })
+          .catch(function (e2) { toast(String(e2.message)); });
+      });
+      var avRm = document.getElementById('av-remove');
+      if (avRm) avRm.addEventListener('click', function () {
+        SH_API.removeAvatar().then(function () { toast(t('avRemoved')); route(); })
+          .catch(function (e2) { toast(String(e2.message)); });
+      });
+      var avG = document.getElementById('av-google');
+      if (avG) avG.addEventListener('click', function () {
+        SH_API.useGoogleAvatar().then(function () { toast(t('avUpdated')); route(); })
+          .catch(function (e2) { toast(String(e2.message)); });
+      });
+    }
     if (window.LIVE && document.getElementById('p-cert')) wireFileDrop('p-cert');
     var editBtn = document.getElementById('iban-edit');
     if (editBtn) editBtn.addEventListener('click', function () {

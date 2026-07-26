@@ -193,6 +193,7 @@ window.SH_API = (function () {
       secondaryRole: u.secondary_role ? fromDbRole(u.secondary_role) : null,
       active: u.active !== false,
       avatar: u.avatar_url || null,
+      avatarSource: u.avatar_source || 'google',
       aliases: (u.email_aliases || []).map(function (a) { return String(a).toLowerCase(); }),
       weight: 0
     };
@@ -220,8 +221,9 @@ window.SH_API = (function () {
     if (!me) {
       throw new Error('NO_APP_USER'); // signed in, but not in app_users → management must add them
     }
-    // Sync the Google profile photo to this user's row when it changes.
-    if (s.avatar && me.avatar !== s.avatar) {
+    // Sync the Google profile photo — but never override a photo the
+    // user uploaded or deliberately removed (avatarSource !== 'google').
+    if (s.avatar && me.avatarSource === 'google' && me.avatar !== s.avatar) {
       me.avatar = s.avatar;
       req('/rest/v1/rpc/set_avatar', { method: 'POST', body: { p_url: s.avatar } }).catch(function () {});
     }
@@ -408,6 +410,45 @@ window.SH_API = (function () {
     window.LIVE.payslipByComm[c.id] = row[0];
   }
 
+  /* ---------------- profile photo ---------------- */
+  function applyAvatarLocally(url, source) {
+    var me = window.LIVE.me;
+    me.avatar = url || null;
+    me.avatarSource = source;
+    var u = window.LIVE.users.find(function (x) { return x.id === me.id; });
+    if (u) { u.avatar = me.avatar; u.avatarSource = source; }
+  }
+  /* Upload a photo to the public avatars bucket under the user's own id. */
+  async function uploadAvatar(file) {
+    var me = window.LIVE.me;
+    var path = me.dbId + '/' + Date.now() + '-' + file.name.replace(/[^\w.\-]/g, '_');
+    var s = getSession();
+    var up = await fetch(cfg.url + '/storage/v1/object/avatars/' + path, {
+      method: 'POST',
+      headers: { apikey: cfg.key, Authorization: 'Bearer ' + s.access_token, 'Content-Type': file.type || 'application/octet-stream' },
+      body: file
+    });
+    if (!up.ok) throw new Error('Photo upload failed: HTTP ' + up.status);
+    var url = cfg.url + '/storage/v1/object/public/avatars/' + path;
+    await req('/rest/v1/rpc/set_avatar_custom', { method: 'POST', body: { p_url: url } });
+    applyAvatarLocally(url, 'custom');
+    return url;
+  }
+  async function removeAvatar() {
+    await req('/rest/v1/rpc/set_avatar_custom', { method: 'POST', body: { p_url: null } });
+    applyAvatarLocally(null, 'none');
+  }
+  async function useGoogleAvatar() {
+    var s = getSession();
+    if (!s || !s.avatar) throw new Error('No Google photo on this sign-in.');
+    await req('/rest/v1/rpc/reset_avatar_to_google', { method: 'POST', body: { p_url: s.avatar } });
+    applyAvatarLocally(s.avatar, 'google');
+  }
+  function googleAvatarAvailable() {
+    var s = getSession();
+    return !!(s && s.avatar);
+  }
+
   /* IBAN certificate: upload to the private iban-certs bucket under the
      user's own id, return the storage path to store on the profile. */
   async function uploadIbanCert(file) {
@@ -500,6 +541,8 @@ window.SH_API = (function () {
     setCommissionStatus: setCommissionStatus,
     uploadPayslip: uploadPayslip, openPayslip: openPayslip, hasPayslip: hasPayslip,
     uploadIbanCert: uploadIbanCert, openIbanCert: openIbanCert,
+    uploadAvatar: uploadAvatar, removeAvatar: removeAvatar,
+    useGoogleAvatar: useGoogleAvatar, googleAvatarAvailable: googleAvatarAvailable,
     addUser: addUser, patchUser: patchUser, saveSettings: saveSettings,
     revealIban: revealIban, profileOf: profileOf
   };

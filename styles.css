@@ -254,7 +254,19 @@ button { font: inherit; cursor: pointer; }
 /* Profile page — summary column + form column */
 .profile-grid { display: grid; grid-template-columns: 300px 1fr; gap: 16px; align-items: start; max-width: 1000px; }
 .profile-summary { text-align: center; position: sticky; top: 16px; }
-.ps-avatar { width: 88px !important; height: 88px !important; flex: 0 0 88px !important; font-size: 30px !important; margin: 4px auto 12px; box-shadow: var(--shadow); }
+.ps-photo { position: relative; width: 88px; margin: 4px auto 10px; }
+.ps-avatar { width: 88px !important; height: 88px !important; flex: 0 0 88px !important; font-size: 30px !important; box-shadow: var(--shadow); }
+.ps-cam {
+  position: absolute; bottom: -2px; inset-inline-end: -2px;
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--cta); color: var(--cta-ink);
+  border: 2px solid var(--surface); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0;
+}
+.ps-cam:hover { background: var(--cta-strong); }
+.ps-cam svg { width: 14px; height: 14px; }
+.ps-photo-links { font-size: 12px; margin-bottom: 10px; }
+.ps-sep { color: var(--muted); margin: 0 7px; }
 .profile-summary h2 { font-size: 19px; }
 .profile-summary .sub { color: var(--muted); font-size: 13px; margin-top: 3px; }
 .ps-badges { display: flex; justify-content: center; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
