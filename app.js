@@ -2142,6 +2142,13 @@
     /* Live mode reads the store_showcase table (Metabase-fed); the
        bundled mock list is demo-only. */
     var showcase = window.LIVE ? (LIVE.showcase || []) : STORE_SHOWCASE;
+    // Order volume/revenue are for management & finance only. RLS already
+    // keeps a real hunter session from ever receiving them, but a
+    // dual-role person previewing via the Management/Hunter toggle still
+    // has their real (management) data loaded client-side — gate the
+    // rendering on the currently *acting* role too, not just what RLS let
+    // through at fetch time.
+    var canSeeVolume = roleOf() === 'mgr' || roleOf() === 'fin';
     var myLeads = isManager() ? [] : leadsOf(user.id);
     var mineByCat = {};
     myLeads.forEach(function (l) { mineByCat[l.industry] = (mineByCat[l.industry] || 0) + 1; });
@@ -2184,7 +2191,7 @@
             '<div class="s-cat"><span class="cat-chip">' + esc(trCat(c.category)) + '</span>' +
             (wr !== null ? '<span class="s-meta">' + t('catWinRate', { pct: fmtPct(wr, 0) }) + '</span>' : '') + '</div>' +
             '<div><h3>' + t('no1', { name: esc(leader.name) }) + '</h3>' +
-              (leader.ordersCount != null ? '<span class="s-meta">' + fmtNum(leader.ordersCount) + ' ' + t('ordersAllTime') + '</span>' : '') + '</div>' +
+              (canSeeVolume && leader.ordersCount != null ? '<span class="s-meta">' + fmtNum(leader.ordersCount) + ' ' + t('ordersAllTime') + '</span>' : '') + '</div>' +
             '<p class="s-blurb">' + t(c.stores.length === 1 ? 'topStoreCount' : 'topStoresCount', { n: c.stores.length }) +
               (mine ? ' · <span class="s-mine">' + t(mine === 1 ? 'youHaveLead' : 'youHaveLeads', { n: mine }) + '</span>' : '') + '</p>' +
             '<span class="s-open">' + t('browseCat') + '</span>' +
@@ -2218,8 +2225,8 @@
             '<div class="s-cat"><span class="rank-badge ' + (i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : '') + '">' + (i + 1) + '</span></div>' +
             '<div><h3>' + esc(st.name) + '</h3></div>' +
             '<div class="s-metrics">' +
-              (st.ordersCount != null ? '<div class="s-metric"><b>' + fmtNum(st.ordersCount) + '</b><span>' + t('ordersAllTime') + '</span></div>' : '') +
-              (st.revenue != null ? '<div class="s-metric"><b class="money-pos">' + fmtMoneyC(st.revenue) + '</b><span>' + t('revenueWord') + '</span></div>' : '') +
+              (canSeeVolume && st.ordersCount != null ? '<div class="s-metric"><b>' + fmtNum(st.ordersCount) + '</b><span>' + t('ordersAllTime') + '</span></div>' : '') +
+              (canSeeVolume && st.revenue != null ? '<div class="s-metric"><b class="money-pos">' + fmtMoneyC(st.revenue) + '</b><span>' + t('revenueWord') + '</span></div>' : '') +
             '</div>' +
           '</section>';
         }).join('') +
