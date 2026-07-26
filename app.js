@@ -693,7 +693,8 @@
                 [user.role, user.secondaryRole].map(function (rr) {
                   return '<button class="rs-btn' + (rr === roleOf() ? ' active' : '') + '" data-role="' + rr + '">' + roleName(rr) + '</button>';
                 }).join('') + '</div>' : '') +
-              (window.LIVE ? '<button class="icon-btn" id="refresh-btn" title="' + t('refreshData') + '" aria-label="' + t('refreshData') + '">' + ICONS.refresh + '</button>' : '') +
+              (window.LIVE ? '<span class="freshness" id="freshness"></span>' +
+                '<button class="icon-btn" id="refresh-btn" title="' + t('refreshData') + '" aria-label="' + t('refreshData') + '">' + ICONS.refresh + '</button>' : '') +
               '<button class="icon-btn lang-btn" id="lang-toggle" aria-label="' + t('langToggle') + '">' + (isAr() ? 'EN' : 'ع') + '</button>' +
               '<button class="icon-btn" id="theme-toggle" title="' + t('themeToggle') + '" aria-label="' + t('themeToggle') + '">' + ICONS.sun + '</button>' +
             '</div>' +
@@ -710,6 +711,7 @@
     });
     var rb = document.getElementById('refresh-btn');
     if (rb) rb.addEventListener('click', function () { doRefresh(true); });
+    updateFreshness();
     document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
     document.getElementById('lang-toggle').addEventListener('click', function () { setLang(isAr() ? 'en' : 'ar'); route(); });
     document.getElementById('nav-toggle').addEventListener('click', function () {
@@ -1691,6 +1693,14 @@
               '<p class="f-hint">' + t('vatHint') + '</p></div>' +
           '</div>' +
           '<div style="margin-top:14px"><button type="submit" class="btn">' + t('saveRules') + '</button></div></form>' +
+          (window.LIVE ? '<div style="margin-top:18px; padding-top:16px; border-top:1px solid var(--hairline)">' +
+            '<label class="f-label" for="set-refresh">' + t('autoRefreshLbl') + '</label>' +
+            '<select id="set-refresh" style="max-width:220px">' +
+              [[1, t('everyMin', { n: 1 })], [2, t('everyMins', { n: 2 })], [5, t('everyMins', { n: 5 })],
+               [10, t('everyMins', { n: 10 })], [0, t('refreshOff')]].map(function (o) {
+                return '<option value="' + o[0] + '"' + (o[0] === refreshMins() ? ' selected' : '') + '>' + o[1] + '</option>';
+              }).join('') + '</select>' +
+            '<p class="f-hint">' + t('autoRefreshHint') + '</p></div>' : '') +
         '</section>' +
         (window.LIVE ? '' :
         '<section class="card">' +
@@ -1713,6 +1723,12 @@
         '<div class="card-head"><div><h3>' + t('sysHealth') + '</h3><p class="sub">' + t('sysHealthSub') + '</p></div></div>' +
         '<div id="health-body"><div class="empty">' + t('loadingLive') + '</div></div>' +
       '</section>' : '');
+
+    var setRefresh = document.getElementById('set-refresh');
+    if (setRefresh) setRefresh.addEventListener('change', function () {
+      LS.set('refreshMins', parseInt(this.value, 10));
+      toast(t('rulesSavedShort'));
+    });
 
     if (window.LIVE) {
       SH_API.recentErrors().then(function (rows) {
@@ -2735,9 +2751,26 @@
     // coming back to the tab after a while → get current data
     if (!document.hidden && window.LIVE && Date.now() - SH_API.lastLoaded() > 60000) doRefresh(false);
   });
+
+  /* How often to auto-refresh, in minutes (0 = off). Per device. */
+  function refreshMins() {
+    var v = LS.get('refreshMins', 1);
+    return typeof v === 'number' ? v : 1;
+  }
+  function updateFreshness() {
+    var el2 = document.getElementById('freshness');
+    if (!el2 || !window.LIVE || !SH_API.lastLoaded) return;
+    var age = Math.floor((Date.now() - SH_API.lastLoaded()) / 60000);
+    el2.textContent = age < 1 ? t('updatedNow') : t('updatedAgo', { n: age });
+  }
+  /* One ticker drives both the label and the auto-refresh, so the
+     interval can change at runtime without re-arming timers. */
   setInterval(function () {
-    if (!document.hidden && window.LIVE) doRefresh(false);
-  }, 5 * 60 * 1000);
+    updateFreshness();
+    var mins = refreshMins();
+    if (!mins || document.hidden || !window.LIVE) return;
+    if (Date.now() - SH_API.lastLoaded() >= mins * 60000) doRefresh(false);
+  }, 15000);
 
   /* Report uncaught failures so breakage is visible to management
      instead of dying silently in someone's browser. */
