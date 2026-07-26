@@ -224,12 +224,12 @@ en: {
 
   storesTitle: 'The stores winning on Zid right now',
   storesSub: 'Pick a category to see its top performers — proof points for your pitch: “stores like yours do this on Zid.”',
-  catWinRate: '{pct} win rate', no1: '№1 · {name}', ordersMo: 'orders / month',
+  catWinRate: '{pct} win rate', no1: '№1 · {name}', ordersAllTime: 'orders all-time',
   topStoresCount: '{n} top stores to use in your pitch', topStoreCount: '1 top store to use in your pitch',
   youHaveLeads: 'you have {n} leads here', youHaveLead: 'you have 1 lead here',
   browseCat: 'Browse category →', backCats: '← All categories',
   catHeadSub: 'Top Zid stores in this category', catWinInline: ' · hunter leads here close won {pct} of the time',
-  catMineInline: ' · you have {n} lead(s) in this category', growthYear: 'growth this year',
+  catMineInline: ' · you have {n} lead(s) in this category',
 
   activeHunters: 'Active hunters', ofEnrolled: 'of {n} enrolled', currentlyOpen: '{n} currently open',
   newStores: 'New Zid stores', wonMerchants: 'closed-won merchants', programConv: 'Program conversion',
@@ -521,12 +521,12 @@ ar: {
 
   storesTitle: 'المتاجر المتصدرة في زد الآن',
   storesSub: 'اختر فئة لترى أفضل متاجرها — حجج قوية لعرضك: «متاجر مثلك تحقق هذا في زد».',
-  catWinRate: 'نجاح {pct}', no1: 'الأول · {name}', ordersMo: 'طلب / شهر',
+  catWinRate: 'نجاح {pct}', no1: 'الأول · {name}', ordersAllTime: 'طلب إجمالي',
   topStoresCount: '{n} متاجر متصدرة لعرضك', topStoreCount: 'متجر متصدر واحد لعرضك',
   youHaveLeads: 'لديك {n} عملاء هنا', youHaveLead: 'لديك عميل واحد هنا',
   browseCat: 'تصفح الفئة ←', backCats: '→ كل الفئات',
   catHeadSub: 'أفضل متاجر زد في هذه الفئة', catWinInline: ' · عملاء الصيادين هنا يُغلقون بنجاح {pct} من المرات',
-  catMineInline: ' · لديك {n} عميلاً في هذه الفئة', growthYear: 'نمو هذا العام',
+  catMineInline: ' · لديك {n} عميلاً في هذه الفئة',
 
   activeHunters: 'الصيادون النشطون', ofEnrolled: 'من أصل {n} مسجلين', currentlyOpen: '{n} مفتوحة حالياً',
   newStores: 'متاجر زد الجديدة', wonMerchants: 'تجار بصفقات ناجحة', programConv: 'تحويل البرنامج',

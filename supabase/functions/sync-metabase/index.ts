@@ -5,7 +5,8 @@
 //   card_subscriptions → "Sales Hunter Deals Details" — invoice-level:
 //     purchasable name, VAT-excluded amount, commission amount, and the
 //     deal owner's name/id, all joined by hubspot_deal_id in one card.
-//   card_topstores → Top Zid Stores showcase card.
+//   card_topstores → Top Zid Stores showcase card (all-time orders per
+//     store; ranked within each category, no per-category cap).
 // Runs in MOCK mode (no-op) until a Metabase connection has been saved.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -126,13 +127,45 @@ async function syncDealDetails(base: string, key: string, cardId: string) {
   return { subscriptions: subs, commissions: comms, deals_updated: dealsUpdated };
 }
 
+// Ranked by all-time order count within each category, no per-category
+// cap — every store the card returns gets a showcase row. Written as one
+// batched upsert (not one round-trip per store) since this card returns
+// hundreds of rows.
 async function syncTopStores(base: string, key: string, cardId: string) {
-  // The Top Stores card's columns (all-time Store ID / Name / Category /
-  // Orders Total) don't line up with store_showcase's monthly-rank shape
-  // (orders_month, growth, rank_in_category) yet — left as a read-only
-  // probe until that mapping is designed, rather than guessing at ranks.
   const rows = await runCard(base, key, cardId);
-  return rows.length;
+  const byCategory = new Map<string, Record<string, unknown>[]>();
+  for (const r of rows) {
+    const category = String(r["Store Category Name"] ?? "");
+    if (!category) continue;
+    if (!byCategory.has(category)) byCategory.set(category, []);
+    byCategory.get(category)!.push(r);
+  }
+
+  const now = new Date().toISOString();
+  const showcaseRows: Record<string, unknown>[] = [];
+  for (const [category, stores] of byCategory) {
+    stores.sort((a, b) => Number(b["Orders Count"] ?? 0) - Number(a["Orders Count"] ?? 0));
+    stores.forEach((r, i) => {
+      const storeId = r["Store ID"];
+      if (storeId == null) return;
+      showcaseRows.push({
+        store_id: String(storeId),
+        name: r["Store Name"] ?? String(storeId),
+        category,
+        orders_count: r["Orders Count"] ?? null,
+        orders_total_sar: r["Orders Total Sar"] ?? null,
+        rank_in_category: i + 1,
+        synced_at: now,
+      });
+    });
+  }
+
+  const CHUNK = 500;
+  for (let i = 0; i < showcaseRows.length; i += CHUNK) {
+    const { error } = await supabase.from("store_showcase").upsert(showcaseRows.slice(i, i + CHUNK));
+    if (error) throw error;
+  }
+  return showcaseRows.length;
 }
 
 Deno.serve(async () => {

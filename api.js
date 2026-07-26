@@ -265,10 +265,10 @@ window.SH_API = (function () {
     var ibanByUser = {};
     (results[8] || []).forEach(function (r) { ibanByUser[r.user_id] = r.iban; });
 
-    /* store_showcase rows (fed by the Metabase sync) → the category
-       structure the Top Zid Stores page renders. Management/finance
-       read the full table; for hunters RLS returns nothing, so fall
-       back to the lite view without order volumes. */
+    /* store_showcase rows (fed by the Metabase sync, ranked by all-time
+       orders) → the category structure the Top Zid Stores page renders.
+       Management/finance read the full table; for hunters RLS returns
+       nothing, so fall back to the lite view without order volumes. */
     var showcaseRows = results[7];
     if (!showcaseRows.length) {
       showcaseRows = await req('/rest/v1/store_showcase_lite?select=*').catch(function () { return []; });
@@ -276,9 +276,9 @@ window.SH_API = (function () {
     var byCat = {};
     showcaseRows.forEach(function (r) {
       (byCat[r.category] = byCat[r.category] || []).push({
-        name: r.name, city: r.city || '',
-        ordersMo: r.orders_month == null ? null : Number(r.orders_month),
-        growth: Number(r.growth) || 0, blurb: r.blurb || '',
+        name: r.name,
+        ordersCount: r.orders_count == null ? null : Number(r.orders_count),
+        revenue: r.orders_total_sar == null ? null : Number(r.orders_total_sar),
         rank: r.rank_in_category || 999
       });
     });

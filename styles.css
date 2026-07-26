@@ -903,7 +903,7 @@ fieldset { border: none; margin: 0; padding: 0; }
 .store-card { display: flex; flex-direction: column; gap: 8px; }
 .store-card .s-cat { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .store-card h3 { font-size: 15px; }
-.store-card .s-city { color: var(--muted); font-size: 12px; }
+.store-card .s-meta { color: var(--muted); font-size: 12px; }
 .store-card .s-metrics { display: flex; gap: 18px; margin-top: 2px; }
 .store-card .s-metric b { display: block; font-size: 17px; letter-spacing: -0.01em; }
 .store-card .s-metric span { color: var(--muted); font-size: 11px; }

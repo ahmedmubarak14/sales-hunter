@@ -66,47 +66,47 @@ var PLANS = [
    First store in each list is the category leader. */
 var STORE_SHOWCASE = [
   { category: 'Fashion & Apparel', stores: [
-    { name: 'Lamsa Boutique', city: 'Riyadh', ordersMo: 4236, growth: 0.38, blurb: 'Instagram seller that moved to Zid and tripled repeat purchases with its own app.' },
-    { name: 'Thoub & Co.', city: 'Jeddah', ordersMo: 2380, growth: 0.26, blurb: 'Made-to-measure thoubs with a 4-day promise, powered by Zid shipping rules.' },
-    { name: 'Mishkah Abayas', city: 'Dammam', ordersMo: 1140, growth: 0.21, blurb: 'Moved from WhatsApp orders to a full storefront in one week.' }
+    { name: 'Lamsa Boutique', ordersCount: 4236, revenue: 635400 },
+    { name: 'Thoub & Co.', ordersCount: 2380, revenue: 357000 },
+    { name: 'Mishkah Abayas', ordersCount: 1140, revenue: 171000 }
   ]},
   { category: 'Food & Beverage', stores: [
-    { name: 'Bin Saif Roastery', city: 'Jeddah', ordersMo: 3105, growth: 0.52, blurb: 'Subscription coffee boxes now drive half of monthly revenue.' },
-    { name: 'Halawiyat Noura', city: 'Makkah', ordersMo: 1870, growth: 0.33, blurb: 'Seasonal sweets with pre-order windows for Eid and Ramadan.' },
-    { name: 'Tamr House', city: 'Madinah', ordersMo: 1420, growth: 0.24, blurb: 'Premium dates exported to the Gulf through Zid’s shipping partners.' }
+    { name: 'Bin Saif Roastery', ordersCount: 3105, revenue: 465750 },
+    { name: 'Halawiyat Noura', ordersCount: 1870, revenue: 280500 },
+    { name: 'Tamr House', ordersCount: 1420, revenue: 213000 }
   ]},
   { category: 'Beauty & Care', stores: [
-    { name: 'Nara Beauty', city: 'Riyadh', ordersMo: 2870, growth: 0.44, blurb: 'Launched on Zid in Ramadan season and hit 10K orders in six months.' },
-    { name: 'Oud & Co.', city: 'Jeddah', ordersMo: 1560, growth: 0.29, blurb: 'Niche fragrance house with bundle builders at checkout.' },
-    { name: 'Sahara Skin', city: 'Khobar', ordersMo: 830, growth: 0.22, blurb: 'Clean-beauty brand running loyalty points through Zid apps.' }
+    { name: 'Nara Beauty', ordersCount: 2870, revenue: 430500 },
+    { name: 'Oud & Co.', ordersCount: 1560, revenue: 234000 },
+    { name: 'Sahara Skin', ordersCount: 830, revenue: 124500 }
   ]},
   { category: 'Electronics', stores: [
-    { name: 'Volt Store', city: 'Khobar', ordersMo: 1922, growth: 0.27, blurb: 'Uses Zid shipping integrations to deliver same-day in the Eastern Province.' },
-    { name: 'Gadget Hub KSA', city: 'Riyadh', ordersMo: 1310, growth: 0.19, blurb: 'Accessories retailer with installment payments enabled.' }
+    { name: 'Volt Store', ordersCount: 1922, revenue: 288300 },
+    { name: 'Gadget Hub KSA', ordersCount: 1310, revenue: 196500 }
   ]},
   { category: 'Home & Furniture', stores: [
-    { name: 'Dar Alwan', city: 'Dammam', ordersMo: 1490, growth: 0.31, blurb: 'Bulky-item logistics handled end-to-end through Zid partners.' },
-    { name: 'Majlis Studio', city: 'Riyadh', ordersMo: 960, growth: 0.25, blurb: 'Custom majlis seating with a 3D preview before ordering.' }
+    { name: 'Dar Alwan', ordersCount: 1490, revenue: 223500 },
+    { name: 'Majlis Studio', ordersCount: 960, revenue: 144000 }
   ]},
   { category: 'Health & Sports', stores: [
-    { name: 'Enduro KSA', city: 'Riyadh', ordersMo: 1218, growth: 0.35, blurb: 'Grew from a gym counter to nationwide supplements delivery.' },
-    { name: 'Yalla Fit', city: 'Jeddah', ordersMo: 720, growth: 0.28, blurb: 'Home-gym gear with subscription coaching add-ons.' }
+    { name: 'Enduro KSA', ordersCount: 1218, revenue: 182700 },
+    { name: 'Yalla Fit', ordersCount: 720, revenue: 108000 }
   ]},
   { category: 'Gifts & Flowers', stores: [
-    { name: 'Ward & Co.', city: 'Jeddah', ordersMo: 987, growth: 0.41, blurb: 'Same-day gifting with scheduled delivery slots at checkout.' },
-    { name: 'Hadiya Box', city: 'Riyadh', ordersMo: 640, growth: 0.30, blurb: 'Curated gift boxes for corporate clients and weddings.' }
+    { name: 'Ward & Co.', ordersCount: 987, revenue: 148050 },
+    { name: 'Hadiya Box', ordersCount: 640, revenue: 96000 }
   ]},
   { category: 'Grocery', stores: [
-    { name: 'Baqalah Plus', city: 'Madinah', ordersMo: 2540, growth: 0.22, blurb: 'Neighborhood mini-market turned quick-commerce operation.' },
-    { name: 'Souq Al Hay', city: 'Abha', ordersMo: 1120, growth: 0.17, blurb: 'Fresh produce with morning delivery windows.' }
+    { name: 'Baqalah Plus', ordersCount: 2540, revenue: 381000 },
+    { name: 'Souq Al Hay', ordersCount: 1120, revenue: 168000 }
   ]},
   { category: 'Books & Stationery', stores: [
-    { name: 'Warraq', city: 'Riyadh', ordersMo: 640, growth: 0.18, blurb: 'Niche Arabic titles with nationwide reach and pre-orders.' },
-    { name: 'Qalam Studio', city: 'Jeddah', ordersMo: 380, growth: 0.15, blurb: 'Stationery and art supplies for schools and studios.' }
+    { name: 'Warraq', ordersCount: 640, revenue: 96000 },
+    { name: 'Qalam Studio', ordersCount: 380, revenue: 57000 }
   ]},
   { category: 'Pets', stores: [
-    { name: 'Mishmish Pets', city: 'Jeddah', ordersMo: 512, growth: 0.29, blurb: 'Recurring pet-food subscriptions keep customers for years.' },
-    { name: 'Paws Riyadh', city: 'Riyadh', ordersMo: 310, growth: 0.23, blurb: 'Grooming bookings and supplies in one storefront.' }
+    { name: 'Mishmish Pets', ordersCount: 512, revenue: 76800 },
+    { name: 'Paws Riyadh', ordersCount: 310, revenue: 46500 }
   ]}
 ];
 var SALES_OWNERS = ['Fahad Al-Otaibi', 'Sara Al-Zahrani', 'Mohammed Iqbal', 'Lama Al-Harbi'];
