@@ -1733,6 +1733,78 @@
 
   /* ---- Management backoffice: program settings + audit log ---- */
   /* ---- Management: self-service integrations (HubSpot / Metabase) ---- */
+  /* HubSpot pipelines worth offering by default — the ones actually in
+     play for the referral program plus the handful of adjacent ones
+     you're most likely to also want deals from. Anything else can be
+     added by ID via the "other pipelines" chip list below. */
+  var HS_KNOWN_PIPELINES = [
+    { id: '39948135', label: 'Sales Pipeline' },
+    { id: '39707223', label: 'Nurturing' },
+    { id: '897552273', label: 'Pre-Sales' },
+    { id: '78432319', label: 'Growth Pipeline' },
+    { id: '26669937', label: 'PLG' },
+    { id: '4104812', label: 'Enterprise Pipeline' }
+  ];
+  /* Commonly-useful deal properties, offered as a starting point for
+     "extra properties to sync" — management can add any others by name. */
+  var HS_SUGGESTED_PROPS = [
+    'amount_without_vat', 'closedate', 'hubspot_owner_id', 'closed_lost_reason',
+    'dealtype', 'hs_analytics_source', 'dealname', 'createdate'
+  ];
+
+  /* Small reusable chip/tag input: add via Enter or comma, remove via ×
+     on the chip. Value is a comma-joined string in a hidden input so
+     it participates in normal form submission. */
+  function chipInput(id, values, placeholder) {
+    var chips = (values || []).filter(Boolean);
+    return '<div class="chip-input" id="' + id + '-wrap">' +
+        '<div class="chip-list" id="' + id + '-list">' +
+          chips.map(function (v) { return chipHtml(v); }).join('') +
+        '</div>' +
+        '<input type="text" id="' + id + '-add" placeholder="' + esc(placeholder || '') + '">' +
+        '<input type="hidden" id="' + id + '" value="' + esc(chips.join(',')) + '">' +
+      '</div>';
+  }
+  function chipHtml(v) {
+    return '<span class="chip">' + esc(v) + '<button type="button" class="chip-x" data-v="' + esc(v) + '" aria-label="Remove">×</button></span>';
+  }
+  function wireChipInput(id) {
+    var wrap = document.getElementById(id + '-wrap');
+    if (!wrap) return;
+    var list = document.getElementById(id + '-list');
+    var add = document.getElementById(id + '-add');
+    var hidden = document.getElementById(id);
+    function current() { return hidden.value ? hidden.value.split(',') : []; }
+    function sync(vals) { hidden.value = vals.join(','); }
+    function addChip(v) {
+      v = v.trim();
+      if (!v) return;
+      var vals = current();
+      if (vals.indexOf(v) >= 0) return;
+      vals.push(v);
+      sync(vals);
+      list.insertAdjacentHTML('beforeend', chipHtml(v));
+    }
+    add.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault();
+        addChip(add.value.replace(/,$/, ''));
+        add.value = '';
+      } else if (e.key === 'Backspace' && !add.value) {
+        var vals = current();
+        if (vals.length) { vals.pop(); sync(vals); list.lastElementChild && list.lastElementChild.remove(); }
+      }
+    });
+    add.addEventListener('blur', function () { if (add.value.trim()) { addChip(add.value); add.value = ''; } });
+    list.addEventListener('click', function (e) {
+      var btn = e.target.closest('.chip-x');
+      if (!btn) return;
+      var vals = current().filter(function (v) { return v !== btn.getAttribute('data-v'); });
+      sync(vals);
+      btn.closest('.chip').remove();
+    });
+  }
+
   function viewIntegrations(content) {
     var cfg = {}; // name -> row
 
@@ -1745,14 +1817,21 @@
     function lastSync(row) {
       return row && row.last_synced_at ? t('intgLastSync', { when: fmtDate(new Date(row.last_synced_at)) }) : t('intgNeverSynced');
     }
-    function fieldRow(id, label, val, ph, type) {
+    function fieldRow(id, label, val, ph, type, hint) {
       return '<div><label class="f-label" for="' + id + '">' + esc(label) + '</label>' +
-        '<input type="' + (type || 'text') + '" id="' + id + '" value="' + esc(val || '') + '" placeholder="' + esc(ph || '') + '"></div>';
+        '<input type="' + (type || 'text') + '" id="' + id + '" value="' + esc(val || '') + '" placeholder="' + esc(ph || '') + '">' +
+        (hint ? '<p class="f-hint">' + esc(hint) + '</p>' : '') + '</div>';
     }
 
     function render() {
       var hs = cfg.hubspot, mb = cfg.metabase;
       var hsS = (hs && hs.settings) || {}, mbS = (mb && mb.settings) || {};
+      var selectedPipelines = hsS.pipelines || ['39948135', '39707223'];
+      var otherPipelines = selectedPipelines.filter(function (id) {
+        return !HS_KNOWN_PIPELINES.some(function (p) { return p.id === id; });
+      });
+      var extraProps = (hsS.extra_properties && hsS.extra_properties.length) ? hsS.extra_properties : HS_SUGGESTED_PROPS;
+
       content.innerHTML =
         '<div class="filter-row"><div><h2>' + t('navIntegrations') + '</h2>' +
           '<p class="sub">' + t('intgSub') + '</p></div></div>' +
@@ -1761,11 +1840,39 @@
           '<div class="intg-head"><div class="intg-title"><span class="intg-logo hs">H</span>' +
             '<div><h3>HubSpot</h3><p class="sub">' + t('intgHubspotSub') + '</p></div></div>' + statusPill(hs) + '</div>' +
           '<form id="hs-form" class="intg-body">' +
+            '<h4 class="intg-sub-h">' + t('intgSecAuth') + '</h4>' +
             '<div class="form-grid">' +
-              fieldRow('hs-token', t('intgToken'), '', hs && hs.secret_set ? t('intgSecretSaved', { hint: hsS.secret_hint || '••••' }) : 'pat-…', 'password') +
-              fieldRow('hs-prop', t('intgHunterProp'), hsS.hunter_prop || 'lead_by__zidder_email_', 'lead_by__zidder_email_') +
-              fieldRow('hs-target', t('intgTargetType'), hsS.target_type || 'Sales Hunter', 'Sales Hunter') +
+              fieldRow('hs-token', t('intgToken'), '', hs && hs.secret_set ? t('intgSecretSaved', { hint: hsS.secret_hint || '••••' }) : 'pat-…', 'password',
+                t('intgTokenHint')) +
             '</div>' +
+
+            '<h4 class="intg-sub-h">' + t('intgSecPipelines') + '</h4>' +
+            '<p class="f-hint" style="margin-bottom:8px">' + t('intgPipelinesHint') + '</p>' +
+            '<div class="pipeline-grid">' +
+              HS_KNOWN_PIPELINES.map(function (p) {
+                var checked = selectedPipelines.indexOf(p.id) >= 0;
+                return '<label class="pipeline-chk"><input type="checkbox" class="hs-pipeline-cb" value="' + p.id + '"' + (checked ? ' checked' : '') + '>' +
+                  '<span>' + esc(p.label) + '</span><span class="cell-sub">' + p.id + '</span></label>';
+              }).join('') +
+            '</div>' +
+            '<div style="margin-top:10px"><label class="f-label" for="hs-other-pipelines">' + t('intgOtherPipelines') + '</label>' +
+              chipInput('hs-other-pipelines', otherPipelines, t('intgPipelineIdPh')) +
+              '<p class="f-hint">' + t('intgOtherPipelinesHint') + '</p></div>' +
+
+            '<h4 class="intg-sub-h">' + t('intgSecFields') + '</h4>' +
+            '<div class="form-grid">' +
+              fieldRow('hs-target', t('intgTargetType'), hsS.target_type || 'Sales Hunter', 'Sales Hunter', 'text', t('intgTargetTypeHint')) +
+              fieldRow('hs-prop', t('intgHunterProp'), hsS.hunter_prop || 'lead_by__zidder_email_', 'lead_by__zidder_email_') +
+              fieldRow('hs-amount', t('intgAmountProp'), hsS.amount_prop || 'amount_without_vat', 'amount_without_vat') +
+              fieldRow('hs-close', t('intgCloseProp'), hsS.close_date_prop || 'closedate', 'closedate') +
+              fieldRow('hs-owner', t('intgOwnerProp'), hsS.owner_prop || 'hubspot_owner_id', 'hubspot_owner_id') +
+              fieldRow('hs-lost', t('intgLostProp'), hsS.lost_reason_prop || 'closed_lost_reason', 'closed_lost_reason') +
+            '</div>' +
+
+            '<div style="margin-top:14px"><label class="f-label" for="hs-extra-props">' + t('intgExtraProps') + '</label>' +
+              chipInput('hs-extra-props', extraProps, t('intgExtraPropsPh')) +
+              '<p class="f-hint">' + t('intgExtraPropsHint') + '</p></div>' +
+
             '<div class="intg-actions"><span class="sub">' + lastSync(hs) + '</span>' +
               '<button type="submit" class="btn">' + t('saveChanges') + '</button></div>' +
           '</form>' +
@@ -1788,11 +1895,24 @@
         '</section>' +
         '<p class="sub" style="text-align:center">' + t('intgSecurityNote') + '</p>';
 
+      wireChipInput('hs-other-pipelines');
+      wireChipInput('hs-extra-props');
+
       document.getElementById('hs-form').addEventListener('submit', function (e) {
         e.preventDefault();
+        var picked = Array.prototype.map.call(
+          content.querySelectorAll('.hs-pipeline-cb:checked'), function (cb) { return cb.value; }
+        );
+        var other = (document.getElementById('hs-other-pipelines').value || '').split(',').filter(Boolean);
         save('hubspot', {
+          pipelines: picked.concat(other),
           hunter_prop: document.getElementById('hs-prop').value.trim(),
-          target_type: document.getElementById('hs-target').value.trim()
+          target_type: document.getElementById('hs-target').value.trim(),
+          amount_prop: document.getElementById('hs-amount').value.trim(),
+          close_date_prop: document.getElementById('hs-close').value.trim(),
+          owner_prop: document.getElementById('hs-owner').value.trim(),
+          lost_reason_prop: document.getElementById('hs-lost').value.trim(),
+          extra_properties: (document.getElementById('hs-extra-props').value || '').split(',').filter(Boolean)
         }, document.getElementById('hs-token').value);
       });
       document.getElementById('mb-form').addEventListener('submit', function (e) {

@@ -364,6 +364,39 @@ button { font: inherit; cursor: pointer; }
 .intg-logo.hs { background: #ff7a59; }
 .intg-logo.mb { background: #509ee3; }
 .intg-body { display: flex; flex-direction: column; gap: 14px; }
+.intg-sub-h {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;
+  color: var(--muted); margin: 4px 0 0; padding-top: 14px; border-top: 1px solid var(--hairline);
+}
+.intg-body > .intg-sub-h:first-child { padding-top: 0; border-top: none; }
+.pipeline-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.pipeline-chk {
+  display: flex; align-items: baseline; gap: 8px; padding: 8px 10px;
+  border: 1px solid var(--hairline); border-radius: 8px; cursor: pointer; font-size: 13px;
+}
+.pipeline-chk:has(input:checked) { border-color: var(--brand); background: var(--brand-soft); }
+.pipeline-chk input { flex: none; margin: 0; }
+.pipeline-chk span:first-of-type { flex: 1; }
+.pipeline-chk .cell-sub { font-size: 10.5px; }
+
+/* Chip / tag input (extra properties, other pipeline IDs) */
+.chip-input {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  border: 1px solid var(--hairline); border-radius: 8px; padding: 6px 8px; background: var(--surface);
+}
+.chip-input input[type="text"] { border: none; padding: 4px 2px; min-width: 140px; flex: 1; width: auto; }
+.chip-input input[type="text"]:focus { outline: none; }
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--surface-2); border: 1px solid var(--hairline); border-radius: 6px;
+  padding: 3px 4px 3px 9px; font-size: 12px; font-family: ui-monospace, monospace;
+}
+.chip-x {
+  background: none; border: none; cursor: pointer; color: var(--muted);
+  width: 18px; height: 18px; border-radius: 4px; font-size: 14px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.chip-x:hover { background: var(--hairline); color: var(--critical); }
 .intg-actions {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding-top: 14px; border-top: 1px solid var(--hairline); flex-wrap: wrap;
@@ -639,7 +672,7 @@ td .cell-sub { display: block; color: var(--muted); font-size: 11.5px; }
   font-size: 12.5px; color: var(--ink-2); font-weight: 500;
 }
 .seg button.active { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
-input[type="text"], input[type="email"], input[type="tel"], input[type="number"], select, textarea {
+input[type="text"], input[type="email"], input[type="tel"], input[type="number"], input[type="password"], input[type="search"], select, textarea {
   font: inherit; color: var(--ink);
   background: var(--surface); border: 1px solid var(--hairline);
   border-radius: 8px; padding: 8px 10px; width: 100%;
