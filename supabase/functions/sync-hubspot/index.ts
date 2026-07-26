@@ -1,7 +1,8 @@
 // Sales Hunter — HubSpot deal sync (hourly reconciliation poll + backfill)
-// Secrets: HUBSPOT_TOKEN (private app), HS_HUNTER_EMAIL_PROP (internal name
-// of the deal property that carries the hunter's Zid email).
-// MOCK mode when secrets are absent.
+// Connection + field mapping are configured from the app's Integrations
+// page (management only) and stored in integration_config /
+// integration_secrets — see supabase/migrations/013_integrations.sql.
+// Runs in MOCK mode until a HubSpot token has been saved there.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -10,64 +11,150 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
-const HS_TOKEN = Deno.env.get("HUBSPOT_TOKEN");
-const HUNTER_PROP = Deno.env.get("HS_HUNTER_EMAIL_PROP") ?? "hunter_email";
-const MOCK = !HS_TOKEN;
-
-// TODO once stage IDs are provided: map HubSpot stage IDs → app stage labels.
-const STAGE_MAP: Record<string, string> = {
-  // "appointmentscheduled": "New Lead", ...
+type HSSettings = {
+  pipelines?: string[];
+  target_type?: string;
+  hunter_prop?: string;
+  amount_prop?: string;
+  close_date_prop?: string;
+  owner_prop?: string;
+  lost_reason_prop?: string;
+  extra_properties?: string[];
 };
 
-async function fetchModifiedDeals(since: string | null) {
-  if (MOCK) {
-    return [{
-      id: "MOCK-1",
-      properties: {
-        dealname: "Mock Merchant", dealstage: "closedwon", amount: "2990",
-        [HUNTER_PROP]: "ahmedmubaraks@hotmail.com",
-        hs_lastmodifieddate: new Date().toISOString(),
-      },
-    }];
+async function loadConnection() {
+  const { data: cfg } = await supabase
+    .from("integration_config")
+    .select("settings, secret_set")
+    .eq("name", "hubspot")
+    .maybeSingle();
+  if (!cfg?.secret_set) return { configured: false as const };
+  const { data: token, error } = await supabase.rpc("get_integration_secret", { p_name: "hubspot" });
+  if (error || !token) throw new Error(`could not read saved HubSpot token: ${error?.message ?? "empty"}`);
+  return { configured: true as const, token: token as string, settings: (cfg.settings ?? {}) as HSSettings };
+}
+
+// Deal stage IDs are only unique per-pipeline, so labels are resolved via
+// the pipelines API rather than a hardcoded map.
+async function fetchStageLabels(token: string): Promise<Record<string, Record<string, string>>> {
+  const res = await fetch("https://api.hubapi.com/crm/v3/pipelines/deals", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return {};
+  const pipelines = (await res.json()).results ?? [];
+  const map: Record<string, Record<string, string>> = {};
+  for (const p of pipelines) {
+    map[p.id] = {};
+    for (const s of p.stages ?? []) map[p.id][s.id] = s.label;
   }
+  return map;
+}
+
+async function fetchOwnerNames(token: string): Promise<Record<string, string>> {
+  const map: Record<string, string> = {};
+  let after: string | undefined;
+  do {
+    const url = new URL("https://api.hubapi.com/crm/v3/owners");
+    url.searchParams.set("limit", "200");
+    if (after) url.searchParams.set("after", after);
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) break;
+    const body = await res.json();
+    for (const o of body.results ?? []) {
+      map[o.id] = [o.firstName, o.lastName].filter(Boolean).join(" ") || o.email;
+    }
+    after = body.paging?.next?.after;
+  } while (after);
+  return map;
+}
+
+async function fetchModifiedDeals(token: string, settings: HSSettings, properties: string[], since: string | null) {
+  const filters: Record<string, unknown>[] = [];
+  if (since) filters.push({ propertyName: "hs_lastmodifieddate", operator: "GT", value: since });
+  if (settings.pipelines?.length) filters.push({ propertyName: "pipeline", operator: "IN", values: settings.pipelines });
+  if (settings.target_type) filters.push({ propertyName: "target_type", operator: "EQ", value: settings.target_type });
+
   const body = {
-    filterGroups: since ? [{ filters: [{ propertyName: "hs_lastmodifieddate", operator: "GT", value: since }] }] : [],
-    properties: ["dealname", "dealstage", "amount", "hubspot_owner_id",
-      "closed_lost_reason", HUNTER_PROP, "hs_lastmodifieddate", "createdate", "closedate"],
+    filterGroups: filters.length ? [{ filters }] : [],
+    properties,
     sorts: [{ propertyName: "hs_lastmodifieddate", direction: "ASCENDING" }],
     limit: 100,
   };
   const res = await fetch("https://api.hubapi.com/crm/v3/objects/deals/search", {
     method: "POST",
-    headers: { Authorization: `Bearer ${HS_TOKEN}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`HubSpot search: HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`HubSpot search: HTTP ${res.status} — ${await res.text()}`);
   return (await res.json()).results ?? [];
+}
+
+function mockDeals(hunterProp: string) {
+  return [{
+    id: "MOCK-1",
+    properties: {
+      dealname: "Mock Merchant", dealstage: "closedwon", pipeline: "mock",
+      amount: "2990", [hunterProp]: "ahmedmubaraks@hotmail.com",
+      hs_lastmodifieddate: new Date().toISOString(),
+      createdate: new Date().toISOString(), closedate: new Date().toISOString(),
+    },
+  }];
 }
 
 Deno.serve(async () => {
   const started = new Date().toISOString();
+  let configured = false;
   try {
+    const conn = await loadConnection();
+    configured = conn.configured;
+    const settings: HSSettings = conn.configured ? conn.settings : {};
+
+    const hunterProp = settings.hunter_prop || "hunter_email";
+    const amountProp = settings.amount_prop || "amount";
+    const closeProp = settings.close_date_prop || "closedate";
+    const ownerProp = settings.owner_prop || "";
+    const lostProp = settings.lost_reason_prop || "";
+    const extraProps = settings.extra_properties ?? [];
+
+    const properties = Array.from(new Set([
+      "dealname", "dealstage", "pipeline", "hs_lastmodifieddate", "createdate", "closedate",
+      hunterProp, amountProp, closeProp,
+      ...(ownerProp ? [ownerProp] : []),
+      ...(lostProp ? [lostProp] : []),
+      ...extraProps,
+    ]));
+
     const { data: state } = await supabase.from("sync_state").select().eq("source", "hubspot").maybeSingle();
-    const deals = await fetchModifiedDeals(state?.bookmark ?? null);
     let bookmark = state?.bookmark ?? null;
+
+    const deals = conn.configured
+      ? await fetchModifiedDeals(conn.token, settings, properties, bookmark)
+      : mockDeals(hunterProp);
+    const stageLabels = conn.configured ? await fetchStageLabels(conn.token) : {};
+    const ownerNames = conn.configured && ownerProp ? await fetchOwnerNames(conn.token) : {};
 
     for (const d of deals) {
       const p = d.properties;
-      const stage = STAGE_MAP[p.dealstage] ?? p.dealstage;
+      const stage = stageLabels[p.pipeline]?.[p.dealstage] ?? p.dealstage;
       const { data: existing } = await supabase.from("deals").select("stage").eq("hubspot_deal_id", d.id).maybeSingle();
+
+      const extra: Record<string, unknown> = {};
+      for (const key of extraProps) if (p[key] != null) extra[key] = p[key];
+
       await supabase.from("deals").upsert({
         hubspot_deal_id: d.id,
         company: p.dealname,
-        hunter_email: p[HUNTER_PROP]?.trim().toLowerCase() ?? null,
+        hunter_email: p[hunterProp] ? String(p[hunterProp]).trim().toLowerCase() : null,
         stage,
-        amount_net: p.amount ? Number(p.amount) : null,
-        lost_reason: p.closed_lost_reason ?? null,
+        amount_net: p[amountProp] != null ? Number(p[amountProp]) : null,
+        sales_owner: ownerProp ? (ownerNames[p[ownerProp]] ?? p[ownerProp] ?? null) : null,
+        lost_reason: lostProp ? (p[lostProp] ?? null) : null,
         hs_created_at: p.createdate,
-        hs_closed_at: p.closedate,
+        hs_closed_at: p[closeProp] ?? p.closedate,
+        extra,
         synced_at: new Date().toISOString(),
       });
+
       if (existing && existing.stage !== stage) {
         await supabase.from("deal_stage_events").insert({
           hubspot_deal_id: d.id, from_stage: existing.stage, to_stage: stage,
@@ -80,11 +167,17 @@ Deno.serve(async () => {
     await supabase.from("sync_state").upsert({
       source: "hubspot", bookmark, last_run_at: started, last_status: "ok", last_error: null,
     });
-    return Response.json({ ok: true, synced: deals.length, mock: MOCK });
+    if (configured) {
+      await supabase.from("integration_config").update({ last_synced_at: started, last_status: "ok" }).eq("name", "hubspot");
+    }
+    return Response.json({ ok: true, synced: deals.length, mock: !conn.configured });
   } catch (e) {
     await supabase.from("sync_state").upsert({
       source: "hubspot", last_run_at: started, last_status: "error", last_error: String(e),
     });
+    if (configured) {
+      await supabase.from("integration_config").update({ last_synced_at: started, last_status: `error: ${String(e)}` }).eq("name", "hubspot");
+    }
     return Response.json({ ok: false, error: String(e) }, { status: 500 });
   }
 });
