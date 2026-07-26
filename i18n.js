@@ -53,7 +53,7 @@ var CAT_AR = {
   'Gifts & Flowers': 'الهدايا والزهور', 'Grocery': 'البقالة',
   'Books & Stationery': 'الكتب والقرطاسية', 'Pets': 'الحيوانات الأليفة'
 };
-var PLAN_AR = { 'Launch': 'الانطلاقة', 'Growth': 'النمو', 'Professional': 'الاحترافية' };
+var PLAN_AR = { 'Launch': 'الانطلاقة', 'Growth': 'النمو', 'Professional': 'الاحترافية', 'Rise': 'رايز', 'ZidLite': 'زد لايت' };
 var BANK_AR = {
   'Al Rajhi Bank': 'مصرف الراجحي', 'Saudi National Bank': 'البنك الأهلي السعودي',
   'Riyad Bank': 'بنك الرياض', 'Alinma Bank': 'مصرف الإنماء', 'SAB': 'البنك السعودي الأول',
@@ -247,6 +247,7 @@ en: {
   momRevenue: 'Revenue closed', momCommission: 'Commission unlocked', newDelta: 'new',
   topPackages: 'Top packages sold', topPackagesSub: 'Closed-won deals by Zid plan · share of revenue',
   packageCol: 'Package', stores: 'Stores', revenue: 'Revenue', share: 'Share', zidPlan: 'Zid {name}',
+  noPackagesYet: 'No closed-won subscriptions synced yet.',
   programFunnel: 'Program funnel', programFunnelSub: 'All hunter leads — count that reached each stage',
   stageNow: 'Deals by stage right now', stageNowSub: 'Live count in each pipeline stage — mirrors the HubSpot board',
   deals: 'Deals', afterPayment: 'after payment',
@@ -543,6 +544,7 @@ ar: {
   momRevenue: 'الإيراد المُغلق', momCommission: 'العمولات المستحقة', newDelta: 'جديد',
   topPackages: 'الباقات الأكثر مبيعاً', topPackagesSub: 'الصفقات الناجحة حسب باقة زد · حصة الإيراد',
   packageCol: 'الباقة', stores: 'متاجر', revenue: 'الإيراد', share: 'الحصة', zidPlan: 'زد {name}',
+  noPackagesYet: 'لا توجد اشتراكات مُزامَنة لصفقات ناجحة بعد.',
   programFunnel: 'قمع البرنامج', programFunnelSub: 'كل عملاء الصيادين — عدد من وصل لكل مرحلة',
   stageNow: 'الصفقات حسب المرحلة الآن', stageNowSub: 'عدّ حي لكل مرحلة — يطابق لوحة هبسبوت',
   deals: 'صفقات', afterPayment: 'بعد الدفع',

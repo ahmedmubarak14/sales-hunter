@@ -150,7 +150,15 @@ window.SH_API = (function () {
     return 'new';
   }
 
-  function toLead(d, eventsByDeal) {
+  // Metabase's Purchasable Name is e.g. "Growth - Yearly" — the app only
+  // ever showed a static demo plan list before subscriptions synced for
+  // real, so this strips the billing-cycle suffix down to the plan tier.
+  function basePlanName(purchasable) {
+    if (!purchasable) return null;
+    return String(purchasable).split(' - ')[0].trim() || null;
+  }
+
+  function toLead(d, eventsByDeal, subsByDeal) {
     var created = d.hs_created_at ? new Date(d.hs_created_at) : new Date(d.synced_at);
     var evs = (eventsByDeal[d.hubspot_deal_id] || []).map(function (e) {
       return { stage: normStage(e.to_stage), date: new Date(e.occurred_at) };
@@ -158,6 +166,7 @@ window.SH_API = (function () {
     if (!evs.length || evs[0].stage !== 'new') evs.unshift({ stage: 'new', date: created });
     var stage = normStage(d.stage);
     if (evs[evs.length - 1].stage !== stage) evs.push({ stage: stage, date: new Date(d.synced_at) });
+    var sub = (subsByDeal || {})[d.hubspot_deal_id];
     return {
       id: d.hubspot_deal_id,
       hunterId: (d.hunter_email || 'unassigned').toLowerCase(),
@@ -168,7 +177,7 @@ window.SH_API = (function () {
       industry: d.industry || '',
       city: '', source: null,
       platform: d.platform || '', storeUrl: d.store_url || '', notes: d.notes || '',
-      plan: null, years: 1,
+      plan: sub ? basePlanName(sub.package) : null, years: 1,
       createdAt: created,
       stage: stage,
       events: evs,
@@ -212,7 +221,8 @@ window.SH_API = (function () {
       req('/rest/v1/profiles?select=*'),
       req('/rest/v1/payslips?select=*').catch(function () { return []; }),
       req('/rest/v1/store_showcase?select=*').catch(function () { return []; }),
-      req('/rest/v1/rpc/get_ibans', { method: 'POST', body: {} }).catch(function () { return []; })
+      req('/rest/v1/rpc/get_ibans', { method: 'POST', body: {} }).catch(function () { return []; }),
+      req('/rest/v1/subscriptions?select=hubspot_deal_id,package,billing_cycle').catch(function () { return []; })
     ]);
     var users = results[0].map(toUser);
     var me = users.find(function (u) {
@@ -231,7 +241,11 @@ window.SH_API = (function () {
     results[2].forEach(function (e) {
       (eventsByDeal[e.hubspot_deal_id] = eventsByDeal[e.hubspot_deal_id] || []).push(e);
     });
-    var leads = results[1].map(function (d) { return toLead(d, eventsByDeal); });
+    var subsByDeal = {};
+    (results[9] || []).forEach(function (sub) {
+      if (sub.hubspot_deal_id) subsByDeal[sub.hubspot_deal_id] = sub;
+    });
+    var leads = results[1].map(function (d) { return toLead(d, eventsByDeal, subsByDeal); });
 
     var commAmount = {}, commByDeal = {}, payslipByComm = {};
     results[3].forEach(function (c) {

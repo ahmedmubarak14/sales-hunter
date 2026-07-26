@@ -2307,17 +2307,21 @@
       [t('momCommission'), fmtMoneyC(mThis.commission), fmtMoneyC(mLast.commission), momDelta(mThis.commission, mLast.commission)]
     ];
 
-    // Top packages sold (won deals by Zid plan — ordered tiers)
+    // Top packages sold (won deals by Zid plan) — the plan names come
+    // straight from Metabase's Purchasable Name (via subscriptions), not
+    // a fixed list, so whatever plans actually sold show up here.
     var planAgg = {};
-    PLANS.forEach(function (p) { planAgg[p.name] = { count: 0, revenue: 0 }; });
     all.forEach(function (l) {
-      if (l.stage === 'won' && l.plan && planAgg[l.plan]) {
-        planAgg[l.plan].count += 1;
-        planAgg[l.plan].revenue += l.amountNet;
-      }
+      if (l.stage !== 'won' || !l.plan) return;
+      if (!planAgg[l.plan]) planAgg[l.plan] = { count: 0, revenue: 0 };
+      planAgg[l.plan].count += 1;
+      planAgg[l.plan].revenue += l.amountNet;
     });
-    var planRevTotal = PLANS.reduce(function (a, p) { return a + planAgg[p.name].revenue; }, 0) || 1;
-    var PLAN_CLS = { Launch: 'f2', Growth: 'f4', Professional: 'f6' };
+    var planNames = Object.keys(planAgg).sort(function (a, b) { return planAgg[b].revenue - planAgg[a].revenue; });
+    var planRevTotal = planNames.reduce(function (a, name) { return a + planAgg[name].revenue; }, 0) || 1;
+    var PLAN_SHADES = ['f1', 'f2', 'f3', 'f4', 'f5', 'f6'];
+    var PLAN_CLS = {};
+    planNames.forEach(function (name, i) { PLAN_CLS[name] = PLAN_SHADES[i % PLAN_SHADES.length]; });
 
     // Category performance of won stores
     var catAgg = {};
@@ -2404,19 +2408,20 @@
         '</section>' +
         '<section class="card">' +
           '<div class="card-head"><div><h3>' + t('topPackages') + '</h3><p class="sub">' + t('topPackagesSub') + '</p></div></div>' +
-          '<div class="legend">' + PLANS.map(function (p) {
-            return '<span class="lg"><i class="sw ' + PLAN_CLS[p.name] + '"></i>' + esc(trPlan(p.name)) + '</span>';
+          (planNames.length ? '<div class="legend">' + planNames.map(function (name) {
+            return '<span class="lg"><i class="sw ' + PLAN_CLS[name] + '"></i>' + esc(trPlan(name)) + '</span>';
           }).join('') + '</div>' +
-          stackedBarSVG(PLANS.map(function (p) {
-            return { label: t('zidPlan', { name: trPlan(p.name) }), count: planAgg[p.name].revenue, cls: PLAN_CLS[p.name] };
+          stackedBarSVG(planNames.map(function (name) {
+            return { label: t('zidPlan', { name: trPlan(name) }), count: planAgg[name].revenue, cls: PLAN_CLS[name] };
           }), { money: true, aria: 'Revenue share by package' }) +
           '<div class="tbl-wrap"><table class="mini">' +
             '<thead><tr><th>' + t('packageCol') + '</th><th class="num">' + t('stores') + '</th><th class="num">' + t('revenue') + '</th><th class="num">' + t('share') + '</th></tr></thead>' +
-            '<tbody>' + PLANS.map(function (p) {
-              var a = planAgg[p.name];
-              return '<tr><td>' + t('zidPlan', { name: esc(trPlan(p.name)) }) + '</td><td class="num">' + fmtNum(a.count) + '</td><td class="num"><b>' + fmtMoneyC(a.revenue) + '</b></td><td class="num">' + fmtPct(a.revenue / planRevTotal, 0) + '</td></tr>';
+            '<tbody>' + planNames.map(function (name) {
+              var a = planAgg[name];
+              return '<tr><td>' + t('zidPlan', { name: esc(trPlan(name)) }) + '</td><td class="num">' + fmtNum(a.count) + '</td><td class="num"><b>' + fmtMoneyC(a.revenue) + '</b></td><td class="num">' + fmtPct(a.revenue / planRevTotal, 0) + '</td></tr>';
             }).join('') + '</tbody>' +
-          '</table></div>' +
+          '</table></div>'
+            : '<div class="empty">' + t('noPackagesYet') + '</div>') +
         '</section>' +
       '</div>' +
 

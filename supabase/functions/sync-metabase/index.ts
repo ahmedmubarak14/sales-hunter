@@ -59,13 +59,15 @@ function billingCycleOf(name: unknown): string | null {
 
 // One card carries invoice-level purchase data AND the deal-owner
 // name/id, joined by hubspot_deal_id — feeds subscriptions + commissions
-// and resolves deals.sales_owner (raw HubSpot owner IDs → real names,
-// since the HubSpot token isn't scoped for crm.objects.owners.read) in
-// a single pass.
+// and overwrites deals.sales_owner / deals.amount_net for any deal it
+// covers. Metabase is the source of truth: its real invoiced,
+// VAT-excluded amount replaces whatever HubSpot's deal-level amount
+// property said, and its owner name replaces the raw HubSpot owner ID
+// (the HubSpot token isn't scoped for crm.objects.owners.read).
 async function syncDealDetails(base: string, key: string, cardId: string) {
   const rows = await runCard(base, key, cardId);
   let subs = 0, comms = 0;
-  const ownerByDeal = new Map<string, string>();
+  const dealUpdates = new Map<string, { sales_owner?: string; amount_net?: number }>();
 
   for (const r of rows) {
     const dealId = String(r["id"] ?? "");
@@ -106,18 +108,22 @@ async function syncDealDetails(base: string, key: string, cardId: string) {
       comms++;
     }
 
-    if (ownerName) ownerByDeal.set(dealId, String(ownerName));
+    const patch = dealUpdates.get(dealId) ?? {};
+    if (ownerName) patch.sales_owner = String(ownerName);
+    if (typeof vatExcluded === "number") patch.amount_net = vatExcluded;
+    dealUpdates.set(dealId, patch);
   }
 
-  let ownersResolved = 0;
-  for (const [dealId, name] of ownerByDeal) {
-    const { error } = await supabase.from("deals").update({ sales_owner: name }).eq("hubspot_deal_id", dealId);
+  let dealsUpdated = 0;
+  for (const [dealId, patch] of dealUpdates) {
+    if (!patch.sales_owner && patch.amount_net === undefined) continue;
+    const { error } = await supabase.from("deals").update(patch).eq("hubspot_deal_id", dealId);
     if (error) throw error;
-    ownersResolved++;
+    dealsUpdated++;
   }
 
   if (comms) await supabase.rpc("rematch_commissions");
-  return { subscriptions: subs, commissions: comms, owners_resolved: ownersResolved };
+  return { subscriptions: subs, commissions: comms, deals_updated: dealsUpdated };
 }
 
 async function syncTopStores(base: string, key: string, cardId: string) {
@@ -143,7 +149,7 @@ Deno.serve(async () => {
 
     const details = conn.settings.card_subscriptions
       ? await syncDealDetails(conn.base, conn.key, conn.settings.card_subscriptions)
-      : { subscriptions: 0, commissions: 0, owners_resolved: 0 };
+      : { subscriptions: 0, commissions: 0, deals_updated: 0 };
     const storesSeen = conn.settings.card_topstores
       ? await syncTopStores(conn.base, conn.key, conn.settings.card_topstores)
       : 0;

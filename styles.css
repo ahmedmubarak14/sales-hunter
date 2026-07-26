@@ -606,7 +606,8 @@ button { font: inherit; cursor: pointer; }
 .legend .sw.s1 { background: var(--s1); } .legend .sw.s2 { background: var(--s2); }
 .legend .sw.s3 { background: var(--s3); } .legend .sw.gray { background: var(--mark-muted); }
 .legend .sw.good { background: var(--good); } .legend .sw.critical { background: var(--critical); }
-.legend .sw.f2 { background: var(--f2); } .legend .sw.f4 { background: var(--f4); } .legend .sw.f6 { background: var(--f6); }
+.legend .sw.f1 { background: var(--f1); } .legend .sw.f2 { background: var(--f2); } .legend .sw.f3 { background: var(--f3); }
+.legend .sw.f4 { background: var(--f4); } .legend .sw.f5 { background: var(--f5); } .legend .sw.f6 { background: var(--f6); }
 
 /* month-over-month deltas */
 .mom-up { color: var(--good-text); font-weight: 600; }

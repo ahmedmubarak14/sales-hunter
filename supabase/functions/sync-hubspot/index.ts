@@ -136,6 +136,13 @@ Deno.serve(async () => {
     const stageLabels = conn.configured ? await fetchStageLabels(conn.token) : {};
     const ownerNames = conn.configured && ownerProp ? await fetchOwnerNames(conn.token) : {};
 
+    // Metabase is the source of truth for amount/owner once a deal has a
+    // real invoiced purchase — don't let this HubSpot poll (which only
+    // sees the deal's quoted amount and a raw, unresolved owner ID) stomp
+    // back over what sync-metabase already corrected.
+    const { data: subRows } = await supabase.from("subscriptions").select("hubspot_deal_id");
+    const metabaseOwned = new Set((subRows ?? []).map((r) => r.hubspot_deal_id));
+
     for (const d of deals) {
       const p = d.properties;
       const stage = stageLabels[p.pipeline]?.[p.dealstage] ?? p.dealstage;
@@ -144,20 +151,24 @@ Deno.serve(async () => {
       const extra: Record<string, unknown> = {};
       for (const key of extraProps) if (p[key] != null) extra[key] = p[key];
 
-      await supabase.from("deals").upsert({
+      const patch: Record<string, unknown> = {
         hubspot_deal_id: d.id,
         company: p.dealname,
         hunter_email: p[hunterProp] ? String(p[hunterProp]).trim().toLowerCase() : null,
         stage,
-        amount_net: p[amountProp] != null ? Number(p[amountProp]) : null,
-        sales_owner: ownerProp ? (ownerNames[p[ownerProp]] ?? p[ownerProp] ?? null) : null,
         lost_reason: lostProp ? (p[lostProp] ?? null) : null,
         unqualified_reason: unqualProp ? (p[unqualProp] ?? null) : null,
         hs_created_at: p.createdate,
         hs_closed_at: p[closeProp] ?? p.closedate,
         extra,
         synced_at: new Date().toISOString(),
-      });
+      };
+      if (!metabaseOwned.has(d.id)) {
+        patch.amount_net = p[amountProp] != null ? Number(p[amountProp]) : null;
+        patch.sales_owner = ownerProp ? (ownerNames[p[ownerProp]] ?? p[ownerProp] ?? null) : null;
+      }
+
+      await supabase.from("deals").upsert(patch);
 
       if (existing && existing.stage !== stage) {
         await supabase.from("deal_stage_events").insert({
