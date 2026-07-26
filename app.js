@@ -2727,7 +2727,9 @@
         return '<tr>' +
           '<td>' + (hunter
             ? '<a href="#" class="hunter-link" data-hunter="' + hunter.id + '"><b>' + esc(hunter.name) + '</b></a><span class="cell-sub">' + esc(trDept(hunter.dept)) + '</span>'
-            : '<b>Unknown</b>') + '</td>' +
+            : l.hunterId === 'unassigned'
+              ? '<b>' + t('unassigned') + '</b>'
+              : '<b>' + esc(l.hunterId) + '</b><span class="cell-sub"><span class="unreg-pill" title="' + esc(t('notRegisteredHint')) + '">' + t('notRegistered') + '</span></span>') + '</td>' +
           '<td><b>' + esc(l.company) + '</b><span class="cell-sub">' + esc(l.id) + ' · <a href="#" class="hs-link" data-deal="' + esc(l.id) + '">' + t('openHubspot') + '</a></span></td>' +
           '<td>' + fmtDate(wonDate(l)) + '</td>' +
           '<td>' + esc(l.salesOwner) + '</td>' +
@@ -2865,7 +2867,7 @@
         var hunter = (window.LIVE ? LIVE.users : EMPLOYEES).find(function (e) { return e.id === l.hunterId; });
         var pay = hunter ? payoutDetailsOf(hunter) : { bank: '', iban: '' };
         lines.push([
-          '"' + (hunter ? hunter.name : 'Unknown').replace(/"/g, '""') + '"',
+          '"' + (hunter ? hunter.name : (l.hunterId === 'unassigned' ? t('unassigned') : l.hunterId)).replace(/"/g, '""') + '"',
           hunter ? hunter.dept : '', l.id,
           '"' + l.company.replace(/"/g, '""') + '"',
           fmtDate(wonDate(l)), '"' + l.salesOwner + '"',
