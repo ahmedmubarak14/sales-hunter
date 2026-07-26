@@ -139,8 +139,12 @@ window.SH_API = (function () {
   /* ---------------- transforms ---------------- */
   function normStage(s) {
     s = String(s || '').toLowerCase().replace(/[^a-z]/g, '');
-    if (s.indexOf('closedwon') >= 0 || s === 'won') return 'won';
-    if (s.indexOf('closedlost') >= 0 || s === 'lost') return 'lost';
+    // Match on "won"/"lost" alone, not "closedwon"/"closedlost" — real
+    // pipeline stage names aren't consistent ("Closed Won" vs "Close
+    // Lost", missing the "d"), and every stage seen so far only uses
+    // one or the other word once.
+    if (s.indexOf('won') >= 0) return 'won';
+    if (s.indexOf('lost') >= 0) return 'lost';
     if (s.indexOf('unqual') >= 0) return 'unqualified';
     if (s.indexOf('reengage') >= 0) return 'reengage';
     if (s.indexOf('commit') >= 0) return 'commit';
@@ -165,7 +169,15 @@ window.SH_API = (function () {
     }).sort(function (a, b) { return a.date - b.date; });
     if (!evs.length || evs[0].stage !== 'new') evs.unshift({ stage: 'new', date: created });
     var stage = normStage(d.stage);
-    if (evs[evs.length - 1].stage !== stage) evs.push({ stage: stage, date: new Date(d.synced_at) });
+    if (evs[evs.length - 1].stage !== stage) {
+      // deal_stage_events has no real history yet, so this synthetic
+      // "arrived at current stage" event needs a real date — HubSpot's
+      // own close date when the deal is actually closed, not synced_at
+      // (which is just whenever a sync job last touched the row, i.e.
+      // today, making every closed deal look like it closed "just now").
+      var stageDate = d.hs_closed_at ? new Date(d.hs_closed_at) : new Date(d.synced_at);
+      evs.push({ stage: stage, date: stageDate });
+    }
     var sub = (subsByDeal || {})[d.hubspot_deal_id];
     return {
       id: d.hubspot_deal_id,
