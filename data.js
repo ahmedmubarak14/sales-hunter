@@ -322,12 +322,19 @@ function reached(lead, stageId) {
   return false;
 }
 
+// A sentinel key (never a real HubSpot reason string) for deals with no
+// reason captured at all — so they show up as an explicit bucket instead
+// of silently vanishing from the tally and leaving it short of the
+// card's own "N lost/unqualified leads" total.
+var NO_REASON_KEY = ' no-reason';
+
 // HubSpot multi-checkbox properties (e.g. closed_lost_reasons) come back
 // as a single ";"-joined string when a deal has more than one reason
 // selected — tally each one separately rather than the whole string.
 function tallyReasons(bucket, raw) {
-  if (!raw) return;
-  String(raw).split(';').forEach(function (part) {
+  var s = raw ? String(raw).trim() : '';
+  if (!s) { bucket[NO_REASON_KEY] = (bucket[NO_REASON_KEY] || 0) + 1; return; }
+  s.split(';').forEach(function (part) {
     var reason = part.trim();
     if (reason) bucket[reason] = (bucket[reason] || 0) + 1;
   });

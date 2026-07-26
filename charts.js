@@ -10,6 +10,11 @@ function esc(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// tallyReasons() (data.js) buckets deals with no reason captured under
+// NO_REASON_KEY rather than dropping them — this is where that bucket
+// gets a real, translated label instead of the raw sentinel key.
+function reasonLabel(k) { return k === NO_REASON_KEY ? t('noReasonGiven') : trReason(k); }
+
 function curr(v) { return isAr() ? v + ' ر.س' : 'SAR ' + v; }
 function fmtMoney(n) { return curr(Math.round(n).toLocaleString('en-US')); }
 function fmtMoneyC(n) { // compact

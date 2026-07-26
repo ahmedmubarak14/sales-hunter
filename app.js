@@ -853,9 +853,9 @@
       return decided.filter(function (l) { return l.stage === 'won'; }).length / decided.length;
     });
 
-    var reasonsLost = Object.keys(s.lostReasons).map(function (k) { return { label: trReason(k), count: s.lostReasons[k] }; })
+    var reasonsLost = Object.keys(s.lostReasons).map(function (k) { return { label: reasonLabel(k), count: s.lostReasons[k] }; })
       .sort(function (a, b) { return b.count - a.count; });
-    var reasonsUnq = Object.keys(s.unqualReasons).map(function (k) { return { label: trReason(k), count: s.unqualReasons[k] }; })
+    var reasonsUnq = Object.keys(s.unqualReasons).map(function (k) { return { label: reasonLabel(k), count: s.unqualReasons[k] }; })
       .sort(function (a, b) { return b.count - a.count; });
 
     var currentStages = STAGES.filter(function (st) { return st.group === 'open'; }).map(function (st) {
@@ -2367,9 +2367,9 @@
     var coach = lb.filter(function (r) { return r.s.total >= 8 && r.s.conversion < avgConv * 0.55; })
       .sort(function (a, b) { return a.s.conversion - b.s.conversion; });
 
-    var reasonsLost = Object.keys(s.lostReasons).map(function (k) { return { label: trReason(k), count: s.lostReasons[k] }; })
+    var reasonsLost = Object.keys(s.lostReasons).map(function (k) { return { label: reasonLabel(k), count: s.lostReasons[k] }; })
       .sort(function (a, b) { return b.count - a.count; });
-    var reasonsUnq = Object.keys(s.unqualReasons).map(function (k) { return { label: trReason(k), count: s.unqualReasons[k] }; })
+    var reasonsUnq = Object.keys(s.unqualReasons).map(function (k) { return { label: reasonLabel(k), count: s.unqualReasons[k] }; })
       .sort(function (a, b) { return b.count - a.count; });
 
     // Live pipeline board: current count + value sitting in each stage
