@@ -143,10 +143,7 @@ window.SH_API = (function () {
     // pipeline stage names aren't consistent ("Closed Won" vs "Close
     // Lost", missing the "d"), and every stage seen so far only uses
     // one or the other word once.
-    // "Subscribed" is the Nurturing pipeline's own win: a deal that was
-    // lost/unqualified in Sales, moved to Nurturing to be re-engaged,
-    // and converted there — a real close, not a fresh "new" lead.
-    if (s.indexOf('won') >= 0 || s.indexOf('subscribed') >= 0) return 'won';
+    if (s.indexOf('won') >= 0) return 'won';
     if (s.indexOf('lost') >= 0) return 'lost';
     if (s.indexOf('unqual') >= 0) return 'unqualified';
     if (s.indexOf('reengage') >= 0) return 'reengage';
