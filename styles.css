@@ -251,6 +251,33 @@ button { font: inherit; cursor: pointer; }
 .icon-btn:hover { background: var(--surface-2); }
 .icon-btn svg { width: 16px; height: 16px; }
 
+/* First-run / empty states */
+.empty-state { text-align: center; padding: 40px 24px; max-width: 620px; margin: 0 auto; }
+.empty-state .es-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 52px; height: 52px; border-radius: 14px;
+  background: var(--brand-soft); color: var(--brand-strong); margin-bottom: 14px;
+}
+.empty-state .es-icon svg { width: 24px; height: 24px; }
+.empty-state h3 { font-size: 17px; }
+.empty-state .sub { margin: 8px auto 18px; max-width: 460px; }
+.empty-state .btn { display: inline-block; text-decoration: none; }
+.how-steps { margin: 0; padding: 0; list-style: none; counter-reset: step; display: flex; flex-direction: column; gap: 14px; }
+.how-steps li { counter-increment: step; display: grid; grid-template-columns: 28px 1fr; gap: 4px 12px; align-items: baseline; }
+.how-steps li::before {
+  content: counter(step); grid-row: span 2;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--brand-soft); color: var(--brand-strong);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 12.5px;
+}
+.how-steps li b { font-size: 13.5px; }
+.how-steps li span { color: var(--muted); font-size: 13px; grid-column: 2; }
+
+/* Refresh control */
+.icon-btn.spinning svg { animation: sh-spin 0.7s linear infinite; }
+@keyframes sh-spin { to { transform: rotate(360deg); } }
+
 /* Profile page — summary column + form column */
 .profile-grid { display: grid; grid-template-columns: 300px 1fr; gap: 16px; align-items: start; max-width: 1000px; }
 .profile-summary { text-align: center; position: sticky; top: 16px; }

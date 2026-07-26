@@ -152,6 +152,10 @@
     return '<span class="avatar' + (cls ? ' ' + cls : '') + '"' + s + '>' + inner + '</span>';
   }
   function toast(msg) {
+    // surface-level failures are logged so management can see breakage
+    if (/HTTP \d|failed|error|denied/i.test(String(msg)) && window.SH_API && SH_API.logError) {
+      SH_API.logError(String(msg), 'toast');
+    }
     var t = el('<div class="toast" role="status">' + esc(msg) + '</div>');
     document.body.appendChild(t);
     setTimeout(function () { t.remove(); }, 3200);
@@ -174,6 +178,7 @@
     chevronLeft: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 18l-6-6 6-6"/></svg>',
     ban: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>',
     camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.2l1.1-1.8A1 1 0 0 1 8.7 4.7h6.6a1 1 0 0 1 .9.5L17.3 7h2.2A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-9Z"/><circle cx="12" cy="12.8" r="3.3"/></svg>',
+    refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 4v4.5h-4.5"/></svg>',
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg>',
     dash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
     leads: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="3.5" cy="18" r="1.4" fill="currentColor" stroke="none"/></svg>',
@@ -688,6 +693,7 @@
                 [user.role, user.secondaryRole].map(function (rr) {
                   return '<button class="rs-btn' + (rr === roleOf() ? ' active' : '') + '" data-role="' + rr + '">' + roleName(rr) + '</button>';
                 }).join('') + '</div>' : '') +
+              (window.LIVE ? '<button class="icon-btn" id="refresh-btn" title="' + t('refreshData') + '" aria-label="' + t('refreshData') + '">' + ICONS.refresh + '</button>' : '') +
               '<button class="icon-btn lang-btn" id="lang-toggle" aria-label="' + t('langToggle') + '">' + (isAr() ? 'EN' : 'ع') + '</button>' +
               '<button class="icon-btn" id="theme-toggle" title="' + t('themeToggle') + '" aria-label="' + t('themeToggle') + '">' + ICONS.sun + '</button>' +
             '</div>' +
@@ -702,6 +708,8 @@
       if (window.LIVE) { SH_API.signOut(); location.hash = ''; location.reload(); return; }
       LS.set('user', null); location.hash = ''; route();
     });
+    var rb = document.getElementById('refresh-btn');
+    if (rb) rb.addEventListener('click', function () { doRefresh(true); });
     document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
     document.getElementById('lang-toggle').addEventListener('click', function () { setLang(isAr() ? 'en' : 'ar'); route(); });
     document.getElementById('nav-toggle').addEventListener('click', function () {
@@ -737,6 +745,17 @@
     return rows.map(function (f) { return { stage: trStage(f.stage), count: f.count }; });
   }
 
+  /* First-run / zero-data state. Every hunter starts here, so it should
+     read as "new", not "broken". */
+  function emptyState(icon, title, body, ctaHash, ctaLabel) {
+    return '<section class="card empty-state">' +
+      '<span class="es-icon">' + (ICONS[icon] || '') + '</span>' +
+      '<h3>' + esc(title) + '</h3>' +
+      '<p class="sub">' + esc(body) + '</p>' +
+      (ctaHash ? '<a class="btn" href="#' + ctaHash + '">' + esc(ctaLabel) + '</a>' : '') +
+    '</section>';
+  }
+
   function tile(label, value, deltaHtml) {
     return '<div class="tile"><div class="t-label">' + esc(label) + '</div>' +
       '<div class="t-value">' + value + '</div>' +
@@ -746,6 +765,22 @@
   /* ---- Employee dashboard ---- */
   function viewDashboard(content, user) {
     var leads = leadsOf(user.id);
+    // brand-new hunter: a welcome + how-it-works beats a wall of zeros
+    if (!leads.length) {
+      content.innerHTML =
+        '<div class="welcome-banner"><div><h2>' + t('welcomeBack', { name: esc(user.name.split(' ')[0]) }) + '</h2>' +
+          '<p class="w-date">' + t('firstRunTag') + '</p></div></div>' +
+        emptyState('plus', t('firstRunTitle'), t('firstRunBody', { rate: ratePct() }), '/submit', t('navSubmit')) +
+        '<section class="card">' +
+          '<div class="card-head"><div><h3>' + t('firstRunStepsTitle') + '</h3></div></div>' +
+          '<ol class="how-steps">' +
+            '<li><b>' + t('firstRunStep1') + '</b><span>' + t('firstRunStep1b') + '</span></li>' +
+            '<li><b>' + t('firstRunStep2') + '</b><span>' + t('firstRunStep2b') + '</span></li>' +
+            '<li><b>' + t('firstRunStep3', { rate: ratePct() }) + '</b><span>' + t('firstRunStep3b') + '</span></li>' +
+          '</ol>' +
+        '</section>';
+      return;
+    }
     var s = statsFor(leads);
     var months = last12Months();
 
@@ -903,6 +938,10 @@
 
   /* ---- My Leads ---- */
   function viewLeads(content, user) {
+    if (!leadsOf(user.id).length) {
+      content.innerHTML = emptyState('leads', t('noLeadsTitle'), t('noLeadsBody'), '/submit', t('navSubmit'));
+      return;
+    }
     var stageFilter = 'all';
     var q = '';
 
@@ -1235,6 +1274,12 @@
   /* ---- Commission ---- */
   function viewCommission(content, user) {
     var leads = leadsOf(user.id);
+    if (!leads.filter(function (l) { return l.stage === 'won'; }).length) {
+      content.innerHTML = emptyState('money', t('noCommTitle'),
+        t('noCommBody', { rate: ratePct() }), leads.length ? '/leads' : '/submit',
+        leads.length ? t('navLeads') : t('navSubmit'));
+      return;
+    }
     var s = statsFor(leads);
     var months = last12Months();
     var thisMonthKey = monthKey(NOW);
@@ -1663,7 +1708,27 @@
                 '<td>' + esc(e.who) + '</td><td>' + esc(e.action) + '</td></tr>';
             }).join('') + '</tbody></table></div>'
           : '<div class="empty">' + t('auditEmpty') + '</div>') +
-      '</section>';
+      '</section>' +
+      (window.LIVE ? '<section class="card" id="health-card">' +
+        '<div class="card-head"><div><h3>' + t('sysHealth') + '</h3><p class="sub">' + t('sysHealthSub') + '</p></div></div>' +
+        '<div id="health-body"><div class="empty">' + t('loadingLive') + '</div></div>' +
+      '</section>' : '');
+
+    if (window.LIVE) {
+      SH_API.recentErrors().then(function (rows) {
+        var body = document.getElementById('health-body');
+        if (!body) return;
+        body.innerHTML = (rows && rows.length)
+          ? '<div class="tbl-wrap"><table class="mini"><thead><tr><th>' + t('when') + '</th><th>' + t('who') + '</th><th>' + t('errorCol') + '</th></tr></thead><tbody>' +
+            rows.map(function (r) {
+              return '<tr><td style="white-space:nowrap">' + fmtDate(new Date(r.created_at)) +
+                '<span class="cell-sub">' + new Date(r.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + '</span></td>' +
+                '<td>' + esc(r.actor_email || '—') + '</td>' +
+                '<td>' + esc(r.message) + '<span class="cell-sub">' + esc([r.context, r.page].filter(Boolean).join(' · ')) + '</span></td></tr>';
+            }).join('') + '</tbody></table></div>'
+          : '<div class="empty">' + t('sysHealthOk') + '</div>';
+      });
+    }
 
     document.getElementById('settings-form').addEventListener('submit', function (e) {
       e.preventDefault();
@@ -2632,6 +2697,56 @@
       e.preventDefault();
       SH_API.openPayslip(b.getAttribute('data-deal')).catch(function (e2) { toast(String(e2.message)); });
     }
+  });
+
+  /* ---------------- Live data refresh ----------------
+     The app used to load its snapshot once at sign-in and never again,
+     so approvals/edits made elsewhere stayed invisible for hours. Now
+     we re-pull on demand, when the tab regains focus, and periodically.
+     Auto-refreshes never re-render over a form the user is using. */
+  var refreshing = false;
+  function safeToRerender() {
+    if (document.getElementById('ob-overlay') || document.getElementById('drawer-root')) return false;
+    var ov = document.getElementById('au-overlay');
+    if (ov && !ov.hidden) return false;
+    var a = document.activeElement;
+    if (a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) return false;
+    return true;
+  }
+  function doRefresh(manual) {
+    if (refreshing || !window.LIVE || !window.SH_API) return;
+    if (!manual && !safeToRerender()) return;
+    refreshing = true;
+    var btn = document.getElementById('refresh-btn');
+    if (btn) btn.classList.add('spinning');
+    SH_API.refresh().then(function (ok) {
+      if (ok && (manual || safeToRerender())) route();
+      if (manual) toast(t('refreshed'));
+    }).catch(function (e) {
+      SH_API.logError(String(e.message), 'refresh');
+      if (manual) toast(String(e.message));
+    }).then(function () {
+      refreshing = false;
+      var b2 = document.getElementById('refresh-btn');
+      if (b2) b2.classList.remove('spinning');
+    });
+  }
+  document.addEventListener('visibilitychange', function () {
+    // coming back to the tab after a while → get current data
+    if (!document.hidden && window.LIVE && Date.now() - SH_API.lastLoaded() > 60000) doRefresh(false);
+  });
+  setInterval(function () {
+    if (!document.hidden && window.LIVE) doRefresh(false);
+  }, 5 * 60 * 1000);
+
+  /* Report uncaught failures so breakage is visible to management
+     instead of dying silently in someone's browser. */
+  window.addEventListener('error', function (e) {
+    if (window.SH_API && SH_API.logError) SH_API.logError(e.message, 'window.error');
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    var m = e.reason && (e.reason.message || e.reason);
+    if (window.SH_API && SH_API.logError) SH_API.logError(String(m), 'unhandled');
   });
 
   /* ---------------- Boot ---------------- */

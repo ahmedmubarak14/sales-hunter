@@ -287,6 +287,7 @@ window.SH_API = (function () {
      every existing reference keeps working). */
   function activate(snap) {
     window.LIVE = snap;
+    lastLoadedAt = Date.now();
     NOW = new Date();
     if (snap.settings.commission_rate_display) COMMISSION_RATE = Number(snap.settings.commission_rate_display);
     if (snap.settings.vat_rate_display) VAT_RATE = Number(snap.settings.vat_rate_display);
@@ -295,6 +296,18 @@ window.SH_API = (function () {
     LEADS.length = 0;
     snap.leads.forEach(function (l) { LEADS.push(l); });
     LEADS.sort(function (a, b) { return b.createdAt - a.createdAt; });
+  }
+
+  /* Re-pull the snapshot for an already signed-in session. Used by the
+     refresh control, tab-focus, and the periodic poll so the UI doesn't
+     sit on data from sign-in time. */
+  var lastLoadedAt = 0;
+  function lastLoaded() { return lastLoadedAt; }
+  async function refresh() {
+    if (!enabled() || !getSession() || !window.LIVE) return false;
+    var snap = await loadSnapshot();
+    activate(snap);
+    return true;
   }
 
   async function init() {
@@ -408,6 +421,25 @@ window.SH_API = (function () {
       body: { commission_id: c.id, storage_path: path, uploaded_by: window.LIVE.me.dbId }
     });
     window.LIVE.payslipByComm[c.id] = row[0];
+  }
+
+  /* ---------------- error reporting ---------------- */
+  /* Fire-and-forget: never let logging break the thing that failed. */
+  var lastLogged = '';
+  function logError(message, context) {
+    try {
+      if (!enabled() || !getSession()) return;
+      var msg = String(message || '').slice(0, 500);
+      if (!msg || msg === lastLogged) return; // don't spam identical repeats
+      lastLogged = msg;
+      req('/rest/v1/client_errors', {
+        method: 'POST', headers: { Prefer: 'return=minimal' },
+        body: { message: msg, context: String(context || '').slice(0, 200), page: location.hash || '/' }
+      }).catch(function () {});
+    } catch (e) {}
+  }
+  async function recentErrors() {
+    return req('/rest/v1/client_errors?select=*&order=created_at.desc&limit=25').catch(function () { return []; });
   }
 
   /* ---------------- profile photo ---------------- */
@@ -543,6 +575,8 @@ window.SH_API = (function () {
     uploadIbanCert: uploadIbanCert, openIbanCert: openIbanCert,
     uploadAvatar: uploadAvatar, removeAvatar: removeAvatar,
     useGoogleAvatar: useGoogleAvatar, googleAvatarAvailable: googleAvatarAvailable,
+    refresh: refresh, lastLoaded: lastLoaded,
+    logError: logError, recentErrors: recentErrors,
     addUser: addUser, patchUser: patchUser, saveSettings: saveSettings,
     revealIban: revealIban, profileOf: profileOf
   };
