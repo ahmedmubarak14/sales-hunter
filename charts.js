@@ -116,6 +116,22 @@ function chartCard(opts) {
   '</section>';
 }
 
+/* ---- Reason breakdown: a title card of big-number tiles, one per
+   reason — for "why did leads get lost/unqualified" views. ---- */
+function reasonTilesCard(title, subtitle, items, cls) {
+  var body = items.length
+    ? '<div class="reason-tiles">' + items.map(function (r) {
+        return '<div class="reason-tile"><div class="rt-value ' + (cls || '') + '">' + fmtNum(r.count) + '</div>' +
+          '<div class="rt-label">' + esc(r.label) + '</div></div>';
+      }).join('') + '</div>'
+    : '<div class="empty">' + t('noReasonsYet') + '</div>';
+  return '<section class="card">' +
+    '<div class="card-head"><div><h3>' + esc(title) + '</h3>' +
+    (subtitle ? '<p class="sub">' + esc(subtitle) + '</p>' : '') + '</div></div>' +
+    body +
+  '</section>';
+}
+
 function wireCardToggles(root) {
   root.querySelectorAll('[data-toggle-table]').forEach(function (btn) {
     btn.addEventListener('click', function () {

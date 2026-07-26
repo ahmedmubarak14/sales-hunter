@@ -322,6 +322,17 @@ function reached(lead, stageId) {
   return false;
 }
 
+// HubSpot multi-checkbox properties (e.g. closed_lost_reasons) come back
+// as a single ";"-joined string when a deal has more than one reason
+// selected — tally each one separately rather than the whole string.
+function tallyReasons(bucket, raw) {
+  if (!raw) return;
+  String(raw).split(';').forEach(function (part) {
+    var reason = part.trim();
+    if (reason) bucket[reason] = (bucket[reason] || 0) + 1;
+  });
+}
+
 function statsFor(leads) {
   var s = {
     total: leads.length, won: 0, lost: 0, unqualified: 0, open: 0,
@@ -343,10 +354,10 @@ function statsFor(leads) {
       cycleSum += (wonDate(l) - l.createdAt) / DAY; cycleN += 1;
     } else if (l.stage === 'lost') {
       s.lost += 1;
-      if (l.lostReason) s.lostReasons[l.lostReason] = (s.lostReasons[l.lostReason] || 0) + 1;
+      tallyReasons(s.lostReasons, l.lostReason);
     } else if (l.stage === 'unqualified') {
       s.unqualified += 1;
-      if (l.unqualReason) s.unqualReasons[l.unqualReason] = (s.unqualReasons[l.unqualReason] || 0) + 1;
+      tallyReasons(s.unqualReasons, l.unqualReason);
     } else {
       s.open += 1; s.pipelineValue += l.amountNet;
     }

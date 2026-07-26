@@ -974,16 +974,8 @@
       '</div>' +
 
       '<div class="grid-2">' +
-        chartCard({
-          title: t('whyLost'), subtitle: t('whyLostSub', { n: fmtNum(s.lost) }),
-          svg: hbarsSVG(reasonsLost, { aria: 'Lost reasons', cls: 'critical' }),
-          table: { head: [t('reason'), t('leads')], rows: reasonsLost.map(function (x) { return [trReason(x.label), fmtNum(x.count)]; }) }
-        }) +
-        chartCard({
-          title: t('whyUnq'), subtitle: t('whyUnqSub', { n: fmtNum(s.unqualified) }),
-          svg: hbarsSVG(reasonsUnq, { aria: 'Unqualified reasons', cls: 'gray' }),
-          table: { head: [t('reason'), t('leads')], rows: reasonsUnq.map(function (x) { return [trReason(x.label), fmtNum(x.count)]; }) }
-        }) +
+        reasonTilesCard(t('whyLost'), t('whyLostSub', { n: fmtNum(s.lost) }), reasonsLost, 'critical') +
+        reasonTilesCard(t('whyUnq'), t('whyUnqSub', { n: fmtNum(s.unqualified) }), reasonsUnq, 'gray') +
       '</div>';
   }
 
@@ -1450,38 +1442,94 @@
     return { rows: rows, topThisMonthId: topThisMonth && topThisMonth.revThisMonth > 0 ? topThisMonth.emp.id : null };
   }
 
+  /* Hunters with real deals (hunterId is just their lowercased email —
+     see toLead() in api.js) but no app_users account yet. Nothing to
+     "link" later: the moment someone registers with that same email,
+     EMPLOYEES picks them up and leadsOf() matches their existing deals
+     automatically, since attribution is the email itself. */
+  function unregisteredHunterRows() {
+    var known = {};
+    EMPLOYEES.forEach(function (e) {
+      known[e.id] = true;
+      (e.aliases || []).forEach(function (a) { known[a] = true; });
+    });
+    var seen = {};
+    var out = [];
+    allLeads().forEach(function (l) {
+      var id = l.hunterId;
+      if (!id || id === 'unassigned' || known[id] || seen[id]) return;
+      seen[id] = true;
+      var local = id.split('@')[0].replace(/[._]+/g, ' ').trim();
+      var name = local.replace(/\w\S*/g, function (w) { return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(); });
+      out.push({ emp: { id: id, name: name || id, dept: '', title: '', email: id, avatar: null }, s: statsFor(leadsOf(id)) });
+    });
+    return out;
+  }
+
   /* Management-only ranking (replaces the shared leaderboard — hunters
      see only their own numbers, for privacy) */
   function viewPerformance(content) {
     var data = leaderboardData();
-    var rows = data.rows.sort(function (a, b) { return b.s.revenueNet - a.s.revenueNet; });
-    var maxRev = Math.max.apply(null, rows.map(function (r) { return r.s.revenueNet; }).concat([1]));
+    var regRows = data.rows.map(function (r) { return Object.assign({ registered: true }, r); });
+    var unregRows = unregisteredHunterRows().map(function (r) { return Object.assign({ registered: false }, r); });
+    var regFilter = 'all';
 
-    var body = rows.map(function (r, i) {
-      var rankCls = i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : '';
-      var badges = badgesFor(r.emp.id, r.s, data.topThisMonthId);
-      return '<tr>' +
-        '<td><span class="rank-badge ' + rankCls + '">' + (i + 1) + '</span></td>' +
-        '<td><b>' + esc(r.emp.name) + '</b><span class="cell-sub">' + esc(trDept(r.emp.dept)) + '</span></td>' +
-        '<td class="num">' + fmtNum(r.s.total) + '</td>' +
-        '<td class="num">' + fmtNum(r.s.won) + '</td>' +
-        '<td class="num">' + fmtPct(r.s.conversion, 0) + '</td>' +
-        '<td style="min-width:120px"><div class="progress-track"><div class="progress-fill" style="width:' + Math.round(r.s.revenueNet / maxRev * 100) + '%"></div></div></td>' +
-        '<td class="num"><b>' + fmtMoneyC(r.s.revenueNet) + '</b></td>' +
-        '<td class="num">' + fmtMoneyC(r.s.commission) + '</td>' +
-        '<td><div class="badges">' + badges.map(function (b) { return '<span class="badge-chip">' + esc(b) + '</span>'; }).join('') + '</div></td>' +
-      '</tr>';
-    }).join('');
+    function rowsFor() {
+      var rows = regFilter === 'reg' ? regRows : regFilter === 'unreg' ? unregRows : regRows.concat(unregRows);
+      return rows.slice().sort(function (a, b) { return b.s.revenueNet - a.s.revenueNet; });
+    }
 
+    function renderTable() {
+      var rows = rowsFor();
+      var maxRev = Math.max.apply(null, rows.map(function (r) { return r.s.revenueNet; }).concat([1]));
+
+      var body = rows.map(function (r, i) {
+        var rankCls = i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : '';
+        var badges = r.registered ? badgesFor(r.emp.id, r.s, data.topThisMonthId) : [];
+        var who = r.registered
+          ? esc(trDept(r.emp.dept))
+          : '<span class="unreg-pill" title="' + esc(t('notRegisteredHint')) + '">' + t('notRegistered') + '</span>';
+        return '<tr>' +
+          '<td><span class="rank-badge ' + rankCls + '">' + (i + 1) + '</span></td>' +
+          '<td><b>' + esc(r.emp.name) + '</b><span class="cell-sub">' + who + '</span></td>' +
+          '<td class="num">' + fmtNum(r.s.total) + '</td>' +
+          '<td class="num">' + fmtNum(r.s.won) + '</td>' +
+          '<td class="num">' + fmtPct(r.s.conversion, 0) + '</td>' +
+          '<td style="min-width:120px"><div class="progress-track"><div class="progress-fill" style="width:' + Math.round(r.s.revenueNet / maxRev * 100) + '%"></div></div></td>' +
+          '<td class="num"><b>' + fmtMoneyC(r.s.revenueNet) + '</b></td>' +
+          '<td class="num">' + fmtMoneyC(r.s.commission) + '</td>' +
+          '<td><div class="badges">' + badges.map(function (b) { return '<span class="badge-chip">' + esc(b) + '</span>'; }).join('') + '</div></td>' +
+        '</tr>';
+      }).join('');
+
+      document.getElementById('perf-table').innerHTML =
+        '<div class="tbl-wrap"><table>' +
+          '<thead><tr><th></th><th>' + t('hunter') + '</th><th class="num">' + t('leads') + '</th><th class="num">' + t('won') + '</th><th class="num">' + t('conversion') + '</th><th>' + t('revenue') + '</th><th class="num"></th><th class="num">' + t('commissionCol') + '</th><th>' + t('achievements') + '</th></tr></thead>' +
+          '<tbody>' + (body || '<tr><td colspan="9"><div class="empty">' + t('noHuntersFilter') + '</div></td></tr>') + '</tbody>' +
+        '</table></div>';
+    }
+
+    var segOpts = [['all', t('all')], ['reg', t('registered')], ['unreg', t('notRegistered')]];
     content.innerHTML =
       '<section class="card">' +
         '<div class="card-head"><div><h3>' + t('allTimeRanking') + '</h3>' +
-        '<p class="sub">' + t('rankingSub') + '</p></div></div>' +
-        '<div class="tbl-wrap"><table>' +
-          '<thead><tr><th></th><th>' + t('hunter') + '</th><th class="num">' + t('leads') + '</th><th class="num">' + t('won') + '</th><th class="num">' + t('conversion') + '</th><th>' + t('revenue') + '</th><th class="num"></th><th class="num">' + t('commissionCol') + '</th><th>' + t('achievements') + '</th></tr></thead>' +
-          '<tbody>' + body + '</tbody>' +
-        '</table></div>' +
+        '<p class="sub">' + t('rankingSub') + '</p></div>' +
+        '<div class="seg" id="reg-seg">' + segOpts.map(function (s, i) {
+          return '<button data-seg="' + s[0] + '" class="' + (i === 0 ? 'active' : '') + '">' + s[1] + '</button>';
+        }).join('') + '</div>' +
+        '</div>' +
+        '<div id="perf-table"></div>' +
       '</section>';
+
+    document.querySelectorAll('#reg-seg button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        document.querySelectorAll('#reg-seg button').forEach(function (x) { x.classList.remove('active'); });
+        b.classList.add('active');
+        regFilter = b.getAttribute('data-seg');
+        renderTable();
+      });
+    });
+    renderTable();
   }
 
   /* ---- Management backoffice: team & access ---- */
@@ -1883,7 +1931,8 @@
               fieldRow('hs-amount', t('intgAmountProp'), hsS.amount_prop || '', 'amount_without_vat') +
               fieldRow('hs-close', t('intgCloseProp'), hsS.close_date_prop || '', 'closedate') +
               fieldRow('hs-owner', t('intgOwnerProp'), hsS.owner_prop || '', 'hubspot_owner_id') +
-              fieldRow('hs-lost', t('intgLostProp'), hsS.lost_reason_prop || '', 'closed_lost_reason') +
+              fieldRow('hs-lost', t('intgLostProp'), hsS.lost_reason_prop || '', 'closed_lost_reasons') +
+              fieldRow('hs-unqual', t('intgUnqualProp'), hsS.unqualified_reason_prop || '', 'unqualified_reason__asbab_dm_altahl') +
             '</div>' +
 
             '<div style="margin-top:14px"><label class="f-label" for="hs-extra-props">' + t('intgExtraProps') + '</label>' +
@@ -1950,6 +1999,7 @@
           close_date_prop: document.getElementById('hs-close').value.trim(),
           owner_prop: document.getElementById('hs-owner').value.trim(),
           lost_reason_prop: document.getElementById('hs-lost').value.trim(),
+          unqualified_reason_prop: document.getElementById('hs-unqual').value.trim(),
           extra_properties: (document.getElementById('hs-extra-props').value || '').split(',').filter(Boolean)
         }, document.getElementById('hs-token').value);
       });
@@ -2458,6 +2508,11 @@
       '</div>' +
 
       '<div class="grid-2">' +
+        reasonTilesCard(t('topLostReasons'), t('programWideLost', { n: fmtNum(s.lost) }), reasonsLost, 'critical') +
+        reasonTilesCard(t('whyUnqProgram'), t('programWideUnq', { n: fmtNum(s.unqualified) }), reasonsUnq, 'gray') +
+      '</div>' +
+
+      '<div class="grid-2">' +
         '<section class="card">' +
           '<div class="card-head"><div><h3>' + t('sourcePerf') + '</h3><p class="sub">' + t('sourceSub') + '</p></div></div>' +
           '<div class="tbl-wrap"><table class="mini">' +
@@ -2467,19 +2522,6 @@
             }).join('') + '</tbody>' +
           '</table></div>' +
         '</section>' +
-        chartCard({
-          title: t('topLostReasons'), subtitle: t('programWideLost', { n: fmtNum(s.lost) }),
-          svg: hbarsSVG(reasonsLost.slice(0, 6), { aria: 'Program lost reasons', cls: 'critical' }),
-          table: { head: [t('reason'), t('leads')], rows: reasonsLost.map(function (x) { return [trReason(x.label), fmtNum(x.count)]; }) }
-        }) +
-      '</div>' +
-
-      '<div class="grid-2">' +
-        chartCard({
-          title: t('whyUnqProgram'), subtitle: t('programWideUnq', { n: fmtNum(s.unqualified) }),
-          svg: hbarsSVG(reasonsUnq.slice(0, 6), { aria: 'Program unqualified reasons', cls: 'gray' }),
-          table: { head: [t('reason'), t('leads')], rows: reasonsUnq.map(function (x) { return [trReason(x.label), fmtNum(x.count)]; }) }
-        }) +
         '<section class="card">' +
           '<div class="card-head"><div><h3>' + t('winsFrom') + '</h3><p class="sub">' + t('winsFromSub') + '</p></div></div>' +
           '<div class="tbl-wrap"><table class="mini">' +

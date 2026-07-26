@@ -19,6 +19,7 @@ type HSSettings = {
   close_date_prop?: string;
   owner_prop?: string;
   lost_reason_prop?: string;
+  unqualified_reason_prop?: string;
   extra_properties?: string[];
 };
 
@@ -114,6 +115,7 @@ Deno.serve(async () => {
     const closeProp = settings.close_date_prop || "closedate";
     const ownerProp = settings.owner_prop || "";
     const lostProp = settings.lost_reason_prop || "";
+    const unqualProp = settings.unqualified_reason_prop || "";
     const extraProps = settings.extra_properties ?? [];
 
     const properties = Array.from(new Set([
@@ -121,6 +123,7 @@ Deno.serve(async () => {
       hunterProp, amountProp, closeProp,
       ...(ownerProp ? [ownerProp] : []),
       ...(lostProp ? [lostProp] : []),
+      ...(unqualProp ? [unqualProp] : []),
       ...extraProps,
     ]));
 
@@ -149,6 +152,7 @@ Deno.serve(async () => {
         amount_net: p[amountProp] != null ? Number(p[amountProp]) : null,
         sales_owner: ownerProp ? (ownerNames[p[ownerProp]] ?? p[ownerProp] ?? null) : null,
         lost_reason: lostProp ? (p[lostProp] ?? null) : null,
+        unqualified_reason: unqualProp ? (p[unqualProp] ?? null) : null,
         hs_created_at: p.createdate,
         hs_closed_at: p[closeProp] ?? p.closedate,
         extra,
