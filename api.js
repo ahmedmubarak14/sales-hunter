@@ -548,6 +548,16 @@ window.SH_API = (function () {
     }
   }
 
+  /* Integrations: read status/settings (never the secret) and save. */
+  async function getIntegrations() {
+    return req('/rest/v1/integration_config?select=*').catch(function () { return []; });
+  }
+  async function saveIntegration(name, settings, secret) {
+    await req('/rest/v1/rpc/save_integration', {
+      method: 'POST', body: { p_name: name, p_settings: settings || {}, p_secret: secret || null }
+    });
+  }
+
   async function saveSettings(rate, vat) {
     await req('/rest/v1/settings?key=eq.commission_rate_display', {
       method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: { value: rate }
@@ -578,6 +588,7 @@ window.SH_API = (function () {
     refresh: refresh, lastLoaded: lastLoaded,
     logError: logError, recentErrors: recentErrors,
     addUser: addUser, patchUser: patchUser, saveSettings: saveSettings,
+    getIntegrations: getIntegrations, saveIntegration: saveIntegration,
     revealIban: revealIban, profileOf: profileOf
   };
 })();

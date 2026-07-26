@@ -180,6 +180,7 @@
     camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.2l1.1-1.8A1 1 0 0 1 8.7 4.7h6.6a1 1 0 0 1 .9.5L17.3 7h2.2A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-9Z"/><circle cx="12" cy="12.8" r="3.3"/></svg>',
     menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
     refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 4v4.5h-4.5"/></svg>',
+    plug: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M9 2v6M15 2v6M6 8h12v3a6 6 0 0 1-12 0V8ZM12 20v2"/></svg>',
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg>',
     dash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
     leads: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="3.5" cy="18" r="1.4" fill="currentColor" stroke="none"/></svg>',
@@ -259,6 +260,7 @@
     '/team':       { titleKey: 'navTeam',         icon: 'team',    render: viewTeam,      who: 'mgr', section: 'work' },
     '/payouts':    { titleKey: 'navPayouts',      icon: 'money',   render: viewPayouts,   who: 'fin', section: 'main' },
     '/hunters':    { titleKey: 'navHunters',      icon: 'person',  render: viewHunters,   who: 'fin', section: 'work' },
+    '/integrations':{ titleKey: 'navIntegrations', icon: 'plug',   render: viewIntegrations, who: 'mgr', section: 'account' },
     '/settings':   { titleKey: 'navSettings',     icon: 'gear',    render: viewSettings,  who: 'mgr', section: 'account' },
     '/profile':    { titleKey: 'navProfile',      icon: 'person',  render: viewProfile,   who: 'emp', section: 'account' }
   };
@@ -1730,6 +1732,101 @@
   }
 
   /* ---- Management backoffice: program settings + audit log ---- */
+  /* ---- Management: self-service integrations (HubSpot / Metabase) ---- */
+  function viewIntegrations(content) {
+    var cfg = {}; // name -> row
+
+    function statusPill(row) {
+      if (!row) return '<span class="dot-badge off"><i></i>' + t('intgNotConfigured') + '</span>';
+      if (row.last_status && /error|fail/i.test(row.last_status)) return '<span class="dot-badge off" style="color:var(--critical)"><i style="background:var(--critical)"></i>' + t('intgError') + '</span>';
+      if (row.secret_set) return '<span class="dot-badge active"><i></i>' + t('intgConnected') + '</span>';
+      return '<span class="dot-badge off"><i></i>' + t('intgNotConfigured') + '</span>';
+    }
+    function lastSync(row) {
+      return row && row.last_synced_at ? t('intgLastSync', { when: fmtDate(new Date(row.last_synced_at)) }) : t('intgNeverSynced');
+    }
+    function fieldRow(id, label, val, ph, type) {
+      return '<div><label class="f-label" for="' + id + '">' + esc(label) + '</label>' +
+        '<input type="' + (type || 'text') + '" id="' + id + '" value="' + esc(val || '') + '" placeholder="' + esc(ph || '') + '"></div>';
+    }
+
+    function render() {
+      var hs = cfg.hubspot, mb = cfg.metabase;
+      var hsS = (hs && hs.settings) || {}, mbS = (mb && mb.settings) || {};
+      content.innerHTML =
+        '<div class="filter-row"><div><h2>' + t('navIntegrations') + '</h2>' +
+          '<p class="sub">' + t('intgSub') + '</p></div></div>' +
+
+        '<section class="card intg-card">' +
+          '<div class="intg-head"><div class="intg-title"><span class="intg-logo hs">H</span>' +
+            '<div><h3>HubSpot</h3><p class="sub">' + t('intgHubspotSub') + '</p></div></div>' + statusPill(hs) + '</div>' +
+          '<form id="hs-form" class="intg-body">' +
+            '<div class="form-grid">' +
+              fieldRow('hs-token', t('intgToken'), '', hs && hs.secret_set ? t('intgSecretSaved', { hint: hsS.secret_hint || '••••' }) : 'pat-…', 'password') +
+              fieldRow('hs-prop', t('intgHunterProp'), hsS.hunter_prop || 'lead_by__zidder_email_', 'lead_by__zidder_email_') +
+              fieldRow('hs-target', t('intgTargetType'), hsS.target_type || 'Sales Hunter', 'Sales Hunter') +
+            '</div>' +
+            '<div class="intg-actions"><span class="sub">' + lastSync(hs) + '</span>' +
+              '<button type="submit" class="btn">' + t('saveChanges') + '</button></div>' +
+          '</form>' +
+        '</section>' +
+
+        '<section class="card intg-card">' +
+          '<div class="intg-head"><div class="intg-title"><span class="intg-logo mb">M</span>' +
+            '<div><h3>Metabase</h3><p class="sub">' + t('intgMetabaseSub') + '</p></div></div>' + statusPill(mb) + '</div>' +
+          '<form id="mb-form" class="intg-body">' +
+            '<div class="form-grid">' +
+              fieldRow('mb-url', t('intgMbUrl'), mbS.base_url || '', 'https://metabase.your-co.com') +
+              fieldRow('mb-key', t('intgMbKey'), '', mb && mb.secret_set ? t('intgSecretSaved', { hint: mbS.secret_hint || '••••' }) : 'mb_…', 'password') +
+              fieldRow('mb-comm', t('intgCardComm'), mbS.card_commissions || '', 'e.g. 142') +
+              fieldRow('mb-subs', t('intgCardSubs'), mbS.card_subscriptions || '', 'e.g. 143') +
+              fieldRow('mb-stores', t('intgCardStores'), mbS.card_topstores || '', 'e.g. 144') +
+            '</div>' +
+            '<div class="intg-actions"><span class="sub">' + lastSync(mb) + '</span>' +
+              '<button type="submit" class="btn">' + t('saveChanges') + '</button></div>' +
+          '</form>' +
+        '</section>' +
+        '<p class="sub" style="text-align:center">' + t('intgSecurityNote') + '</p>';
+
+      document.getElementById('hs-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        save('hubspot', {
+          hunter_prop: document.getElementById('hs-prop').value.trim(),
+          target_type: document.getElementById('hs-target').value.trim()
+        }, document.getElementById('hs-token').value);
+      });
+      document.getElementById('mb-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        save('metabase', {
+          base_url: document.getElementById('mb-url').value.trim(),
+          card_commissions: document.getElementById('mb-comm').value.trim(),
+          card_subscriptions: document.getElementById('mb-subs').value.trim(),
+          card_topstores: document.getElementById('mb-stores').value.trim()
+        }, document.getElementById('mb-key').value);
+      });
+    }
+
+    function save(name, settings, secret) {
+      if (!window.LIVE) {
+        toast(t('intgDemoNote'));
+        return;
+      }
+      SH_API.saveIntegration(name, settings, secret.trim() || null).then(function () {
+        toast(t('intgSaved'));
+        return load();
+      }).catch(function (e2) { toast(String(e2.message)); });
+    }
+    function load() {
+      if (!window.LIVE) { render(); return Promise.resolve(); }
+      return SH_API.getIntegrations().then(function (rows) {
+        cfg = {};
+        (rows || []).forEach(function (r) { cfg[r.name] = r; });
+        render();
+      });
+    }
+    load();
+  }
+
   function viewSettings(content) {
     var log = LS.get('audit', []);
     content.innerHTML =
