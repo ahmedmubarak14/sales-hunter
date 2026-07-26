@@ -13,8 +13,14 @@ alter table store_showcase drop column if exists growth;
 alter table store_showcase drop column if exists city;
 alter table store_showcase drop column if exists blurb;
 
+-- No security_invoker here on purpose: this view exists specifically so
+-- hunters (blocked by store_showcase's management/finance-only RLS) can
+-- still see rankings. security_invoker=true would make the view enforce
+-- that same RLS and defeat the point — the view's fixed column list
+-- (no orders_count/orders_total_sar) is what keeps revenue and order
+-- volume hidden from hunters, not row-level security.
 drop view if exists store_showcase_lite;
-create view store_showcase_lite with (security_invoker = true) as
+create view store_showcase_lite as
   select store_id, name, category, rank_in_category from store_showcase;
 
 grant select on store_showcase_lite to authenticated;
