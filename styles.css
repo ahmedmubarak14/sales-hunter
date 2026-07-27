@@ -1024,3 +1024,28 @@ fieldset { border: none; margin: 0; padding: 0; }
 
 /* Pending-closure list: revealed by the card's "View deals" toggle. */
 .pending-list { margin-top: 14px; border-top: 1px solid var(--hairline); padding-top: 12px; }
+
+/* "View as" — management standing in for a hunter. Deliberately loud and
+   full-bleed above the topbar: it must never be possible to forget whose
+   account is on screen. Amber, not red — nothing is wrong, but this is
+   not your own data. */
+.viewas-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 20px;
+  background: color-mix(in srgb, var(--warning) 22%, var(--surface));
+  border-bottom: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
+  color: var(--ink);
+}
+.viewas-bar .va-txt { font-weight: 650; }
+.viewas-bar .va-note {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--ink-2); border: 1px solid color-mix(in srgb, var(--warning) 55%, transparent);
+  border-radius: 999px; padding: 1px 8px;
+}
+.viewas-bar .va-exit {
+  margin-inline-start: auto;
+  background: var(--ink); color: var(--surface); border: none;
+  border-radius: 7px; padding: 5px 12px; font-weight: 600;
+}
+.viewas-bar .va-exit:hover { background: var(--ink-2); }
+.hd-viewas { width: 100%; justify-content: center; }

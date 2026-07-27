@@ -34,18 +34,64 @@
       return Object.assign({ active: true }, u, over[u.id] || {});
     });
   }
-  function currentUser() {
+  // The person actually signed in — never the impersonated one.
+  function realUser() {
     if (window.LIVE) return LIVE.me;
     var id = LS.get('user', null);
     if (!id) return null;
     var u = usersAll().find(function (x) { return x.id === id; });
     return u && u.active ? u : null;
   }
+
+  /* "View as" — management can render the app exactly as a given hunter
+     sees it, for support and for checking what a hunter is actually shown.
+     This is a presentation-layer simulation: the underlying data was still
+     fetched under management's own database access, so it will NOT catch a
+     row-level-security mistake that hides data from the real hunter. It is
+     strictly read-only (see readOnlyView) so management can never write
+     anything under someone else's name. */
+  function readOnlyNotice(msg) {
+    return '<section class="card"><div class="empty">' + esc(msg) + '</div></section>';
+  }
+  function viewAsId() { return LS.get('viewAs', null); }
+  function canImpersonate(u) {
+    return !!u && (u.role === 'mgr' || u.secondaryRole === 'mgr');
+  }
+  function viewAsUser() {
+    var id = viewAsId();
+    if (!id) return null;
+    if (!canImpersonate(realUser())) { LS.set('viewAs', null); return null; }
+    var u = usersAll().find(function (x) { return x.id === id; });
+    if (!u) { LS.set('viewAs', null); return null; }
+    return u;
+  }
+  function isViewingAs() { return !!viewAsUser(); }
+  // Every mutating control checks this, so an impersonated session can
+  // look but never touch.
+  function readOnlyView() { return isViewingAs(); }
+  function startViewAs(id) {
+    if (!canImpersonate(realUser())) return;
+    LS.set('viewAs', id);
+    location.hash = '#' + homeOf('emp');
+    route();
+  }
+  function stopViewAs() {
+    LS.set('viewAs', null);
+    location.hash = '#' + homeOf(roleOf());
+    route();
+  }
+
+  function currentUser() {
+    return viewAsUser() || realUser();
+  }
   /* A user with a secondary access (e.g. finance who also hunts) can
      switch which one is active; the choice sticks until sign-out. */
   function roleOf() {
     var u = currentUser();
     if (!u) return 'emp';
+    // activeRole belongs to the signed-in user, not the one being viewed —
+    // while impersonating, always render that person's own primary role.
+    if (isViewingAs()) return u.role;
     var act = LS.get('activeRole', null);
     if (act && u.secondaryRole && (act === u.role || act === u.secondaryRole)) return act;
     return u.role;
@@ -293,7 +339,9 @@
     if (!currentUser()) { renderLogin(); return; }
     /* users holding two accesses pick which one to enter with, once per sign-in */
     var cu = currentUser();
-    if (cu.secondaryRole && !LS.get('activeRole', null)) { renderAccessChooser(cu); return; }
+    // The access chooser is about the signed-in user's own two accesses —
+    // it must not appear when standing in for someone else.
+    if (!isViewingAs() && cu.secondaryRole && !LS.get('activeRole', null)) { renderAccessChooser(cu); return; }
     var home = homeOf(roleOf());
     if (!ROUTES[h]) { location.hash = '#' + home; return; }
     var r = ROUTES[h];
@@ -693,10 +741,17 @@
           '</div>' +
         '</aside>' +
         '<div class="main">' +
+          (isViewingAs()
+            ? '<div class="viewas-bar" role="status">' +
+                '<span class="va-txt">' + t('viewingAs', { name: esc(user.name) }) + '</span>' +
+                '<span class="va-note">' + t('viewingAsNote') + '</span>' +
+                '<button class="va-exit" id="exit-viewas">' + t('exitViewAs') + '</button>' +
+              '</div>'
+            : '') +
           '<div class="topbar">' +
             '<div class="crumbs"><h1>' + esc(t(r.titleKey)) + '</h1>' + (window.LIVE ? '' : '<span class="demo-pill">' + t('demoPill') + '</span>') + '</div>' +
             '<div class="actions">' +
-              (user.secondaryRole ? '<div class="role-switch" role="group" aria-label="' + t('switchAccess') + '">' +
+              (user.secondaryRole && !isViewingAs() ? '<div class="role-switch" role="group" aria-label="' + t('switchAccess') + '">' +
                 [user.role, user.secondaryRole].map(function (rr) {
                   return '<button class="rs-btn' + (rr === roleOf() ? ' active' : '') + '" data-role="' + rr + '">' + roleName(rr) + '</button>';
                 }).join('') + '</div>' : '') +
@@ -711,7 +766,11 @@
         '</div>' +
       '</div>';
 
+    var exitVa = document.getElementById('exit-viewas');
+    if (exitVa) exitVa.addEventListener('click', stopViewAs);
+
     document.getElementById('logout').addEventListener('click', function () {
+      LS.set('viewAs', null);
       LS.set('activeRole', null);
       if (window.LIVE) { SH_API.signOut(); location.hash = ''; location.reload(); return; }
       LS.set('user', null); location.hash = ''; route();
@@ -756,7 +815,7 @@
     initTooltip(content);
     wireCardToggles(content);
     wirePendingToggles(content);
-    if (needsOb) openOnboardingModal();
+    if (needsOb && !isViewingAs()) openOnboardingModal();
     else {
       var ob = document.getElementById('ob-overlay');
       if (ob) ob.remove();
@@ -1126,6 +1185,9 @@
 
   /* ---- Submit lead (mirrors the real referral form) ---- */
   function viewSubmit(content, user) {
+    // Submitting would file a lead under this hunter's name, so the whole
+    // form is withheld while management is only looking.
+    if (readOnlyView()) { content.innerHTML = readOnlyNotice(t('submitBlocked')); return; }
     /* Live: embed the real HubSpot form — same form the program already
        uses, so submissions land in the existing pipeline and workflow.
        The hunter's Zid email is prefilled for commission attribution.
@@ -2718,12 +2780,21 @@
           '</dl>' +
           '<p class="hd-note">' + t('fullIbanNote') + '</p>' +
         '</div>' +
+        // Only offered for hunters — there is nothing to stand in for on a
+        // management or finance account, and only management may do it.
+        (canImpersonate(realUser()) && (!emp.role || emp.role === 'emp')
+          ? '<div class="hd-section"><button class="ghost-btn hd-viewas" id="drawer-viewas">' +
+            t('viewAsBtn', { name: esc(emp.name) }) + '</button>' +
+            '<p class="hd-note">' + t('viewAsHint') + '</p></div>'
+          : '') +
       '</div></div>');
     document.body.appendChild(root);
     var release = trapOverlay(root.querySelector('.drawer'), function () { close(); });
     function close() { release(); root.remove(); }
     root.querySelector('.drawer-backdrop').addEventListener('click', close);
     root.querySelector('#drawer-close').addEventListener('click', close);
+    var dva = root.querySelector('#drawer-viewas');
+    if (dva) dva.addEventListener('click', function () { close(); startViewAs(emp.id); });
     var dcv = root.querySelector('#drawer-cert-view');
     if (dcv) dcv.addEventListener('click', function () {
       SH_API.openIbanCert(drawerCert).catch(function (e2) { toast(String(e2.message)); });
@@ -3103,8 +3174,12 @@
       SH_API.openIbanCert(certPath).catch(function (e2) { toast(String(e2.message)); });
     });
 
+    // Belt and braces: the controls are already disabled below while
+    // impersonating, but never let a submit through under someone
+    // else's identity.
     document.getElementById('profile-form').addEventListener('submit', function (e) {
       e.preventDefault();
+      if (readOnlyView()) return;
       var ibanInput = document.getElementById('p-iban');
       var editing = !document.getElementById('iban-edit-wrap').hidden;
       var iban = ibanInput ? ibanInput.value.replace(/\s/g, '').toUpperCase() : '';
@@ -3151,6 +3226,14 @@
       });
       toast(t('profileSaved'));
     });
+
+    // Viewing someone else's profile is look-only: grey out every control
+    // so it is obvious nothing here can be changed from this seat.
+    if (readOnlyView()) {
+      var form = document.getElementById('profile-form');
+      form.querySelectorAll('input, select, textarea, button').forEach(function (c) { c.disabled = true; });
+      form.insertAdjacentHTML('afterbegin', '<p class="f-hint">' + esc(t('profileReadOnly')) + '</p>');
+    }
   }
 
   document.addEventListener('click', function (e) {
