@@ -1032,8 +1032,8 @@
       '</div>' +
 
       '<div class="grid-2">' +
-        reasonTilesCard(t('whyLost'), t('whyLostSub', { n: fmtNum(s.lostReasonDeals) }), reasonsLost, 'critical') +
-        reasonTilesCard(t('whyUnq'), t('whyUnqSub', { n: fmtNum(s.unqualReasonDeals) }), reasonsUnq, 'gray') +
+        reasonTilesCard(t('whyLost'), t('whyLostSub', { n: fmtNum(s.everLost) }), reasonsLost, 'critical') +
+        reasonTilesCard(t('whyUnq'), t('whyUnqSub', { n: fmtNum(s.everUnqualified) }), reasonsUnq, 'gray') +
       '</div>';
   }
 
@@ -2672,8 +2672,8 @@
       '</div>' +
 
       '<div class="grid-2">' +
-        reasonTilesCard(t('topLostReasons'), t('programWideLost', { n: fmtNum(s.lostReasonDeals) }), reasonsLost, 'critical') +
-        reasonTilesCard(t('whyUnqProgram'), t('programWideUnq', { n: fmtNum(s.unqualReasonDeals) }), reasonsUnq, 'gray') +
+        reasonTilesCard(t('topLostReasons'), t('programWideLost', { n: fmtNum(s.everLost) }), reasonsLost, 'critical') +
+        reasonTilesCard(t('whyUnqProgram'), t('programWideUnq', { n: fmtNum(s.everUnqualified) }), reasonsUnq, 'gray') +
       '</div>' +
 
       '<div class="grid-2">' +

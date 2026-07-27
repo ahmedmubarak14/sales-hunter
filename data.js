@@ -345,21 +345,29 @@ function statsFor(leads) {
     total: leads.length, won: 0, lost: 0, unqualified: 0, open: 0,
     revenueNet: 0, revenueGross: 0, commission: 0, commissionPaid: 0, commissionApproved: 0, commissionPending: 0,
     pipelineValue: 0, byStage: {}, funnel: [], lostReasons: {}, unqualReasons: {},
-    lostReasonDeals: 0, unqualReasonDeals: 0, lostNoReason: 0, unqualNoReason: 0,
+    everLost: 0, everUnqualified: 0, lostNoReason: 0, unqualNoReason: 0,
     avgCycleDays: null
   };
   STAGES.forEach(function (st) { s.byStage[st.id] = 0; });
   var cycleSum = 0, cycleN = 0;
   leads.forEach(function (l) {
     s.byStage[l.stage] += 1;
-    // Reasons are tallied over every deal carrying one, wherever that deal
-    // sits today — not just those still parked in the lost/unqualified
-    // stage. A deal marked lost is routinely re-opened or moved to the
-    // nurturing pipeline afterwards, and HubSpot's own reports keep
-    // counting its reason. Scoping this to the current stage dropped most
-    // of them and was why these cards disagreed with HubSpot.
-    if (l.lostReason) { tallyReasons(s.lostReasons, l.lostReason); s.lostReasonDeals += 1; }
-    if (l.unqualReason) { tallyReasons(s.unqualReasons, l.unqualReason); s.unqualReasonDeals += 1; }
+    // Reasons are counted over every deal that EVER reached the lost or
+    // unqualified stage, not just those still parked there — deals get
+    // re-opened and moved to the nurturing pipeline, and HubSpot's own
+    // reports key off that stage history. Scoping to the current stage
+    // dropped most of them and was why these cards disagreed with HubSpot.
+    // Demo leads carry no stage history, so fall back to their stage.
+    var wasLost = l.everLost === undefined ? l.stage === 'lost' : l.everLost;
+    var wasUnq = l.everUnqualified === undefined ? l.stage === 'unqualified' : l.everUnqualified;
+    if (wasLost) {
+      s.everLost += 1;
+      if (l.lostReason) tallyReasons(s.lostReasons, l.lostReason); else s.lostNoReason += 1;
+    }
+    if (wasUnq) {
+      s.everUnqualified += 1;
+      if (l.unqualReason) tallyReasons(s.unqualReasons, l.unqualReason); else s.unqualNoReason += 1;
+    }
     if (l.stage === 'won') {
       s.won += 1; s.revenueNet += l.amountNet;
       // Live deals carry the real invoiced gross from Metabase; demo
@@ -373,10 +381,8 @@ function statsFor(leads) {
       cycleSum += (wonDate(l) - l.createdAt) / DAY; cycleN += 1;
     } else if (l.stage === 'lost') {
       s.lost += 1;
-      if (!l.lostReason) s.lostNoReason += 1;
     } else if (l.stage === 'unqualified') {
       s.unqualified += 1;
-      if (!l.unqualReason) s.unqualNoReason += 1;
     } else {
       s.open += 1; s.pipelineValue += l.amountNet;
     }

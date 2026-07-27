@@ -50,6 +50,42 @@ async function fetchStageLabels(token: string): Promise<Record<string, Record<st
   return map;
 }
 
+// A deal that was marked lost or unqualified rarely stays in that stage —
+// sales re-opens it, or it moves to the nurturing pipeline. HubSpot keeps
+// a "date entered <stage>" property per stage, which is how its own
+// reports count these, so collect the ones belonging to lost /
+// unqualified stages in the pipelines we sync. Resolved from the
+// pipelines API rather than hardcoded: stage ids are portal-specific.
+function terminalStageProps(
+  stageLabels: Record<string, Record<string, string>>,
+  pipelines: string[] | undefined,
+): { lost: string[]; unqualified: string[] } {
+  const lost: string[] = [], unqualified: string[] = [];
+  for (const [pipeId, stages] of Object.entries(stageLabels)) {
+    if (pipelines?.length && !pipelines.includes(pipeId)) continue;
+    for (const [stageId, label] of Object.entries(stages)) {
+      const l = String(label).toLowerCase();
+      if (l.includes("lost")) lost.push(`hs_v2_date_entered_${stageId}`);
+      else if (l.includes("unqual")) unqualified.push(`hs_v2_date_entered_${stageId}`);
+    }
+  }
+  return { lost, unqualified };
+}
+
+// Earliest of the given date properties — when a deal has bounced through
+// more than one lost stage, the first time it happened is the honest one.
+function earliestOf(props: Record<string, unknown>, keys: string[]): string | null {
+  let best: number | null = null, bestRaw: string | null = null;
+  for (const k of keys) {
+    const raw = props[k];
+    if (raw == null || String(raw).trim() === "") continue;
+    const ms = new Date(String(raw)).getTime();
+    if (Number.isNaN(ms)) continue;
+    if (best === null || ms < best) { best = ms; bestRaw = new Date(ms).toISOString(); }
+  }
+  return bestRaw;
+}
+
 // The portal id is what turns a deal id into a clickable CRM link. Store
 // it in `settings` (readable by any signed-in user, and not a secret)
 // rather than hardcoding it, so the links follow the connected account.
@@ -127,11 +163,19 @@ Deno.serve(async () => {
     const unqualProp = settings.unqualified_reason_prop || "";
     const extraProps = settings.extra_properties ?? [];
 
+    // Stage labels come first: the lost/unqualified stage-history
+    // properties are derived from them and have to be part of the deal
+    // query itself.
+    const stageLabels = conn.configured ? await fetchStageLabels(conn.token) : {};
+    const terminal = terminalStageProps(stageLabels, settings.pipelines);
+
     const properties = Array.from(new Set([
       "dealname", "dealstage", "pipeline", "hs_lastmodifieddate", "createdate", "closedate",
       hunterProp, amountProp, closeProp,
       ...(lostProp ? [lostProp] : []),
       ...(unqualProp ? [unqualProp] : []),
+      ...terminal.lost,
+      ...terminal.unqualified,
       ...extraProps,
     ]));
 
@@ -141,7 +185,6 @@ Deno.serve(async () => {
     const deals = conn.configured
       ? await fetchModifiedDeals(conn.token, settings, properties, bookmark)
       : mockDeals(hunterProp);
-    const stageLabels = conn.configured ? await fetchStageLabels(conn.token) : {};
     if (conn.configured) await saveAccountInfo(conn.token);
 
     // Metabase is the source of truth for amount once a deal has a real
@@ -179,6 +222,8 @@ Deno.serve(async () => {
         unqualified_reason: unqualProp ? (p[unqualProp] ?? null) : null,
         hs_created_at: p.createdate,
         hs_closed_at: p[closeProp] ?? p.closedate,
+        entered_lost_at: earliestOf(p, terminal.lost),
+        entered_unqualified_at: earliestOf(p, terminal.unqualified),
         extra,
         synced_at: now,
       };

@@ -209,6 +209,11 @@ window.SH_API = (function () {
       // Paid for, but sales never moved it to Closed Won in HubSpot —
       // surfaced on the dashboard so someone goes and fixes the record.
       wonByInvoice: wonByInvoice, hubspotStage: d.stage,
+      // Whether the deal was EVER marked lost/unqualified, not whether it
+      // still is — deals get re-opened and moved to the nurturing
+      // pipeline, and the reason cards count stage history like HubSpot.
+      everLost: !!d.entered_lost_at,
+      everUnqualified: !!d.entered_unqualified_at,
       lostReason: d.lost_reason, unqualReason: d.unqualified_reason,
       salesOwner: d.sales_owner || 'Unassigned'
     };
