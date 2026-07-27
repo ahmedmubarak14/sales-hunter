@@ -170,6 +170,10 @@ button { font: inherit; cursor: pointer; }
 }
 .nav-toggle:hover { background: rgba(255,255,255,0.1); color: #fff; }
 .nav-toggle svg { width: 16px; height: 16px; transition: transform .15s; }
+/* Mobile-only hamburger — only sized/shown inside the narrow-screen media
+   query below; hidden here so it doesn't render as a blank button on
+   desktop widths, where .nav-toggle is the real collapse control. */
+.mobile-menu-btn { display: none; }
 .nav-collapsed .sidebar { width: 66px; flex-basis: 66px; }
 .nav-collapsed .brand-txt, .nav-collapsed .nav-label,
 .nav-collapsed .nav-sec, .nav-collapsed .side-foot .who,
