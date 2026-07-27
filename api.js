@@ -168,17 +168,27 @@ window.SH_API = (function () {
       return { stage: normStage(e.to_stage), date: new Date(e.occurred_at) };
     }).sort(function (a, b) { return a.date - b.date; });
     if (!evs.length || evs[0].stage !== 'new') evs.unshift({ stage: 'new', date: created });
+    var sub = (subsByDeal || {})[d.hubspot_deal_id];
     var stage = normStage(d.stage);
+    // A real invoiced purchase outranks whatever stage the deal sits in.
+    // Sales sometimes never drags a deal to Closed Won after the merchant
+    // has already paid, which left that revenue, its commission and the
+    // store itself uncounted while the deal still showed as open pipeline.
+    // Metabase is the source of truth, so the invoice decides.
+    if (sub && stage !== 'won') stage = 'won';
     if (evs[evs.length - 1].stage !== stage) {
       // deal_stage_events has no real history yet, so this synthetic
       // "arrived at current stage" event needs a real date — HubSpot's
       // own close date when the deal is actually closed, not synced_at
       // (which is just whenever a sync job last touched the row, i.e.
       // today, making every closed deal look like it closed "just now").
-      var stageDate = d.hs_closed_at ? new Date(d.hs_closed_at) : new Date(d.synced_at);
+      // A deal won by invoice alone has no HubSpot close date, so use the
+      // purchase date rather than letting it fall through to synced_at.
+      var stageDate = d.hs_closed_at ? new Date(d.hs_closed_at)
+        : (stage === 'won' && sub && sub.started_at) ? new Date(sub.started_at)
+        : new Date(d.synced_at);
       evs.push({ stage: stage, date: stageDate });
     }
-    var sub = (subsByDeal || {})[d.hubspot_deal_id];
     return {
       id: d.hubspot_deal_id,
       hunterId: (d.hunter_email || 'unassigned').toLowerCase(),
@@ -235,7 +245,7 @@ window.SH_API = (function () {
       req('/rest/v1/payslips?select=*').catch(function () { return []; }),
       req('/rest/v1/store_showcase?select=*').catch(function () { return []; }),
       req('/rest/v1/rpc/get_ibans', { method: 'POST', body: {} }).catch(function () { return []; }),
-      req('/rest/v1/subscriptions?select=hubspot_deal_id,package,billing_cycle').catch(function () { return []; })
+      req('/rest/v1/subscriptions?select=hubspot_deal_id,package,billing_cycle,started_at').catch(function () { return []; })
     ]);
     var users = results[0].map(toUser);
     var me = users.find(function (u) {
