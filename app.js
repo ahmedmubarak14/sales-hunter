@@ -2251,6 +2251,11 @@
     // and report sign-ups as the sub-figure instead.
     var signedUp = EMPLOYEES.filter(function (e) { return leadsOf(e.id).length > 0; }).length;
     var participants = signedUp + unregisteredHunterRows().length;
+    // Merchants who have paid but whose deal is still sitting in an open
+    // stage in HubSpot. The app counts them as won off the invoice, so
+    // this is purely a nudge to go and fix the CRM record.
+    var pendingClosure = all.filter(function (l) { return l.wonByInvoice; });
+    var pendingAmount = pendingClosure.reduce(function (a, l) { return a + l.amountNet; }, 0);
 
     var byMonth = months.map(function (m) {
       return all.filter(function (l) { return monthKey(l.createdAt) === m.key; }).length;
@@ -2403,6 +2408,14 @@
         tile(t('commOwedPaid'), fmtMoneyC(s.commission), t('alreadyPaid', { v: fmtMoneyC(s.commissionPaid) })) +
         tile(t('forecastTile'), fmtMoneyC(forecast), t('forecastSub')) +
       '</div>' +
+
+      // Only worth showing when there is something to chase; an
+      // always-present "0" tile would just be noise on the dashboard.
+      (pendingClosure.length ? metricTilesCard(
+        t('pendingClosure'), t('pendingClosureSub'),
+        [{ value: fmtNum(pendingClosure.length), label: t('pendingClosureCount') },
+         { value: fmtMoney(pendingAmount), label: t('pendingClosureAmount') }],
+        'warning') : '') +
 
       '<div class="grid-2">' +
         '<section class="card">' +

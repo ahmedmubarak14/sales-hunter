@@ -123,18 +123,26 @@ function chartCard(opts) {
 
 /* ---- Reason breakdown: a title card of big-number tiles, one per
    reason — for "why did leads get lost/unqualified" views. ---- */
-function reasonTilesCard(title, subtitle, items, cls) {
+// Same tile layout as reasonTilesCard, but each value is pre-formatted by
+// the caller, so counts and money can share one card.
+function metricTilesCard(title, subtitle, items, cls, emptyText) {
   var body = items.length
     ? '<div class="reason-tiles">' + items.map(function (r) {
-        return '<div class="reason-tile"><div class="rt-value ' + (cls || '') + '">' + fmtNum(r.count) + '</div>' +
+        return '<div class="reason-tile"><div class="rt-value ' + (cls || '') + '">' + esc(r.value) + '</div>' +
           '<div class="rt-label">' + esc(r.label) + '</div></div>';
       }).join('') + '</div>'
-    : '<div class="empty">' + t('noReasonsYet') + '</div>';
+    : '<div class="empty">' + esc(emptyText || t('noReasonsYet')) + '</div>';
   return '<section class="card">' +
     '<div class="card-head"><div><h3>' + esc(title) + '</h3>' +
     (subtitle ? '<p class="sub">' + esc(subtitle) + '</p>' : '') + '</div></div>' +
     body +
   '</section>';
+}
+
+function reasonTilesCard(title, subtitle, items, cls) {
+  return metricTilesCard(title, subtitle, items.map(function (r) {
+    return { value: fmtNum(r.count), label: r.label };
+  }), cls);
 }
 
 function wireCardToggles(root) {

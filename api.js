@@ -175,7 +175,8 @@ window.SH_API = (function () {
     // has already paid, which left that revenue, its commission and the
     // store itself uncounted while the deal still showed as open pipeline.
     // Metabase is the source of truth, so the invoice decides.
-    if (sub && stage !== 'won') stage = 'won';
+    var wonByInvoice = !!sub && stage !== 'won';
+    if (wonByInvoice) stage = 'won';
     if (evs[evs.length - 1].stage !== stage) {
       // deal_stage_events has no real history yet, so this synthetic
       // "arrived at current stage" event needs a real date — HubSpot's
@@ -205,6 +206,9 @@ window.SH_API = (function () {
       events: evs,
       amountNet: d.amount_net !== null && d.amount_net !== undefined ? Number(d.amount_net) : 0,
       amountGross: d.amount_gross !== null && d.amount_gross !== undefined ? Number(d.amount_gross) : 0,
+      // Paid for, but sales never moved it to Closed Won in HubSpot —
+      // surfaced on the dashboard so someone goes and fixes the record.
+      wonByInvoice: wonByInvoice, hubspotStage: d.stage,
       lostReason: d.lost_reason, unqualReason: d.unqualified_reason,
       salesOwner: d.sales_owner || 'Unassigned'
     };

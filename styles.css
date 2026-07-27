@@ -566,6 +566,7 @@ button { font: inherit; cursor: pointer; }
 .reason-tile .rt-value { font-size: 24px; font-weight: 700; letter-spacing: -0.015em; }
 .reason-tile .rt-value.critical { color: var(--critical); }
 .reason-tile .rt-value.gray { color: var(--mark-muted); }
+.reason-tile .rt-value.warning { color: var(--warning); }
 .reason-tile .rt-label {
   font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em;
   color: var(--muted); margin-top: 4px;
