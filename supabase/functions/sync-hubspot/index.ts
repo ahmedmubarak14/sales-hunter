@@ -50,6 +50,22 @@ async function fetchStageLabels(token: string): Promise<Record<string, Record<st
   return map;
 }
 
+// The portal id is what turns a deal id into a clickable CRM link. Store
+// it in `settings` (readable by any signed-in user, and not a secret)
+// rather than hardcoding it, so the links follow the connected account.
+async function saveAccountInfo(token: string) {
+  const res = await fetch("https://api.hubapi.com/account-info/v3/details", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return;
+  const info = await res.json();
+  if (!info?.portalId) return;
+  await supabase.from("settings").upsert([
+    { key: "hubspot_portal_id", value: String(info.portalId) },
+    { key: "hubspot_ui_domain", value: info.uiDomain || "app.hubspot.com" },
+  ]);
+}
+
 async function fetchModifiedDeals(token: string, settings: HSSettings, properties: string[], since: string | null) {
   const filters: Record<string, unknown>[] = [];
   if (since) filters.push({ propertyName: "hs_lastmodifieddate", operator: "GT", value: since });
@@ -126,6 +142,7 @@ Deno.serve(async () => {
       ? await fetchModifiedDeals(conn.token, settings, properties, bookmark)
       : mockDeals(hunterProp);
     const stageLabels = conn.configured ? await fetchStageLabels(conn.token) : {};
+    if (conn.configured) await saveAccountInfo(conn.token);
 
     // Metabase is the source of truth for amount once a deal has a real
     // invoiced purchase — don't let this HubSpot poll (which only sees

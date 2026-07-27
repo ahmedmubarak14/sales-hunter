@@ -755,6 +755,7 @@
     r.render(content, user);
     initTooltip(content);
     wireCardToggles(content);
+    wirePendingToggles(content);
     if (needsOb) openOnboardingModal();
     else {
       var ob = document.getElementById('ob-overlay');
@@ -1447,6 +1448,77 @@
      "link" later: the moment someone registers with that same email,
      EMPLOYEES picks them up and leadsOf() matches their existing deals
      automatically, since attribution is the email itself. */
+  // Real CRM deep link. sync-hubspot writes the connected account's portal
+  // id into settings, so this follows whichever portal is connected rather
+  // than being hardcoded. Returns null in demo mode, where there is no
+  // real deal to open.
+  function hubspotDealUrl(dealId) {
+    var st = (window.LIVE && window.LIVE.settings) || {};
+    if (!st.hubspot_portal_id) return null;
+    return 'https://' + (st.hubspot_ui_domain || 'app.hubspot.com') +
+      '/contacts/' + st.hubspot_portal_id + '/record/0-3/' + encodeURIComponent(dealId);
+  }
+
+  function hubspotLinkHtml(dealId) {
+    var url = hubspotDealUrl(dealId);
+    return url
+      ? '<a href="' + esc(url) + '" target="_blank" rel="noopener">' + t('openHubspot') + '</a>'
+      : '<a href="#" class="hs-link" data-deal="' + esc(dealId) + '">' + t('openHubspot') + '</a>';
+  }
+
+  // Paid merchants whose HubSpot deal is still open. Collapsed to two
+  // numbers by default; expanding lists them with a link straight to the
+  // record that needs fixing.
+  function pendingClosureCard(rows, amount) {
+    cardSeq += 1;
+    var id = 'pc' + cardSeq;
+    var head =
+      '<div class="card-head"><div><h3>' + t('pendingClosure') + '</h3>' +
+      '<p class="sub">' + t('pendingClosureSub') + '</p></div>' +
+      '<button class="ghost-btn" data-toggle-pending="' + id + '" aria-expanded="false">' + t('viewDeals') + '</button></div>';
+    var tiles =
+      '<div class="reason-tiles">' +
+        '<div class="reason-tile"><div class="rt-value warning">' + fmtNum(rows.length) + '</div>' +
+        '<div class="rt-label">' + t('pendingClosureCount') + '</div></div>' +
+        '<div class="reason-tile"><div class="rt-value warning">' + fmtMoney(amount) + '</div>' +
+        '<div class="rt-label">' + t('pendingClosureAmount') + '</div></div>' +
+      '</div>';
+    var table =
+      '<div class="tbl-wrap"><table class="mini"><thead><tr>' +
+        '<th>' + t('merchant') + '</th><th>' + t('hunter') + '</th><th>' + t('packageCol') + '</th>' +
+        '<th>' + t('purchased') + '</th><th class="num">' + t('valueExVat') + '</th><th>' + t('hubspotStageCol') + '</th>' +
+      '</tr></thead><tbody>' +
+      rows.map(function (l) {
+        var hunter = (window.LIVE ? LIVE.users : EMPLOYEES).find(function (e) { return e.id === l.hunterId; });
+        return '<tr>' +
+          '<td><b>' + esc(l.company) + '</b><span class="cell-sub">' + esc(l.id) + ' · ' + hubspotLinkHtml(l.id) + '</span></td>' +
+          '<td>' + (hunter ? '<b>' + esc(hunter.name) + '</b>'
+            : l.hunterId === 'unassigned' ? t('unassigned')
+            : esc(l.hunterId)) + '</td>' +
+          '<td>' + esc(l.plan || '—') + '</td>' +
+          '<td>' + fmtDate(wonDate(l)) + '</td>' +
+          '<td class="num">' + fmtMoney(l.amountNet) + '</td>' +
+          '<td>' + esc(l.hubspotStage || '—') + '</td>' +
+        '</tr>';
+      }).join('') +
+      '</tbody></table></div>';
+    return '<section class="card" id="' + id + '">' + head + tiles +
+      '<div class="pending-list" hidden>' + table + '</div></section>';
+  }
+
+  function wirePendingToggles(root) {
+    root.querySelectorAll('[data-toggle-pending]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var card = document.getElementById(btn.getAttribute('data-toggle-pending'));
+        var list = card.querySelector('.pending-list');
+        var show = list.hidden;
+        list.hidden = !show;
+        btn.setAttribute('aria-expanded', String(show));
+        btn.textContent = show ? t('hideDeals') : t('viewDeals');
+      });
+    });
+  }
+
   function unregisteredHunterRows() {
     var known = {};
     EMPLOYEES.forEach(function (e) {
@@ -2411,11 +2483,7 @@
 
       // Only worth showing when there is something to chase; an
       // always-present "0" tile would just be noise on the dashboard.
-      (pendingClosure.length ? metricTilesCard(
-        t('pendingClosure'), t('pendingClosureSub'),
-        [{ value: fmtNum(pendingClosure.length), label: t('pendingClosureCount') },
-         { value: fmtMoney(pendingAmount), label: t('pendingClosureAmount') }],
-        'warning') : '') +
+      (pendingClosure.length ? pendingClosureCard(pendingClosure, pendingAmount) : '') +
 
       '<div class="grid-2">' +
         '<section class="card">' +
@@ -2757,7 +2825,7 @@
             : l.hunterId === 'unassigned'
               ? '<b>' + t('unassigned') + '</b>'
               : '<b>' + esc(l.hunterId) + '</b><span class="cell-sub"><span class="unreg-pill" title="' + esc(t('notRegisteredHint')) + '">' + t('notRegistered') + '</span></span>') + '</td>' +
-          '<td><b>' + esc(l.company) + '</b><span class="cell-sub">' + esc(l.id) + ' · <a href="#" class="hs-link" data-deal="' + esc(l.id) + '">' + t('openHubspot') + '</a></span></td>' +
+          '<td><b>' + esc(l.company) + '</b><span class="cell-sub">' + esc(l.id) + ' · ' + hubspotLinkHtml(l.id) + '</span></td>' +
           '<td>' + fmtDate(wonDate(l)) + '</td>' +
           '<td>' + esc(l.salesOwner) + '</td>' +
           '<td class="num">' + fmtMoney(l.amountNet) + '</td>' +
