@@ -193,14 +193,20 @@ Deno.serve(async () => {
     // already corrected. Owner names are entirely sync-metabase's job
     // now (the HubSpot token isn't scoped for crm.objects.owners.read,
     // so this sync never had a real name to offer anyway).
-    const { data: subRows } = await supabase.from("subscriptions").select("hubspot_deal_id");
+    // Read this defensively: if the query silently returns nothing, every
+    // deal looks un-owned and the write below would wipe Metabase's
+    // amounts wholesale. Fail the run instead of destroying data.
+    const { data: subRows, error: subErr } = await supabase.from("subscriptions").select("hubspot_deal_id");
+    if (subErr) throw new Error(`could not read subscriptions (needed to protect Metabase amounts): ${subErr.message}`);
     const metabaseOwned = new Set((subRows ?? []).map((r) => r.hubspot_deal_id));
 
     // One read of current stages up front and chunked writes at the end —
     // a select + upsert per deal ran up against the function timeout once
     // a full page set (hundreds of deals) arrives in a single run.
-    const { data: current } = await supabase.from("deals").select("hubspot_deal_id, stage");
+    const { data: current, error: curErr } = await supabase.from("deals").select("hubspot_deal_id, stage, amount_net");
+    if (curErr) throw curErr;
     const stageOf = new Map((current ?? []).map((r) => [r.hubspot_deal_id, r.stage]));
+    const amountOf = new Map((current ?? []).map((r) => [r.hubspot_deal_id, r.amount_net]));
 
     const now = new Date().toISOString();
     const patches: Record<string, unknown>[] = [];
@@ -227,9 +233,16 @@ Deno.serve(async () => {
         extra,
         synced_at: now,
       };
-      if (!metabaseOwned.has(d.id)) {
-        patch.amount_net = p[amountProp] != null ? Number(p[amountProp]) : null;
-      }
+      // amount_net is ALWAYS written, never conditionally omitted. These
+      // rows go out as one bulk upsert, and PostgREST unions the columns
+      // across the batch — so a row that leaves amount_net off does not
+      // keep its stored value, it gets NULL. Omitting the key wiped every
+      // Metabase-sourced amount on the first full backfill. Carry the
+      // stored value forward explicitly instead.
+      const hsAmount = p[amountProp] != null && String(p[amountProp]).trim() !== ""
+        ? Number(p[amountProp]) : null;
+      const keepStored = metabaseOwned.has(d.id) || hsAmount === null || Number.isNaN(hsAmount);
+      patch.amount_net = keepStored ? (amountOf.get(d.id) ?? null) : hsAmount;
       patches.push(patch);
 
       const prevStage = stageOf.get(d.id);
