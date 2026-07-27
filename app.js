@@ -913,10 +913,8 @@
       return decided.filter(function (l) { return l.stage === 'won'; }).length / decided.length;
     });
 
-    var reasonsLost = Object.keys(s.lostReasons).map(function (k) { return { label: reasonLabel(k), count: s.lostReasons[k] }; })
-      .sort(function (a, b) { return b.count - a.count; });
-    var reasonsUnq = Object.keys(s.unqualReasons).map(function (k) { return { label: reasonLabel(k), count: s.unqualReasons[k] }; })
-      .sort(function (a, b) { return b.count - a.count; });
+    var reasonsLost = reasonTiles(s.lostReasons, s.lostNoReason);
+    var reasonsUnq = reasonTiles(s.unqualReasons, s.unqualNoReason);
 
     var currentStages = STAGES.filter(function (st) { return st.group === 'open'; }).map(function (st) {
       return { label: st.label, count: s.byStage[st.id] };
@@ -1034,8 +1032,8 @@
       '</div>' +
 
       '<div class="grid-2">' +
-        reasonTilesCard(t('whyLost'), t('whyLostSub', { n: fmtNum(s.lost) }), reasonsLost, 'critical') +
-        reasonTilesCard(t('whyUnq'), t('whyUnqSub', { n: fmtNum(s.unqualified) }), reasonsUnq, 'gray') +
+        reasonTilesCard(t('whyLost'), t('whyLostSub', { n: fmtNum(s.lostReasonDeals) }), reasonsLost, 'critical') +
+        reasonTilesCard(t('whyUnq'), t('whyUnqSub', { n: fmtNum(s.unqualReasonDeals) }), reasonsUnq, 'gray') +
       '</div>';
   }
 
@@ -1579,6 +1577,17 @@
         btn.textContent = show ? t('hideDeals') : t('viewDeals');
       });
     });
+  }
+
+  // Reason tiles rank the recorded reasons, then append the deals still
+  // parked in the stage with nothing recorded — a data-hygiene number that
+  // belongs on the card but is not itself a reason, so it always sorts last.
+  function reasonTiles(bucket, noReason) {
+    var out = Object.keys(bucket)
+      .map(function (k) { return { label: reasonLabel(k), count: bucket[k] }; })
+      .sort(function (a, b) { return b.count - a.count; });
+    if (noReason) out.push({ label: t('noReasonGiven'), count: noReason });
+    return out;
   }
 
   function unregisteredHunterRows() {
@@ -2511,10 +2520,8 @@
     var coach = lb.filter(function (r) { return r.s.total >= 8 && r.s.conversion < avgConv * 0.55; })
       .sort(function (a, b) { return a.s.conversion - b.s.conversion; });
 
-    var reasonsLost = Object.keys(s.lostReasons).map(function (k) { return { label: reasonLabel(k), count: s.lostReasons[k] }; })
-      .sort(function (a, b) { return b.count - a.count; });
-    var reasonsUnq = Object.keys(s.unqualReasons).map(function (k) { return { label: reasonLabel(k), count: s.unqualReasons[k] }; })
-      .sort(function (a, b) { return b.count - a.count; });
+    var reasonsLost = reasonTiles(s.lostReasons, s.lostNoReason);
+    var reasonsUnq = reasonTiles(s.unqualReasons, s.unqualNoReason);
 
     // Live pipeline board: current count + value sitting in each stage
     var stageValue = {};
@@ -2665,8 +2672,8 @@
       '</div>' +
 
       '<div class="grid-2">' +
-        reasonTilesCard(t('topLostReasons'), t('programWideLost', { n: fmtNum(s.lost) }), reasonsLost, 'critical') +
-        reasonTilesCard(t('whyUnqProgram'), t('programWideUnq', { n: fmtNum(s.unqualified) }), reasonsUnq, 'gray') +
+        reasonTilesCard(t('topLostReasons'), t('programWideLost', { n: fmtNum(s.lostReasonDeals) }), reasonsLost, 'critical') +
+        reasonTilesCard(t('whyUnqProgram'), t('programWideUnq', { n: fmtNum(s.unqualReasonDeals) }), reasonsUnq, 'gray') +
       '</div>' +
 
       '<div class="grid-2">' +
