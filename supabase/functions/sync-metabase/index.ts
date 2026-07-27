@@ -108,51 +108,128 @@ async function patchDeals(rows: { hubspot_deal_id: string; [col: string]: unknow
 // HubSpot's deal-level amount property said. (Owner names are handled
 // separately by syncOwnerNames — this card's owner data only covers
 // deals with a purchase; the plain deals table needs every deal.)
+// When sales merges duplicate deals in HubSpot the surviving record keeps
+// a new id, but the warehouse still reports purchases under the id that
+// was merged away — so those invoices matched no row in `deals` and their
+// revenue and commission silently went unattributed. A GET by the old id
+// follows the merge and reports the survivor's id, so ids we can't match
+// locally get resolved that way (only the unmatched handful, not every
+// deal). Returns old id -> canonical id.
+async function resolveMergedDeals(unknownIds: string[]): Promise<Map<string, string>> {
+  const remap = new Map<string, string>();
+  if (!unknownIds.length) return remap;
+  const { data: token } = await supabase.rpc("get_integration_secret", { p_name: "hubspot" });
+  if (!token) return remap;
+  for (const id of unknownIds) {
+    try {
+      const res = await fetch(`https://api.hubapi.com/crm/v3/objects/deals/${id}?properties=hs_object_id`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) continue;
+      const canonical = String((await res.json())?.id ?? "");
+      if (canonical && canonical !== id) remap.set(id, canonical);
+    } catch { /* leave unmapped; a later run retries */ }
+  }
+  return remap;
+}
+
 async function syncDealDetails(base: string, key: string, cardId: string) {
-  const rows = await runCard(base, key, cardId);
-  let subs = 0, comms = 0;
+  const rawRows = await runCard(base, key, cardId);
   const amountByDeal = new Map<string, number>();
+
+  const { data: dealRows } = await supabase.from("deals").select("hubspot_deal_id, hunter_email");
+  const knownDeals = new Map((dealRows ?? []).map((r) => [r.hubspot_deal_id as string, r.hunter_email as string | null]));
+  const unknownIds = [...new Set(rawRows
+    .map((r) => String(r["id"] ?? ""))
+    .filter((id) => id && !knownDeals.has(id)))];
+  const remap = await resolveMergedDeals(unknownIds);
+
+  const rows = rawRows.map((r) => {
+    const id = String(r["id"] ?? "");
+    return remap.has(id) ? { ...r, id: remap.get(id) } : r;
+  });
+
+  // The card is invoice-level: a store can buy more than once, so several
+  // rows can share a store_id (subscriptions' primary key) or a
+  // deal+hunter+period (commissions' unique key). Writing row-by-row made
+  // the last invoice silently overwrite the earlier ones instead of adding
+  // to them, under-reporting both revenue and commission. Fold the
+  // invoices together first, then write one row per key.
+  type SubAcc = { store_id: string; hubspot_deal_id: string; package: unknown; amount_net: number; started_at: unknown; top: number };
+  type CommAcc = { hubspot_deal_id: string; hunter_email: string; period: string; base_amount: number; commission_amount: number };
+  const subAcc = new Map<string, SubAcc>();
+  const commAcc = new Map<string, CommAcc>();
 
   for (const r of rows) {
     const dealId = String(r["id"] ?? "");
     if (!dealId) continue;
     const storeId = r["Purchases - invoice → Store ID"];
     const purchasable = r["Purchases - invoice → Purchasable Name"];
-    const vatExcluded = r["VAT Excluded"];
+    const vatExcluded = typeof r["VAT Excluded"] === "number" ? r["VAT Excluded"] as number : 0;
     const purchaseDate = r["Purchases - invoice → Purchase Date"];
-    const hunterEmail = r["Hubspot Fact Deals - Deal → Lead Owner Email"];
+    // The card's own email column is blank on some rows (notably deals
+    // that were merged); the deal record we already hold still knows who
+    // owns it, so fall back to that rather than dropping the commission.
+    const hunterEmail = r["Hubspot Fact Deals - Deal → Lead Owner Email"] || knownDeals.get(dealId) || null;
     const commissionAmount = r["Commission Amount"];
 
     if (storeId != null) {
-      const { error } = await supabase.from("subscriptions").upsert({
-        store_id: String(storeId),
-        hubspot_deal_id: dealId,
-        package: purchasable ?? null,
-        billing_cycle: billingCycleOf(purchasable),
-        started_at: purchaseDate ?? null,
-        amount_net: vatExcluded ?? null,
-        synced_at: new Date().toISOString(),
-      });
-      if (error) throw error;
-      subs++;
+      const skey = String(storeId);
+      const prev = subAcc.get(skey);
+      if (!prev) {
+        subAcc.set(skey, {
+          store_id: skey, hubspot_deal_id: dealId, package: purchasable ?? null,
+          amount_net: vatExcluded, started_at: purchaseDate ?? null, top: vatExcluded,
+        });
+      } else {
+        prev.amount_net += vatExcluded;
+        // The plan shown for a store is its biggest purchase, not whichever
+        // invoice happened to be last in the card's row order.
+        if (vatExcluded > prev.top) {
+          prev.top = vatExcluded;
+          prev.package = purchasable ?? null;
+          prev.hubspot_deal_id = dealId;
+          prev.started_at = purchaseDate ?? null;
+        }
+      }
     }
 
     if (hunterEmail && commissionAmount != null) {
-      const { error } = await supabase.from("commissions").upsert({
-        hubspot_deal_id: dealId,
-        hunter_email: String(hunterEmail).trim().toLowerCase(),
-        period: periodOf(purchaseDate),
-        base_amount: vatExcluded ?? null,
-        commission_amount: commissionAmount,
-        calculated_at: new Date().toISOString(),
-        synced_at: new Date().toISOString(),
-      }, { onConflict: "hubspot_deal_id,hunter_email,period", ignoreDuplicates: false });
-      if (error) throw error;
-      comms++;
+      const email = String(hunterEmail).trim().toLowerCase();
+      const period = periodOf(purchaseDate);
+      const ckey = `${dealId}|${email}|${period}`;
+      const prev = commAcc.get(ckey);
+      if (!prev) {
+        commAcc.set(ckey, {
+          hubspot_deal_id: dealId, hunter_email: email, period,
+          base_amount: vatExcluded, commission_amount: Number(commissionAmount),
+        });
+      } else {
+        prev.base_amount += vatExcluded;
+        prev.commission_amount += Number(commissionAmount);
+      }
     }
 
-    if (typeof vatExcluded === "number") amountByDeal.set(dealId, vatExcluded);
+    amountByDeal.set(dealId, (amountByDeal.get(dealId) ?? 0) + vatExcluded);
   }
+
+  const now = new Date().toISOString();
+  const subRows = Array.from(subAcc.values(), (s) => ({
+    store_id: s.store_id, hubspot_deal_id: s.hubspot_deal_id,
+    package: s.package, billing_cycle: billingCycleOf(s.package),
+    started_at: s.started_at, amount_net: s.amount_net, synced_at: now,
+  }));
+  if (subRows.length) {
+    const { error } = await supabase.from("subscriptions").upsert(subRows);
+    if (error) throw error;
+  }
+  const commRows = Array.from(commAcc.values(), (c) => ({ ...c, calculated_at: now, synced_at: now }));
+  if (commRows.length) {
+    const { error } = await supabase.from("commissions")
+      .upsert(commRows, { onConflict: "hubspot_deal_id,hunter_email,period", ignoreDuplicates: false });
+    if (error) throw error;
+  }
+  const subs = subRows.length, comms = commRows.length;
 
   const amountRows = Array.from(amountByDeal, ([hubspot_deal_id, amount_net]) => ({ hubspot_deal_id, amount_net }));
   const dealsUpdated = await patchDeals(amountRows);

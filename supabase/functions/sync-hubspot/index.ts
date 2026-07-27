@@ -56,19 +56,32 @@ async function fetchModifiedDeals(token: string, settings: HSSettings, propertie
   if (settings.pipelines?.length) filters.push({ propertyName: "pipeline", operator: "IN", values: settings.pipelines });
   if (settings.target_type) filters.push({ propertyName: "target_type", operator: "EQ", value: settings.target_type });
 
-  const body = {
-    filterGroups: filters.length ? [{ filters }] : [],
-    properties,
-    sorts: [{ propertyName: "hs_lastmodifieddate", direction: "ASCENDING" }],
-    limit: 100,
-  };
-  const res = await fetch("https://api.hubapi.com/crm/v3/objects/deals/search", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`HubSpot search: HTTP ${res.status} — ${await res.text()}`);
-  return (await res.json()).results ?? [];
+  // The search endpoint caps at 100 results per page. Without following
+  // the cursor this poll only ever saw the oldest 100 modified deals and
+  // needed as many hourly runs as there were pages to catch up, so stage
+  // changes showed up in the app hours late. Page until HubSpot stops
+  // handing back a cursor.
+  const all: Record<string, never>[] = [];
+  let after: string | null = null;
+  do {
+    const body: Record<string, unknown> = {
+      filterGroups: filters.length ? [{ filters }] : [],
+      properties,
+      sorts: [{ propertyName: "hs_lastmodifieddate", direction: "ASCENDING" }],
+      limit: 100,
+    };
+    if (after) body.after = after;
+    const res = await fetch("https://api.hubapi.com/crm/v3/objects/deals/search", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`HubSpot search: HTTP ${res.status} — ${await res.text()}`);
+    const page = await res.json();
+    all.push(...(page.results ?? []));
+    after = page.paging?.next?.after ?? null;
+  } while (after);
+  return all;
 }
 
 function mockDeals(hunterProp: string) {
@@ -123,10 +136,19 @@ Deno.serve(async () => {
     const { data: subRows } = await supabase.from("subscriptions").select("hubspot_deal_id");
     const metabaseOwned = new Set((subRows ?? []).map((r) => r.hubspot_deal_id));
 
+    // One read of current stages up front and chunked writes at the end —
+    // a select + upsert per deal ran up against the function timeout once
+    // a full page set (hundreds of deals) arrives in a single run.
+    const { data: current } = await supabase.from("deals").select("hubspot_deal_id, stage");
+    const stageOf = new Map((current ?? []).map((r) => [r.hubspot_deal_id, r.stage]));
+
+    const now = new Date().toISOString();
+    const patches: Record<string, unknown>[] = [];
+    const events: Record<string, unknown>[] = [];
+
     for (const d of deals) {
       const p = d.properties;
       const stage = stageLabels[p.pipeline]?.[p.dealstage] ?? p.dealstage;
-      const { data: existing } = await supabase.from("deals").select("stage").eq("hubspot_deal_id", d.id).maybeSingle();
 
       const extra: Record<string, unknown> = {};
       for (const key of extraProps) if (p[key] != null) extra[key] = p[key];
@@ -141,21 +163,31 @@ Deno.serve(async () => {
         hs_created_at: p.createdate,
         hs_closed_at: p[closeProp] ?? p.closedate,
         extra,
-        synced_at: new Date().toISOString(),
+        synced_at: now,
       };
       if (!metabaseOwned.has(d.id)) {
         patch.amount_net = p[amountProp] != null ? Number(p[amountProp]) : null;
       }
+      patches.push(patch);
 
-      await supabase.from("deals").upsert(patch);
-
-      if (existing && existing.stage !== stage) {
-        await supabase.from("deal_stage_events").insert({
-          hubspot_deal_id: d.id, from_stage: existing.stage, to_stage: stage,
-          occurred_at: p.hs_lastmodifieddate ?? new Date().toISOString(), source: "poll",
+      const prevStage = stageOf.get(d.id);
+      if (prevStage !== undefined && prevStage !== stage) {
+        events.push({
+          hubspot_deal_id: d.id, from_stage: prevStage, to_stage: stage,
+          occurred_at: p.hs_lastmodifieddate ?? now, source: "poll",
         });
       }
       bookmark = p.hs_lastmodifieddate ?? bookmark;
+    }
+
+    const CHUNK = 500;
+    for (let i = 0; i < patches.length; i += CHUNK) {
+      const { error } = await supabase.from("deals").upsert(patches.slice(i, i + CHUNK));
+      if (error) throw error;
+    }
+    for (let i = 0; i < events.length; i += CHUNK) {
+      const { error } = await supabase.from("deal_stage_events").insert(events.slice(i, i + CHUNK));
+      if (error) throw error;
     }
 
     await supabase.from("sync_state").upsert({
