@@ -2392,6 +2392,7 @@
         tile(t('newStores'), fmtNum(s.won), (s.avgCycleDays ? t('avgCycle', { n: s.avgCycleDays }) : t('wonMerchants'))) +
         tile(t('programConv'), fmtPct(s.conversion), t('convSub')) +
         tile(t('revenueClosed'), fmtMoneyC(s.revenueNet), s.won ? t('avgPerStore', { v: fmtMoneyC(s.revenueNet / s.won) }) : t('exVat')) +
+        tile(t('revenueClosedGross'), fmtMoneyC(s.revenueGross), s.won ? t('avgPerStoreInc', { v: fmtMoneyC(s.revenueGross / s.won) }) : t('incVat')) +
         tile(t('pipelineValue'), fmtMoneyC(s.pipelineValue), t('openExVat')) +
         tile(t('commMonthTile'), fmtMoneyC(commThisMonthOf(all)), t('wonThisMonthSub')) +
         tile(t('commOwedPaid'), fmtMoneyC(s.commission), t('alreadyPaid', { v: fmtMoneyC(s.commissionPaid) })) +

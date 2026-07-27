@@ -135,7 +135,7 @@ async function resolveMergedDeals(unknownIds: string[]): Promise<Map<string, str
 
 async function syncDealDetails(base: string, key: string, cardId: string) {
   const rawRows = await runCard(base, key, cardId);
-  const amountByDeal = new Map<string, number>();
+  const amountByDeal = new Map<string, { net: number; gross: number }>();
 
   const { data: dealRows } = await supabase.from("deals").select("hubspot_deal_id, hunter_email");
   const knownDeals = new Map((dealRows ?? []).map((r) => [r.hubspot_deal_id as string, r.hunter_email as string | null]));
@@ -155,7 +155,7 @@ async function syncDealDetails(base: string, key: string, cardId: string) {
   // the last invoice silently overwrite the earlier ones instead of adding
   // to them, under-reporting both revenue and commission. Fold the
   // invoices together first, then write one row per key.
-  type SubAcc = { store_id: string; hubspot_deal_id: string; package: unknown; amount_net: number; started_at: unknown; top: number };
+  type SubAcc = { store_id: string; hubspot_deal_id: string; package: unknown; amount_net: number; amount_gross: number; started_at: unknown; top: number };
   type CommAcc = { hubspot_deal_id: string; hunter_email: string; period: string; base_amount: number; commission_amount: number };
   const subAcc = new Map<string, SubAcc>();
   const commAcc = new Map<string, CommAcc>();
@@ -166,6 +166,11 @@ async function syncDealDetails(base: string, key: string, cardId: string) {
     const storeId = r["Purchases - invoice → Store ID"];
     const purchasable = r["Purchases - invoice → Purchasable Name"];
     const vatExcluded = typeof r["VAT Excluded"] === "number" ? r["VAT Excluded"] as number : 0;
+    // What the merchant actually paid, VAT included — taken from the
+    // invoice rather than derived from the net figure, so discounted or
+    // VAT-exempt purchases stay accurate.
+    const amountPaid = typeof r["Purchases - invoice → Amount Paid"] === "number"
+      ? r["Purchases - invoice → Amount Paid"] as number : 0;
     const purchaseDate = r["Purchases - invoice → Purchase Date"];
     // The card's own email column is blank on some rows (notably deals
     // that were merged); the deal record we already hold still knows who
@@ -179,10 +184,12 @@ async function syncDealDetails(base: string, key: string, cardId: string) {
       if (!prev) {
         subAcc.set(skey, {
           store_id: skey, hubspot_deal_id: dealId, package: purchasable ?? null,
-          amount_net: vatExcluded, started_at: purchaseDate ?? null, top: vatExcluded,
+          amount_net: vatExcluded, amount_gross: amountPaid,
+          started_at: purchaseDate ?? null, top: vatExcluded,
         });
       } else {
         prev.amount_net += vatExcluded;
+        prev.amount_gross += amountPaid;
         // The plan shown for a store is its biggest purchase, not whichever
         // invoice happened to be last in the card's row order.
         if (vatExcluded > prev.top) {
@@ -210,14 +217,18 @@ async function syncDealDetails(base: string, key: string, cardId: string) {
       }
     }
 
-    amountByDeal.set(dealId, (amountByDeal.get(dealId) ?? 0) + vatExcluded);
+    const acc = amountByDeal.get(dealId) ?? { net: 0, gross: 0 };
+    acc.net += vatExcluded;
+    acc.gross += amountPaid;
+    amountByDeal.set(dealId, acc);
   }
 
   const now = new Date().toISOString();
   const subRows = Array.from(subAcc.values(), (s) => ({
     store_id: s.store_id, hubspot_deal_id: s.hubspot_deal_id,
     package: s.package, billing_cycle: billingCycleOf(s.package),
-    started_at: s.started_at, amount_net: s.amount_net, synced_at: now,
+    started_at: s.started_at, amount_net: s.amount_net, amount_gross: s.amount_gross,
+    synced_at: now,
   }));
   if (subRows.length) {
     const { error } = await supabase.from("subscriptions").upsert(subRows);
@@ -231,7 +242,9 @@ async function syncDealDetails(base: string, key: string, cardId: string) {
   }
   const subs = subRows.length, comms = commRows.length;
 
-  const amountRows = Array.from(amountByDeal, ([hubspot_deal_id, amount_net]) => ({ hubspot_deal_id, amount_net }));
+  const amountRows = Array.from(amountByDeal, ([hubspot_deal_id, a]) => ({
+    hubspot_deal_id, amount_net: a.net, amount_gross: a.gross,
+  }));
   const dealsUpdated = await patchDeals(amountRows);
 
   if (comms) await supabase.rpc("rematch_commissions");

@@ -194,6 +194,7 @@ window.SH_API = (function () {
       stage: stage,
       events: evs,
       amountNet: d.amount_net !== null && d.amount_net !== undefined ? Number(d.amount_net) : 0,
+      amountGross: d.amount_gross !== null && d.amount_gross !== undefined ? Number(d.amount_gross) : 0,
       lostReason: d.lost_reason, unqualReason: d.unqualified_reason,
       salesOwner: d.sales_owner || 'Unassigned'
     };

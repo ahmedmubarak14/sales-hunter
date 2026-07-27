@@ -343,7 +343,7 @@ function tallyReasons(bucket, raw) {
 function statsFor(leads) {
   var s = {
     total: leads.length, won: 0, lost: 0, unqualified: 0, open: 0,
-    revenueNet: 0, commission: 0, commissionPaid: 0, commissionApproved: 0, commissionPending: 0,
+    revenueNet: 0, revenueGross: 0, commission: 0, commissionPaid: 0, commissionApproved: 0, commissionPending: 0,
     pipelineValue: 0, byStage: {}, funnel: [], lostReasons: {}, unqualReasons: {},
     avgCycleDays: null
   };
@@ -353,6 +353,9 @@ function statsFor(leads) {
     s.byStage[l.stage] += 1;
     if (l.stage === 'won') {
       s.won += 1; s.revenueNet += l.amountNet;
+      // Live deals carry the real invoiced gross from Metabase; demo
+      // leads only have a net figure, so fall back to the standard rate.
+      s.revenueGross += l.amountGross || l.amountNet * (1 + VAT_RATE);
       var c = commissionOf(l), cs = commissionStatus(l);
       s.commission += c;
       if (cs === 'paid') s.commissionPaid += c;
