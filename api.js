@@ -157,9 +157,17 @@ window.SH_API = (function () {
   // Metabase's Purchasable Name is e.g. "Growth - Yearly" — the app only
   // ever showed a static demo plan list before subscriptions synced for
   // real, so this strips the billing-cycle suffix down to the plan tier.
+  // Plans that Zid has since renamed, folded onto the current name so one
+  // package doesn't show up as two rows split across its old and new
+  // labels. Metabase keeps reporting whichever name the invoice was
+  // written under, so this has to be handled here rather than upstream.
+  var PLAN_ALIASES = { 'ZidLite': 'Rise' };
+
   function basePlanName(purchasable) {
     if (!purchasable) return null;
-    return String(purchasable).split(' - ')[0].trim() || null;
+    var base = String(purchasable).split(' - ')[0].trim();
+    if (!base) return null;
+    return PLAN_ALIASES[base] || base;
   }
 
   function toLead(d, eventsByDeal, subsByDeal) {
