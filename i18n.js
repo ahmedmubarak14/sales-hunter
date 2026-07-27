@@ -231,7 +231,7 @@ en: {
   catHeadSub: 'Top Zid stores in this category', catWinInline: ' · hunter leads here close won {pct} of the time',
   catMineInline: ' · you have {n} lead(s) in this category',
 
-  activeHunters: 'Active hunters', ofEnrolled: 'of {n} enrolled', currentlyOpen: '{n} currently open',
+  activeHunters: 'Active hunters', ofEnrolled: 'of {n} enrolled', ofSignedUp: '{n} signed up in the app', currentlyOpen: '{n} currently open',
   newStores: 'New Zid stores', wonMerchants: 'closed-won merchants', programConv: 'Program conversion',
   revenueClosed: 'Revenue closed', avgPerStore: '{v} avg per store · excl. VAT', exVat: 'excl. VAT',
   revenueClosedGross: 'Revenue closed (incl. VAT)', avgPerStoreInc: '{v} avg per store · incl. VAT', incVat: 'incl. VAT',
@@ -530,7 +530,7 @@ ar: {
   catHeadSub: 'أفضل متاجر زد في هذه الفئة', catWinInline: ' · عملاء الصيادين هنا يُغلقون بنجاح {pct} من المرات',
   catMineInline: ' · لديك {n} عميلاً في هذه الفئة',
 
-  activeHunters: 'الصيادون النشطون', ofEnrolled: 'من أصل {n} مسجلين', currentlyOpen: '{n} مفتوحة حالياً',
+  activeHunters: 'الصيادون النشطون', ofEnrolled: 'من أصل {n} مسجلين', ofSignedUp: '{n} سجّلوا في التطبيق', currentlyOpen: '{n} مفتوحة حالياً',
   newStores: 'متاجر زد الجديدة', wonMerchants: 'تجار بصفقات ناجحة', programConv: 'تحويل البرنامج',
   revenueClosed: 'الإيراد المُغلق', avgPerStore: 'متوسط {v} لكل متجر · دون الضريبة', exVat: 'دون الضريبة',
   revenueClosedGross: 'الإيراد المُغلق (شامل الضريبة)', avgPerStoreInc: 'متوسط {v} لكل متجر · شامل الضريبة', incVat: 'شامل الضريبة',

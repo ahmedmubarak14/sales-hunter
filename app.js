@@ -2245,7 +2245,12 @@
     var all = allLeads();
     var s = statsFor(all);
     var months = last12Months();
-    var participants = EMPLOYEES.filter(function (e) { return leadsOf(e.id).length > 0; }).length;
+    // Most people submitting leads in HubSpot have never signed into the
+    // app, so counting only registered users badly understates how many
+    // hunters are actually running. Count everyone with at least one lead
+    // and report sign-ups as the sub-figure instead.
+    var signedUp = EMPLOYEES.filter(function (e) { return leadsOf(e.id).length > 0; }).length;
+    var participants = signedUp + unregisteredHunterRows().length;
 
     var byMonth = months.map(function (m) {
       return all.filter(function (l) { return monthKey(l.createdAt) === m.key; }).length;
@@ -2387,7 +2392,7 @@
 
     content.innerHTML =
       '<div class="kpis">' +
-        tile(t('activeHunters'), fmtNum(participants), t('ofEnrolled', { n: EMPLOYEES.length })) +
+        tile(t('activeHunters'), fmtNum(participants), t('ofSignedUp', { n: fmtNum(signedUp) })) +
         tile(t('totalLeads'), fmtNum(s.total), t('currentlyOpen', { n: fmtNum(s.open) })) +
         tile(t('newStores'), fmtNum(s.won), (s.avgCycleDays ? t('avgCycle', { n: s.avgCycleDays }) : t('wonMerchants'))) +
         tile(t('programConv'), fmtPct(s.conversion), t('convSub')) +
