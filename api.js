@@ -291,12 +291,29 @@ window.SH_API = (function () {
     });
     var leads = results[1].map(function (d) { return toLead(d, eventsByDeal, subsByDeal); });
 
-    var commAmount = {}, commByDeal = {}, payslipByComm = {};
+    // A deal can carry more than one commissions row — sync-metabase
+    // writes one per (deal, hunter, period), e.g. a store that invoices
+    // in two separate months under the same deal. Keying commAmount by
+    // deal id alone used to keep only whichever row loaded last, silently
+    // under-reporting revenue whenever a deal had more than one. Every
+    // row for a deal is grouped here so the amount is a real sum and the
+    // status reflects all of them, not an arbitrary survivor.
+    var commAmount = {}, commByDeal = {}, commRowsByDeal = {}, payslipByComm = {};
     results[3].forEach(function (c) {
-      commAmount[c.hubspot_deal_id] = Number(c.commission_amount);
-      commByDeal[c.hubspot_deal_id] = c;
-      var st = c.workflow_status === 'awaiting_calc' ? 'pending' : c.workflow_status;
-      COMMISSION_STATUS_OVERRIDES[c.hubspot_deal_id] = st;
+      (commRowsByDeal[c.hubspot_deal_id] = commRowsByDeal[c.hubspot_deal_id] || []).push(c);
+      if (!commByDeal[c.hubspot_deal_id]) commByDeal[c.hubspot_deal_id] = c; // representative row (payslip lookups, etc.)
+    });
+    Object.keys(commRowsByDeal).forEach(function (dealId) {
+      var rows = commRowsByDeal[dealId];
+      commAmount[dealId] = rows.reduce(function (sum, c) { return sum + Number(c.commission_amount); }, 0);
+      // Aggregate status: a deal isn't "paid" until every period behind
+      // it is. Least-complete status wins, so a still-pending period
+      // keeps the whole deal showing pending rather than flipping to
+      // paid on the strength of one row that happened to sort last.
+      var statuses = rows.map(function (c) { return c.workflow_status === 'awaiting_calc' ? 'pending' : c.workflow_status; });
+      var overall = statuses.indexOf('pending') >= 0 ? 'pending'
+        : statuses.indexOf('approved') >= 0 ? 'approved' : 'paid';
+      COMMISSION_STATUS_OVERRIDES[dealId] = overall;
     });
     results[6].forEach(function (p) { payslipByComm[p.commission_id] = p; });
 
@@ -332,7 +349,7 @@ window.SH_API = (function () {
 
     return {
       me: me, users: users, leads: leads,
-      commAmount: commAmount, commByDeal: commByDeal,
+      commAmount: commAmount, commByDeal: commByDeal, commRowsByDeal: commRowsByDeal,
       payslipByComm: payslipByComm,
       profilesByUser: profilesByUser,
       ibanByUser: ibanByUser,
@@ -454,12 +471,20 @@ window.SH_API = (function () {
   }
 
   async function setCommissionStatus(dealId, status) {
-    var c = window.LIVE.commByDeal[dealId];
-    if (!c) throw new Error('No commission row for ' + dealId + ' yet (waiting for the Metabase calculation).');
-    await req('/rest/v1/rpc/set_commission_status', {
-      method: 'POST', body: { p_id: c.id, p_status: status }
-    });
-    c.workflow_status = status;
+    // A deal can back more than one commissions row (one per invoice
+    // period); the payouts page has a single status control per deal, so
+    // that action has to apply to every row behind it — otherwise
+    // marking one period paid left another silently pending in the
+    // database while the UI, keyed off just the row that happened to
+    // load last, showed the whole deal as paid.
+    var rows = window.LIVE.commRowsByDeal[dealId] || (window.LIVE.commByDeal[dealId] ? [window.LIVE.commByDeal[dealId]] : []);
+    if (!rows.length) throw new Error('No commission row for ' + dealId + ' yet (waiting for the Metabase calculation).');
+    for (var i = 0; i < rows.length; i++) {
+      await req('/rest/v1/rpc/set_commission_status', {
+        method: 'POST', body: { p_id: rows[i].id, p_status: status }
+      });
+      rows[i].workflow_status = status;
+    }
     COMMISSION_STATUS_OVERRIDES[dealId] = status;
   }
 
