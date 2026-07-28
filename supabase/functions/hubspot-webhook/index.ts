@@ -44,6 +44,25 @@ async function verifySignature(req: Request, rawBody: string): Promise<boolean> 
   return timingSafeEqual(expected, given);
 }
 
+// stageId -> label, across every pipeline. Stage ids are unique per
+// portal, so one flat map is enough and the event's pipeline (which
+// HubSpot doesn't send on a propertyChange) isn't needed. Best-effort:
+// if the token or the API is unavailable the raw id is stored, which is
+// what this function did for every event before.
+async function fetchStageLabels(): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const { data: token } = await supabase.rpc("get_integration_secret", { p_name: "hubspot" });
+  if (!token) return map;
+  const res = await fetch("https://api.hubapi.com/crm/v3/pipelines/deals", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return map;
+  for (const p of (await res.json()).results ?? []) {
+    for (const s of p.stages ?? []) map.set(String(s.id), String(s.label));
+  }
+  return map;
+}
+
 type SubscriptionEvent = {
   subscriptionType?: string;
   propertyName?: string;
@@ -76,11 +95,19 @@ Deno.serve(async (req) => {
     return new Response("expected an array of events", { status: 400 });
   }
 
+  // Stage LABELS, not the raw ids HubSpot sends. The hourly poll stores
+  // labels ("Closed Won 🏆"), so storing ids here meant deals.stage
+  // flipped to a value none of the app's label-based filters match, and
+  // the next poll then saw prevStage !== stage and recorded a second,
+  // spurious id->label event for a transition that happened once.
+  const stageLabels = await fetchStageLabels();
+
   let processed = 0;
   for (const ev of events as SubscriptionEvent[]) {
     if (ev.subscriptionType !== "deal.propertyChange" || ev.propertyName !== "dealstage") continue;
     if (ev.objectId == null || ev.propertyValue == null) continue;
     const dealId = String(ev.objectId);
+    const stage = stageLabels.get(String(ev.propertyValue)) ?? String(ev.propertyValue);
 
     const { data: existing, error: selErr } = await supabase.from("deals")
       .select("stage").eq("hubspot_deal_id", dealId).maybeSingle();
@@ -90,19 +117,24 @@ Deno.serve(async (req) => {
 
     const { error: upsertErr } = await supabase.from("deals").upsert({
       hubspot_deal_id: dealId,
-      stage: ev.propertyValue,
+      stage,
       synced_at: new Date().toISOString(),
     });
     if (upsertErr) {
       return Response.json({ ok: false, error: upsertErr.message }, { status: 500 });
     }
 
-    const { error: evErr } = await supabase.from("deal_stage_events").insert({
+    // Ignore redeliveries rather than 500-ing on them: HubSpot retries
+    // after a 5xx, and the same event replayed is not new information.
+    const { error: evErr } = await supabase.from("deal_stage_events").upsert({
       hubspot_deal_id: dealId,
       from_stage: existing?.stage ?? null,
-      to_stage: ev.propertyValue,
+      to_stage: stage,
       occurred_at: ev.occurredAt ? new Date(ev.occurredAt).toISOString() : new Date().toISOString(),
       source: "webhook",
+    }, {
+      onConflict: "hubspot_deal_id, from_stage, to_stage, occurred_at",
+      ignoreDuplicates: true,
     });
     if (evErr) {
       return Response.json({ ok: false, error: evErr.message }, { status: 500 });

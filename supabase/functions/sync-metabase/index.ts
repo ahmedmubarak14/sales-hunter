@@ -103,30 +103,31 @@ function billingCycleOf(name: unknown): string | null {
   return null;
 }
 
-// Bulk-patch existing deals with a subset of columns. Postgres validates
-// NOT NULL constraints on the full proposed row before it even checks
-// for a conflict, so a plain `.upsert()` with only {hubspot_deal_id,
-// ...patch} fails on deals.stage (not null, no default) even though
-// every one of these rows already exists and would just be an UPDATE —
-// this pulls each row's current stage back in so the insert-side check
-// passes.
+// Bulk-patch existing deals with a subset of columns, via a real partial
+// UPDATE (patch_deal_fields, migration 023).
+//
+// This used to be an .upsert(): Postgres validates NOT NULL on the whole
+// proposed row before it checks for a conflict, so a partial upsert
+// failed on deals.stage (not null, no default) even though every row
+// already existed and would only ever be an UPDATE. The workaround was to
+// read each deal's current stage and write it back — which quietly turned
+// every amount/owner patch into a stage write, and reverted any stage
+// change that landed between the read and the write. That never healed
+// itself: the HubSpot poll only re-fetches deals modified in HubSpot
+// since its bookmark, and a locally-reverted stage doesn't change
+// hs_lastmodifieddate. An UPDATE has no insert path, so the NOT NULL
+// problem that forced the workaround doesn't arise and stage is simply
+// never mentioned.
 async function patchDeals(rows: { hubspot_deal_id: string; [col: string]: unknown }[]) {
   if (!rows.length) return 0;
-  const existing = await fetchAll<{ hubspot_deal_id: string; stage: string }>((from, to) =>
-    supabase.from("deals").select("hubspot_deal_id, stage").order("hubspot_deal_id").range(from, to)
-  );
-  const stageOf = new Map(existing.map((r) => [r.hubspot_deal_id, r.stage]));
-
-  const patched = rows
-    .filter((r) => stageOf.has(r.hubspot_deal_id))
-    .map((r) => ({ ...r, stage: stageOf.get(r.hubspot_deal_id) }));
-
+  let patched = 0;
   const CHUNK = 500;
-  for (let i = 0; i < patched.length; i += CHUNK) {
-    const { error } = await supabase.from("deals").upsert(patched.slice(i, i + CHUNK));
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const { data, error } = await supabase.rpc("patch_deal_fields", { p_rows: rows.slice(i, i + CHUNK) });
     if (error) throw error;
+    patched += Number(data ?? 0);
   }
-  return patched.length;
+  return patched;
 }
 
 // One card carries invoice-level purchase data, joined by

@@ -253,22 +253,26 @@ Deno.serve(async () => {
     // already corrected. Owner names are entirely sync-metabase's job
     // now (the HubSpot token isn't scoped for crm.objects.owners.read,
     // so this sync never had a real name to offer anyway).
-    // Read this defensively: if the query silently returns nothing, every
-    // deal looks un-owned and the write below would wipe Metabase's
-    // amounts wholesale. Fail the run instead of destroying data.
-    const subRows = await fetchAll<{ hubspot_deal_id: string }>((from, to) =>
-      supabase.from("subscriptions").select("hubspot_deal_id").order("hubspot_deal_id").range(from, to)
-    ).catch((e) => { throw new Error(`could not read subscriptions (needed to protect Metabase amounts): ${e.message}`); });
-    const metabaseOwned = new Set(subRows.map((r) => r.hubspot_deal_id));
-
-    // One read of current stages up front and chunked writes at the end —
+    // One read of current state up front and chunked writes at the end —
     // a select + upsert per deal ran up against the function timeout once
     // a full page set (hundreds of deals) arrives in a single run.
-    const current = await fetchAll<{ hubspot_deal_id: string; stage: string; amount_net: number | null }>((from, to) =>
-      supabase.from("deals").select("hubspot_deal_id, stage, amount_net").order("hubspot_deal_id").range(from, to)
-    );
+    //
+    // amount_from_metabase is the authority on which amounts to protect.
+    // This used to be inferred from subscriptions.hubspot_deal_id, but
+    // subscriptions keeps one row per STORE (its biggest invoice's deal
+    // id) while sync-metabase patches amounts for every invoiced DEAL —
+    // so a store with two deals had the non-winning one overwritten with
+    // the HubSpot quote every poll and re-corrected every Metabase run.
+    // The flag is set by exactly the write that owns the value.
+    const current = await fetchAll<{
+      hubspot_deal_id: string; stage: string; amount_net: number | null; amount_from_metabase: boolean;
+    }>((from, to) =>
+      supabase.from("deals").select("hubspot_deal_id, stage, amount_net, amount_from_metabase")
+        .order("hubspot_deal_id").range(from, to)
+    ).catch((e) => { throw new Error(`could not read deals (needed to protect Metabase amounts): ${e.message}`); });
     const stageOf = new Map(current.map((r) => [r.hubspot_deal_id, r.stage]));
     const amountOf = new Map(current.map((r) => [r.hubspot_deal_id, r.amount_net]));
+    const metabaseOwned = new Set(current.filter((r) => r.amount_from_metabase).map((r) => r.hubspot_deal_id));
 
     const now = new Date().toISOString();
     const patches: Record<string, unknown>[] = [];
@@ -323,7 +327,15 @@ Deno.serve(async () => {
       if (error) throw error;
     }
     for (let i = 0; i < events.length; i += CHUNK) {
-      const { error } = await supabase.from("deal_stage_events").insert(events.slice(i, i + CHUNK));
+      // Ignore repeats rather than failing the run: the overlap window
+      // above deliberately re-fetches recently-modified deals, and a
+      // retried run re-derives the same transitions. The unique index
+      // from migration 023 defines what "the same event" means.
+      const { error } = await supabase.from("deal_stage_events")
+        .upsert(events.slice(i, i + CHUNK), {
+          onConflict: "hubspot_deal_id, from_stage, to_stage, occurred_at",
+          ignoreDuplicates: true,
+        });
       if (error) throw error;
     }
 
