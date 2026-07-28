@@ -111,6 +111,29 @@ window.SH_API = (function () {
     return ct.includes('json') ? res.json() : res.text();
   }
 
+  // PostgREST silently truncates any unpaginated "give me the whole
+  // table" query at its configured max-rows (1000 here). A `select=*`
+  // with no limit reads as "get everything" but is really "get up to
+  // 1000, no warning if there's more" — the exact shape that made
+  // sync-hubspot's amount-carry-forward set incomplete once deals passed
+  // that count in one earlier incident. Pages via limit/offset behind a
+  // caller-supplied, unique-column order (offset pagination is only
+  // correct with a stable sort — ties on a non-unique column like
+  // synced_at let rows shift between pages) until a page comes back
+  // short of a full page, which is the actual proof nothing was left
+  // behind — no separate "did we get everything" check needed.
+  var PAGE_SIZE = 1000;
+  async function reqAll(path, orderBy) {
+    var sep = path.indexOf('?') >= 0 ? '&' : '?';
+    var out = [], offset = 0;
+    for (;;) {
+      var page = await req(path + sep + 'order=' + orderBy + '&limit=' + PAGE_SIZE + '&offset=' + offset);
+      out = out.concat(page);
+      if (page.length < PAGE_SIZE) return out;
+      offset += PAGE_SIZE;
+    }
+  }
+
   /* ---------------- auth ---------------- */
   async function sendMagicLink(email) {
     await req('/auth/v1/otp', {
@@ -256,17 +279,23 @@ window.SH_API = (function () {
   async function loadSnapshot() {
     var s = getSession();
     if (!s) return null;
+    // Every full-table read below pages via reqAll rather than trusting a
+    // single request to return everything — see reqAll's comment. The
+    // order column is each table's primary key: unique, so pagination
+    // can't skip or duplicate a row on a tie, and arbitrary otherwise —
+    // nothing downstream depends on the order these arrive in, every
+    // view re-sorts what it needs.
     var results = await Promise.all([
-      req('/rest/v1/app_users?select=*'),
-      req('/rest/v1/deals?select=*&order=synced_at.desc&limit=2000'),
-      req('/rest/v1/deal_stage_events?select=*&limit=10000'),
-      req('/rest/v1/commissions?select=*'),
+      reqAll('/rest/v1/app_users?select=*', 'id.asc'),
+      reqAll('/rest/v1/deals?select=*', 'hubspot_deal_id.asc'),
+      reqAll('/rest/v1/deal_stage_events?select=*', 'id.asc'),
+      reqAll('/rest/v1/commissions?select=*', 'id.asc'),
       req('/rest/v1/settings?select=*'),
-      req('/rest/v1/profiles?select=*'),
-      req('/rest/v1/payslips?select=*').catch(function () { return []; }),
-      req('/rest/v1/store_showcase?select=*').catch(function () { return []; }),
+      reqAll('/rest/v1/profiles?select=*', 'user_id.asc'),
+      reqAll('/rest/v1/payslips?select=*', 'id.asc').catch(function () { return []; }),
+      reqAll('/rest/v1/store_showcase?select=*', 'store_id.asc').catch(function () { return []; }),
       req('/rest/v1/rpc/get_ibans', { method: 'POST', body: {} }).catch(function () { return []; }),
-      req('/rest/v1/subscriptions?select=hubspot_deal_id,package,billing_cycle,started_at').catch(function () { return []; })
+      reqAll('/rest/v1/subscriptions?select=hubspot_deal_id,package,billing_cycle,started_at', 'store_id.asc').catch(function () { return []; })
     ]);
     var users = results[0].map(toUser);
     var me = users.find(function (u) {

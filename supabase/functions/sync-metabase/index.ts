@@ -19,6 +19,26 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
+// PostgREST caps any single response at its configured max-rows (1000 on
+// this project) regardless of caller role — a plain .select() on a full
+// table silently returns only the first page once the table passes that
+// count. Pages via .range() behind a caller-supplied order (pagination is
+// only correct with a stable sort) until a page comes back short — proof
+// nothing was left behind, no separate row-count check needed.
+const PAGE_SIZE = 1000;
+async function fetchAll<T>(
+  page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await page(from, from + PAGE_SIZE - 1);
+    if (error) throw new Error(error.message);
+    const rows = data ?? [];
+    out.push(...rows);
+    if (rows.length < PAGE_SIZE) return out;
+  }
+}
+
 type MBSettings = {
   base_url?: string;
   card_subscriptions?: string;
@@ -85,9 +105,10 @@ function billingCycleOf(name: unknown): string | null {
 // passes.
 async function patchDeals(rows: { hubspot_deal_id: string; [col: string]: unknown }[]) {
   if (!rows.length) return 0;
-  const { data: existing, error: selErr } = await supabase.from("deals").select("hubspot_deal_id, stage");
-  if (selErr) throw selErr;
-  const stageOf = new Map((existing ?? []).map((r: { hubspot_deal_id: string; stage: string }) => [r.hubspot_deal_id, r.stage]));
+  const existing = await fetchAll<{ hubspot_deal_id: string; stage: string }>((from, to) =>
+    supabase.from("deals").select("hubspot_deal_id, stage").order("hubspot_deal_id").range(from, to)
+  );
+  const stageOf = new Map(existing.map((r) => [r.hubspot_deal_id, r.stage]));
 
   const patched = rows
     .filter((r) => stageOf.has(r.hubspot_deal_id))
@@ -137,8 +158,10 @@ async function syncDealDetails(base: string, key: string, cardId: string) {
   const rawRows = await runCard(base, key, cardId);
   const amountByDeal = new Map<string, { net: number; gross: number }>();
 
-  const { data: dealRows } = await supabase.from("deals").select("hubspot_deal_id, hunter_email");
-  const knownDeals = new Map((dealRows ?? []).map((r) => [r.hubspot_deal_id as string, r.hunter_email as string | null]));
+  const dealRows = await fetchAll<{ hubspot_deal_id: string; hunter_email: string | null }>((from, to) =>
+    supabase.from("deals").select("hubspot_deal_id, hunter_email").order("hubspot_deal_id").range(from, to)
+  );
+  const knownDeals = new Map(dealRows.map((r) => [r.hubspot_deal_id, r.hunter_email]));
   const unknownIds = [...new Set(rawRows
     .map((r) => String(r["id"] ?? ""))
     .filter((id) => id && !knownDeals.has(id)))];

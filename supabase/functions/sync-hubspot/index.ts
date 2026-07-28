@@ -11,6 +11,29 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
+// PostgREST caps any single response at its configured max-rows (1000 on
+// this project) regardless of caller role — a plain .select() on a full
+// table silently returns only the first page once the table passes that
+// count, with no error to signal it. This is exactly how the
+// amount-carry-forward set below went incomplete in an earlier incident.
+// Pages via .range() behind a caller-supplied order (pagination is only
+// correct with a stable sort; ties on a non-unique column let rows shift
+// between pages) until a page comes back short — proof nothing was left
+// behind, no separate row-count check needed.
+const PAGE_SIZE = 1000;
+async function fetchAll<T>(
+  page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await page(from, from + PAGE_SIZE - 1);
+    if (error) throw new Error(error.message);
+    const rows = data ?? [];
+    out.push(...rows);
+    if (rows.length < PAGE_SIZE) return out;
+  }
+}
+
 type HSSettings = {
   pipelines?: string[];
   target_type?: string;
@@ -196,17 +219,19 @@ Deno.serve(async () => {
     // Read this defensively: if the query silently returns nothing, every
     // deal looks un-owned and the write below would wipe Metabase's
     // amounts wholesale. Fail the run instead of destroying data.
-    const { data: subRows, error: subErr } = await supabase.from("subscriptions").select("hubspot_deal_id");
-    if (subErr) throw new Error(`could not read subscriptions (needed to protect Metabase amounts): ${subErr.message}`);
-    const metabaseOwned = new Set((subRows ?? []).map((r) => r.hubspot_deal_id));
+    const subRows = await fetchAll<{ hubspot_deal_id: string }>((from, to) =>
+      supabase.from("subscriptions").select("hubspot_deal_id").order("hubspot_deal_id").range(from, to)
+    ).catch((e) => { throw new Error(`could not read subscriptions (needed to protect Metabase amounts): ${e.message}`); });
+    const metabaseOwned = new Set(subRows.map((r) => r.hubspot_deal_id));
 
     // One read of current stages up front and chunked writes at the end —
     // a select + upsert per deal ran up against the function timeout once
     // a full page set (hundreds of deals) arrives in a single run.
-    const { data: current, error: curErr } = await supabase.from("deals").select("hubspot_deal_id, stage, amount_net");
-    if (curErr) throw curErr;
-    const stageOf = new Map((current ?? []).map((r) => [r.hubspot_deal_id, r.stage]));
-    const amountOf = new Map((current ?? []).map((r) => [r.hubspot_deal_id, r.amount_net]));
+    const current = await fetchAll<{ hubspot_deal_id: string; stage: string; amount_net: number | null }>((from, to) =>
+      supabase.from("deals").select("hubspot_deal_id, stage, amount_net").order("hubspot_deal_id").range(from, to)
+    );
+    const stageOf = new Map(current.map((r) => [r.hubspot_deal_id, r.stage]));
+    const amountOf = new Map(current.map((r) => [r.hubspot_deal_id, r.amount_net]));
 
     const now = new Date().toISOString();
     const patches: Record<string, unknown>[] = [];
