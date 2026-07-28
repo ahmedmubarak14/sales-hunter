@@ -336,6 +336,18 @@ async function syncTopStores(base: string, key: string, cardId: string) {
     const { error } = await supabase.from("store_showcase").upsert(showcaseRows.slice(i, i + CHUNK));
     if (error) throw error;
   }
+  // A store that drops out of this run's card results (fell out of the
+  // top ranking, or its whole category disappeared) never gets touched
+  // by the upsert above and its row stuck around forever. Sweep it out
+  // by synced_at AFTER the upsert (not delete-then-insert), so
+  // store_showcase_lite never sees a window with zero rows for a
+  // category mid-sync. Only sweep when this run actually returned rows —
+  // an empty or failed card response must never be allowed to wipe the
+  // whole table.
+  if (showcaseRows.length > 0) {
+    const { error: sweepError } = await supabase.from("store_showcase").delete().lt("synced_at", now);
+    if (sweepError) throw sweepError;
+  }
   return showcaseRows.length;
 }
 

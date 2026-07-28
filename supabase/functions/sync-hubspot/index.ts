@@ -195,6 +195,15 @@ function mockDeals(hunterProp: string) {
   }];
 }
 
+function errMsg(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (e && typeof e === "object") {
+    const anyE = e as Record<string, unknown>;
+    return String(anyE.message ?? anyE.error ?? anyE.details ?? JSON.stringify(e));
+  }
+  return String(e);
+}
+
 Deno.serve(async () => {
   const started = new Date().toISOString();
   let configured = false;
@@ -351,11 +360,11 @@ Deno.serve(async () => {
     return Response.json({ ok: true, synced: deals.length, more, mock: !conn.configured });
   } catch (e) {
     await supabase.from("sync_state").upsert({
-      source: "hubspot", last_run_at: started, last_status: "error", last_error: String(e),
+      source: "hubspot", last_run_at: started, last_status: "error", last_error: errMsg(e),
     });
     if (configured) {
-      await supabase.from("integration_config").update({ last_synced_at: started, last_status: `error: ${String(e)}` }).eq("name", "hubspot");
+      await supabase.from("integration_config").update({ last_synced_at: started, last_status: `error: ${errMsg(e)}` }).eq("name", "hubspot");
     }
-    return Response.json({ ok: false, error: String(e) }, { status: 500 });
+    return Response.json({ ok: false, error: errMsg(e) }, { status: 500 });
   }
 });
