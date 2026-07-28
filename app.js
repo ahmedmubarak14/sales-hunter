@@ -1691,6 +1691,20 @@
     renderTable();
   }
 
+  // Access picker (Team page): at most one open at a time. Tracked here,
+  // outside viewTeam, so a single delegated click listener — registered
+  // once for the app's whole lifetime — can close and commit whichever
+  // picker is open, regardless of which render created it. wireAccessPickers
+  // used to add its own `document.addEventListener('click', closeMenu)` per
+  // row on every render() (search keystrokes, pagination, saves all call
+  // render()), which both leaked listeners without bound and left stale
+  // ones closing over detached checkboxes — clicking anywhere after a
+  // re-render could silently commit an old snapshot over a newer save.
+  var openAccessPicker = null;
+  document.addEventListener('click', function () {
+    if (openAccessPicker) openAccessPicker();
+  });
+
   /* ---- Management backoffice: team & access ---- */
   function viewTeam(content, user) {
     function saveOverride(id, patch) {
@@ -1784,6 +1798,7 @@
           trigger.setAttribute('aria-expanded', 'false');
           window.removeEventListener('scroll', place, true);
           window.removeEventListener('resize', place);
+          if (openAccessPicker === closeMenu) openAccessPicker = null;
           commit();
         }
         function commit() {
@@ -1812,16 +1827,25 @@
 
         trigger.addEventListener('click', function (e) {
           e.stopPropagation();
+          // Only one picker open at a time. If a DIFFERENT one is open,
+          // close (and commit) it first and stop there — a commit that
+          // actually changed something calls render(), which replaces
+          // content.innerHTML and detaches this very trigger/menu, so
+          // touching them afterward in the same handler would act on
+          // stale nodes. The user's click still registers as closing the
+          // other picker; opening this one takes one more click, same as
+          // clicking anywhere else to dismiss it.
+          if (openAccessPicker && openAccessPicker !== closeMenu) { openAccessPicker(); return; }
           var open = menu.hidden;
-          // only one picker open at a time
-          document.querySelectorAll('.ms-menu').forEach(function (m) { if (m !== menu) m.hidden = true; });
           menu.hidden = !open;
           trigger.setAttribute('aria-expanded', String(open));
           if (open) {
+            openAccessPicker = closeMenu;
             place();
             window.addEventListener('scroll', place, true);
             window.addEventListener('resize', place);
           } else {
+            openAccessPicker = null;
             window.removeEventListener('scroll', place, true);
             window.removeEventListener('resize', place);
             commit();
@@ -1839,7 +1863,6 @@
           sync();
         });
         ms.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeMenu(); trigger.focus(); } });
-        document.addEventListener('click', closeMenu);
       });
     }
 
@@ -3362,6 +3385,7 @@
     if (document.getElementById('ob-overlay') || document.getElementById('drawer-root')) return false;
     var ov = document.getElementById('au-overlay');
     if (ov && !ov.hidden) return false;
+    if (document.querySelector('.ms-menu:not([hidden])')) return false; // access picker open
     var a = document.activeElement;
     if (a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) return false;
     return true;
