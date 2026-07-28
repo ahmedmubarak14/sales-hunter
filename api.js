@@ -157,7 +157,27 @@ window.SH_API = (function () {
       expires_at: Date.now() + (j.expires_in || 3600) * 1000
     });
   }
-  function signOut() { setSession(null); window.LIVE = null; }
+  // Local session is cleared FIRST and synchronously, exactly as before —
+  // every caller fires this and immediately calls location.reload() without
+  // awaiting it, so anything gated behind a network round-trip risks being
+  // aborted by the navigation before it runs. Revocation is then fired in
+  // the background: without this, "sign out" only forgot the token on
+  // THIS device — the refresh token stayed valid on Supabase's side until
+  // natural expiry, so a token captured earlier (a stolen device, a
+  // copied localStorage value) kept working after the user had signed
+  // out. Best-effort only; there's nothing useful to do if it fails, and
+  // the local sign-out must not depend on it succeeding.
+  function signOut() {
+    var s = getSession();
+    setSession(null);
+    window.LIVE = null;
+    if (s && s.access_token) {
+      fetch(cfg.url + '/auth/v1/logout', {
+        method: 'POST',
+        headers: { apikey: cfg.key, Authorization: 'Bearer ' + s.access_token }
+      }).catch(function () {});
+    }
+  }
 
   /* ---------------- transforms ---------------- */
   function normStage(s) {

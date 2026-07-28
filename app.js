@@ -120,6 +120,22 @@
   if (settings.vatRate) VAT_RATE = settings.vatRate;
   function ratePct() { return Math.round(COMMISSION_RATE * 100) + '%'; }
 
+  // Every free-text field in a CSV export (deal id, company, hunter name,
+  // department, sales rep, bank) is either HubSpot data or something a
+  // program participant typed into a form — treat all of it as hostile.
+  // Excel/Sheets/LibreOffice execute a cell that starts with = + - @ (or
+  // a raw tab/CR) as a formula the moment the file is opened; a company
+  // named "=HYPERLINK(...)" or "=cmd|..." runs. A leading apostrophe
+  // forces the cell to plain text without changing what's shown. Every
+  // field is always quoted and its own quotes doubled — one call site
+  // (salesOwner) previously wrapped in quotes without escaping embedded
+  // ones at all, which could break the row's column alignment outright.
+  function csvCell(v) {
+    var s = v === null || v === undefined ? '' : String(v);
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+
   // Shared label for a commissionStatus() value, used everywhere a status
   // chip or <select> option is rendered. 'awaiting' is a live-mode-only
   // state — a won deal Metabase hasn't calculated a commission for yet —
@@ -1492,7 +1508,7 @@
     document.getElementById('dl-statement').addEventListener('click', function () {
       var lines = ['Deal ID,Company,Closed Won Date,Subscription (SAR excl. VAT),Commission (SAR),Status'];
       wonLeads.forEach(function (l) {
-        lines.push([l.id, '"' + l.company.replace(/"/g, '""') + '"', fmtDate(wonDate(l)), l.amountNet, Math.round(commissionOf(l)), commissionStatus(l)].join(','));
+        lines.push([csvCell(l.id), csvCell(l.company), fmtDate(wonDate(l)), l.amountNet, Math.round(commissionOf(l)), commissionStatus(l)].join(','));
       });
       var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
       var a = document.createElement('a');
@@ -3178,12 +3194,12 @@
         var hunter = (window.LIVE ? LIVE.users : EMPLOYEES).find(function (e) { return e.id === l.hunterId; });
         var pay = hunter ? payoutDetailsOf(hunter) : { bank: '', iban: '' };
         lines.push([
-          '"' + (hunter ? hunter.name : (l.hunterId === 'unassigned' ? t('unassigned') : l.hunterId)).replace(/"/g, '""') + '"',
-          hunter ? hunter.dept : '', l.id,
-          '"' + l.company.replace(/"/g, '""') + '"',
-          fmtDate(wonDate(l)), '"' + l.salesOwner + '"',
+          csvCell(hunter ? hunter.name : (l.hunterId === 'unassigned' ? t('unassigned') : l.hunterId)),
+          csvCell(hunter ? hunter.dept : ''), csvCell(l.id),
+          csvCell(l.company),
+          fmtDate(wonDate(l)), csvCell(l.salesOwner),
           l.amountNet, Math.round(commissionOf(l)), commissionStatus(l),
-          '"' + pay.bank + '"', pay.iban || ''
+          csvCell(pay.bank), pay.iban || ''
         ].join(','));
       });
       var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
