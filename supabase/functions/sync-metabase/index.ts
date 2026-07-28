@@ -47,11 +47,18 @@ type MBSettings = {
 };
 
 async function loadConnection() {
-  const { data: cfg } = await supabase
+  // Checked, not swallowed: a transient failure here used to read as
+  // "not configured yet", which silently downgrades a live production
+  // run to MOCK mode. For sync-hubspot that meant upserting the fake
+  // "MOCK-1 / Mock Merchant / closedwon / 2990" deal into the real deals
+  // table — attributed to a real hunter's email — and still reporting
+  // the run as ok. Only genuinely-absent config should mean mock.
+  const { data: cfg, error: cfgErr } = await supabase
     .from("integration_config")
     .select("settings, secret_set")
     .eq("name", "metabase")
     .maybeSingle();
+  if (cfgErr) throw new Error(`could not read metabase integration config: ${cfgErr.message}`);
   if (!cfg?.secret_set) return { configured: false as const };
   const { data: key, error } = await supabase.rpc("get_integration_secret", { p_name: "metabase" });
   if (error || !key) throw new Error(`could not read saved Metabase key: ${error?.message ?? "empty"}`);

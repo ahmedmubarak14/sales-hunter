@@ -46,11 +46,18 @@ type HSSettings = {
 };
 
 async function loadConnection() {
-  const { data: cfg } = await supabase
+  // Checked, not swallowed: a transient failure here used to read as
+  // "not configured yet", which silently downgrades a live production
+  // run to MOCK mode. For sync-hubspot that meant upserting the fake
+  // "MOCK-1 / Mock Merchant / closedwon / 2990" deal into the real deals
+  // table — attributed to a real hunter's email — and still reporting
+  // the run as ok. Only genuinely-absent config should mean mock.
+  const { data: cfg, error: cfgErr } = await supabase
     .from("integration_config")
     .select("settings, secret_set")
     .eq("name", "hubspot")
     .maybeSingle();
+  if (cfgErr) throw new Error(`could not read hubspot integration config: ${cfgErr.message}`);
   if (!cfg?.secret_set) return { configured: false as const };
   const { data: token, error } = await supabase.rpc("get_integration_secret", { p_name: "hubspot" });
   if (error || !token) throw new Error(`could not read saved HubSpot token: ${error?.message ?? "empty"}`);
