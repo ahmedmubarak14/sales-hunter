@@ -17,11 +17,17 @@ function reasonLabel(k) { return k === NO_REASON_KEY ? t('noReasonGiven') : trRe
 
 function curr(v) { return isAr() ? v + ' ر.س' : 'SAR ' + v; }
 function fmtMoney(n) { return curr(Math.round(n).toLocaleString('en-US')); }
-function fmtMoneyC(n) { // compact
-  if (Math.abs(n) >= 1e6) return curr((n / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M');
-  if (Math.abs(n) >= 1e3) return curr((n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K');
-  return curr(Math.round(n));
+// The compact "1.2K" / "3.4M" shape without the currency wrapper — axis
+// ticks want just the number. fmtMoneyC(n).replace('SAR ', '') used to
+// stand in for this, which only ever stripped the English prefix; curr()
+// appends the Arabic currency as a SUFFIX (' ر.س'), so every Arabic axis
+// tick still carried it and overflowed the label gutter.
+function fmtNumC(n) {
+  if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M';
+  if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K';
+  return String(Math.round(n));
 }
+function fmtMoneyC(n) { return curr(fmtNumC(n)); } // compact, with currency
 function fmtPct(x, dp) { return (x * 100).toFixed(dp === undefined ? 1 : dp) + '%'; }
 function fmtDate(d) {
   return d.toLocaleDateString(isAr() ? 'ar-SA-u-ca-gregory-nu-latn' : 'en-GB',
@@ -233,7 +239,7 @@ function columnsSVG(labels, values, opts) {
   ticks.forEach(function (t) {
     var y = padT + plotH - (t / max) * plotH;
     out += '<line x1="' + padL + '" y1="' + y + '" x2="' + (W - padR) + '" y2="' + y + '" class="grid"></line>';
-    out += '<text x="' + (padL - 6) + '" y="' + (y + 3.5) + '" text-anchor="end" class="ax">' + (opts.compact ? fmtMoneyC(t).replace('SAR ', '') : fmtNum(t)) + '</text>';
+    out += '<text x="' + (padL - 6) + '" y="' + (y + 3.5) + '" text-anchor="end" class="ax">' + (opts.compact ? fmtNumC(t) : fmtNum(t)) + '</text>';
   });
   values.forEach(function (v, i) {
     var h = (v / max) * plotH;
@@ -264,7 +270,7 @@ function groupedColumnsSVG(labels, seriesA, seriesB, opts) {
   ticks.forEach(function (t) {
     var y = padT + plotH - (t / max) * plotH;
     out += '<line x1="' + padL + '" y1="' + y + '" x2="' + (W - padR) + '" y2="' + y + '" class="grid"></line>';
-    out += '<text x="' + (padL - 6) + '" y="' + (y + 3.5) + '" text-anchor="end" class="ax">' + fmtMoneyC(t).replace('SAR ', '') + '</text>';
+    out += '<text x="' + (padL - 6) + '" y="' + (y + 3.5) + '" text-anchor="end" class="ax">' + fmtNumC(t) + '</text>';
   });
   function col(v, x, cls, label, name) {
     var h = (v / max) * plotH;

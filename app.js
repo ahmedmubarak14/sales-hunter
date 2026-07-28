@@ -1372,7 +1372,21 @@
     } catch (e) { return false; }
   }
 
+  // Tracked outside renderHubspotForm, at module scope, so a re-render
+  // can find and stop a still-running poll from the PREVIOUS call.
+  // language/theme toggles both call route() — if one lands while the
+  // embed script is still loading, the old render's setInterval kept
+  // polling after content.innerHTML had already been replaced. Once the
+  // script did load, hbspt.forms.create() targets '#hs-form-slot' by CSS
+  // selector, which resolves to whatever element currently has that id —
+  // the NEW slot, not a stale reference — so the old interval's build()
+  // landed in the same container as the new render's and embedded the
+  // lead form twice. Also kept polling for up to ~15s past navigating
+  // away from /submit entirely.
+  var hsPollInterval = null;
+
   function renderHubspotForm(content, user) {
+    if (hsPollInterval) { clearInterval(hsPollInterval); hsPollInterval = null; }
     content.innerHTML =
       '<div class="card hs-panel" style="max-width:760px">' +
         '<div id="hs-form-slot" style="min-height:120px">' +
@@ -1406,9 +1420,9 @@
       document.head.appendChild(sc);
     }
     var tries = 0;
-    var iv = setInterval(function () {
+    hsPollInterval = setInterval(function () {
       tries++;
-      if (build() || tries > 60) clearInterval(iv);
+      if (build() || tries > 60) { clearInterval(hsPollInterval); hsPollInterval = null; }
       if (tries > 60) {
         var slot = document.getElementById('hs-form-slot');
         if (slot) slot.innerHTML = '<p class="f-error">' + t('hsFailed') + '</p>';
@@ -2018,19 +2032,19 @@
           var patch = { name: nu.name, dept: nu.dept, title: nu.title };
           if (window.LIVE) {
             SH_API.patchUser(editingId, patch).then(function () {
-              toast(t('userSavedToast', { name: name })); editingId = null; render();
+              toast(t('userSavedToast', { name: name })); editingId = null; closeForm(); render();
             }).catch(function (e2) { toast(String(e2.message)); });
             return;
           }
           saveOverride(editingId, patch);
           audit('Edited user ' + name);
           toast(t('userSavedToast', { name: name }));
-          editingId = null; render();
+          editingId = null; closeForm(); render();
           return;
         }
         if (window.LIVE) {
           SH_API.addUser(nu).then(function () {
-            toast(t('userAddedToast', { name: name })); render();
+            toast(t('userAddedToast', { name: name })); closeForm(); render();
           }).catch(function (e2) { toast(String(e2.message)); });
           return;
         }
@@ -2039,7 +2053,7 @@
         LS.set('users', custom);
         audit('Added user ' + name + ' (' + roleName(nuRole) + ')');
         toast(t('userAddedToast', { name: name }));
-        render();
+        closeForm(); render();
       });
       content.querySelectorAll('.edit-user').forEach(function (btn) {
         btn.addEventListener('click', function () {
@@ -3081,12 +3095,10 @@
           '<thead><tr><th>' + t('hunter') + '</th><th>' + t('deal') + '</th><th>' + t('closedWon') + '</th><th>' + t('closedBy') + '</th><th class="num">' + t('valueExVat') + '</th><th class="num">' + t('commissionPct', { rate: ratePct() }) + '</th><th>' + t('status') + '</th><th>' + t('payslip') + '</th><th>' + t('payoutAccount') + '</th></tr></thead>' +
           '<tbody>' + (rows || '<tr><td colspan="9"><div class="empty">' + t('noPayouts') + '</div></td></tr>') + '</tbody>' +
         '</table></div>';
-      document.querySelectorAll('.hs-link').forEach(function (a) {
-        a.addEventListener('click', function (e) {
-          e.preventDefault();
-          toast(t('hsToast', { id: a.getAttribute('data-deal') }));
-        });
-      });
+      // .hs-link is now handled by the global delegated click listener,
+      // so it works wherever hubspotLinkHtml() renders it (payouts here,
+      // the manager dashboard's pending-closure card, etc.) — not just
+      // this view.
       document.querySelectorAll('.hunter-link').forEach(function (a) {
         a.addEventListener('click', function (e) {
           e.preventDefault();
@@ -3409,6 +3421,18 @@
     if (b && window.LIVE) {
       e.preventDefault();
       SH_API.openPayslip(b.getAttribute('data-deal')).catch(function (e2) { toast(String(e2.message)); });
+      return;
+    }
+    // Fallback "open in HubSpot" link (hubspotLinkHtml, when the portal
+    // id hasn't synced yet). Wired globally rather than per-view: it was
+    // only handled inside viewPayouts's own render, so the same link
+    // rendered by the manager dashboard's pending-closure card navigated
+    // to a bare "#" — losing the expanded card and dumping the page back
+    // to the home route.
+    var hs = e.target.closest('.hs-link');
+    if (hs) {
+      e.preventDefault();
+      toast(t('hsToast', { id: hs.getAttribute('data-deal') }));
     }
   });
 
