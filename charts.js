@@ -60,19 +60,48 @@ function hbarPath(x, y, w, h, roundLeft, roundRight) {
     (tl ? ' Q' + x + ' ' + y + ' ' + (x + tl) + ' ' + y : '') + ' Z';
 }
 
-/* ---- Shared tooltip ---- */
+/* ---- Tooltip data ----
+   Marks carry their tooltip as data-tip-label (bold first line) and
+   data-tip-value (remaining lines, "\n"-joined) rather than a chunk of
+   markup. Those attributes are attacker-influenced (package/store/reason
+   names from HubSpot or Metabase) but attribute values, so esc() here is
+   about staying inside the quotes — the untrusted text is never treated
+   as HTML, only ever set as textContent below. */
+function tipAttr(label, lines) {
+  return 'data-tip-label="' + esc(label) + '" data-tip-value="' + esc(lines.join('\n')) + '"';
+}
+
+/* ---- Shared tooltip ----
+   Built from plain text, not innerHTML: an attribute value that was
+   esc()'d for safe HTML-attribute embedding comes back from
+   getAttribute() already entity-decoded, so assigning it to innerHTML
+   would parse it a SECOND time and any markup that was escaped once
+   would render live. textContent never parses, so this is the only
+   sink-side fix that actually closes that off regardless of what the
+   attribute contains. */
 function initTooltip(root) {
   var tip = document.getElementById('viz-tip');
   if (!tip) {
     tip = document.createElement('div');
     tip.id = 'viz-tip';
     tip.setAttribute('role', 'status');
+    tip._labelEl = document.createElement('b');
+    tip._bodyEl = document.createElement('span');
+    tip.appendChild(tip._labelEl);
+    tip.appendChild(document.createElement('br'));
+    tip.appendChild(tip._bodyEl);
     document.body.appendChild(tip);
   }
   root.addEventListener('mousemove', function (e) {
-    var el = e.target.closest('[data-tip]');
+    var el = e.target.closest('[data-tip-label]');
     if (el) {
-      tip.innerHTML = el.getAttribute('data-tip');
+      tip._labelEl.textContent = el.getAttribute('data-tip-label') || '';
+      var lines = (el.getAttribute('data-tip-value') || '').split('\n');
+      tip._bodyEl.textContent = '';
+      lines.forEach(function (line, i) {
+        if (i > 0) tip._bodyEl.appendChild(document.createElement('br'));
+        tip._bodyEl.appendChild(document.createTextNode(line));
+      });
       tip.style.display = 'block';
       var x = e.clientX + 14, y = e.clientY + 14;
       var r = tip.getBoundingClientRect();
@@ -178,8 +207,9 @@ function funnelSVG(rows) { // rows: [{stage, count}]
     var pct = i === 0 ? null : (rows[i - 1].count ? r.count / rows[i - 1].count : 0);
     out += '<text x="' + (labelW - 10) + '" y="' + (y + barH / 2 + 4) + '" text-anchor="end" class="ax strong">' + esc(r.stage) + '</text>';
     out += '<path d="' + hbarPath(labelW, y, w, barH, false, true) + '" class="f' + (i + 1) + '" ' +
-      'data-tip="<b>' + esc(r.stage) + '</b><br>' + t('leadsReached', { n: fmtNum(r.count) }) +
-      (pct !== null ? '<br>' + t('ofPrevStage', { pct: fmtPct(pct, 0) }) : '') + '"></path>';
+      tipAttr(r.stage, [t('leadsReached', { n: fmtNum(r.count) })].concat(
+        pct !== null ? [t('ofPrevStage', { pct: fmtPct(pct, 0) })] : []
+      )) + '></path>';
     out += '<text x="' + (labelW + w + 8) + '" y="' + (y + barH / 2 + 4) + '" class="val">' + fmtNum(r.count) + '</text>';
     if (pct !== null) {
       out += '<text x="' + (labelW - 10) + '" y="' + (y + barH / 2 + 18) + '" text-anchor="end" class="ax dim">' + fmtPct(pct, 0) + ' →</text>';
@@ -213,7 +243,7 @@ function columnsSVG(labels, values, opts) {
     if (v > 0) {
       out += '<path d="M' + x + ' ' + (padT + plotH) + ' V' + Math.min(y + 4, padT + plotH) + ' Q' + x + ' ' + y + ' ' + (x + 4) + ' ' + y +
         ' H' + (x + bw - 4) + ' Q' + (x + bw) + ' ' + y + ' ' + (x + bw) + ' ' + Math.min(y + 4, padT + plotH) + ' V' + (padT + plotH) + ' Z" class="s1" ' +
-        'data-tip="<b>' + esc(labels[i]) + '</b><br>' + (opts.money ? fmtMoney(v) : fmtNum(v) + (opts.unit ? ' ' + opts.unit : '')) + '"></path>';
+        tipAttr(labels[i], [opts.money ? fmtMoney(v) : fmtNum(v) + (opts.unit ? ' ' + opts.unit : '')]) + '></path>';
     }
     out += '<text x="' + (padL + i * slot + slot / 2) + '" y="' + (H - 8) + '" text-anchor="middle" class="ax">' + esc(labels[i]) + '</text>';
   });
@@ -243,7 +273,7 @@ function groupedColumnsSVG(labels, seriesA, seriesB, opts) {
     var y = padT + plotH - h;
     return '<path d="M' + x + ' ' + (padT + plotH) + ' V' + Math.min(y + 4, padT + plotH) + ' Q' + x + ' ' + y + ' ' + (x + 4) + ' ' + y +
       ' H' + (x + bw - 4) + ' Q' + (x + bw) + ' ' + y + ' ' + (x + bw) + ' ' + Math.min(y + 4, padT + plotH) + ' V' + (padT + plotH) + ' Z" class="' + cls + '" ' +
-      'data-tip="<b>' + esc(label) + '</b><br>' + esc(name) + ': ' + fmtMoney(v) + '"></path>';
+      tipAttr(label, [name + ': ' + fmtMoney(v)]) + '></path>';
   }
   labels.forEach(function (lb, i) {
     var cx = padL + i * slot + slot / 2;
@@ -297,7 +327,7 @@ function lineSVG(labels, values, opts) {
     var isNull = values[i] === null || values[i] === undefined;
     var bandW = plotW / Math.max(n - 1, 1);
     out += '<g class="hoverpt"><rect x="' + (px(i) - bandW / 2) + '" y="' + padT + '" width="' + bandW + '" height="' + plotH + '" fill="transparent" ' +
-      'data-tip="<b>' + esc(lb) + '</b><br>' + (isNull ? esc(opts.nullLabel || t('noData')) : (opts.pct ? fmtPct(values[i]) : fmtNum(values[i])) + (opts.unit ? ' ' + opts.unit : '')) + '"></rect>' +
+      tipAttr(lb, [isNull ? (opts.nullLabel || t('noData')) : (opts.pct ? fmtPct(values[i]) : fmtNum(values[i])) + (opts.unit ? ' ' + opts.unit : '')]) + '></rect>' +
       (isNull ? '' : '<circle cx="' + px(i) + '" cy="' + py(values[i]) + '" r="4.5" class="s1-dot ringed"></circle>') + '</g>';
   });
   // persistent dot + label on the last real value
@@ -327,7 +357,7 @@ function hbarsSVG(items, opts) { // items: [{label, count}]
     var w = Math.max(3, (it.count / max) * plotW);
     out += '<text x="' + (labelW - 10) + '" y="' + (y + rowH / 2 + 4) + '" text-anchor="end" class="ax strong">' + esc(it.label) + '</text>';
     out += '<path d="' + hbarPath(labelW, y + 5, w, rowH - 10, false, true) + '" class="' + (opts.cls || 's1') + '" ' +
-      'data-tip="<b>' + esc(it.label) + '</b><br>' + t('leadsPct', { n: fmtNum(it.count), pct: fmtPct(total ? it.count / total : 0, 0) }) + '"></path>';
+      tipAttr(it.label, [t('leadsPct', { n: fmtNum(it.count), pct: fmtPct(total ? it.count / total : 0, 0) })]) + '></path>';
     out += '<text x="' + (labelW + w + 8) + '" y="' + (y + rowH / 2 + 4) + '" class="val">' + fmtNum(it.count) +
       ' <tspan class="dim-t">· ' + fmtPct(total ? it.count / total : 0, 0) + '</tspan></text>';
   });
@@ -347,7 +377,7 @@ function stackedBarSVG(segments, opts) { // [{label, count, cls}]
     var valTxt = opts.money ? fmtMoney(s.count) : fmtNum(s.count) + ' ' + t('leadsUnit');
     // 2px surface gap between segments; only the outer ends are rounded
     out += '<path d="' + hbarPath(x + 1, y, Math.max(w - 2, 2), barH, i === 0, i === nonZero.length - 1) + '" class="' + s.cls + '" ' +
-      'data-tip="<b>' + esc(s.label) + '</b><br>' + valTxt + ' (' + fmtPct(s.count / total, 0) + ')"></path>';
+      tipAttr(s.label, [valTxt + ' (' + fmtPct(s.count / total, 0) + ')']) + '></path>';
     if (w > 56) {
       out += '<text x="' + (x + w / 2) + '" y="' + (y + barH + 22) + '" text-anchor="middle" class="ax">' + fmtPct(s.count / total, 0) + '</text>';
     }
