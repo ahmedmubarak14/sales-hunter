@@ -293,9 +293,15 @@ function closedDate(lead) { // date the lead reached a terminal stage
 function lastActivity(lead) { return lead.events[lead.events.length - 1].date; }
 
 function commissionOf(lead) {
-  // Live mode: the amount comes from the Metabase calculation, never computed here.
-  if (window.LIVE && window.LIVE.commAmount && window.LIVE.commAmount[lead.id] !== undefined) {
-    return Math.round(window.LIVE.commAmount[lead.id]);
+  // Live mode: the amount comes from the Metabase calculation, never
+  // computed here. A won deal with no commissions row yet (sync lag, or
+  // a backfilled/invoice-won deal the commissions card hasn't covered)
+  // used to fall through to the demo 20%-of-net formula — an amount
+  // finance never calculated, shown as real. In live mode there is
+  // either a real Metabase figure or nothing; 0 is correct, a guess is not.
+  if (window.LIVE) {
+    return window.LIVE.commAmount && window.LIVE.commAmount[lead.id] !== undefined
+      ? Math.round(window.LIVE.commAmount[lead.id]) : 0;
   }
   return lead.stage === 'won' ? Math.round(lead.amountNet * COMMISSION_RATE) : 0;
 }
@@ -307,6 +313,12 @@ var COMMISSION_STATUS_OVERRIDES = {};
 function commissionStatus(lead) {
   if (lead.stage !== 'won') return null;
   if (COMMISSION_STATUS_OVERRIDES[lead.id]) return COMMISSION_STATUS_OVERRIDES[lead.id];
+  // Live mode: no override means no commissions row exists for this deal
+  // yet — not "old enough to assume paid". The age-based heuristic below
+  // is demo storytelling only; applying it in live mode showed a
+  // fabricated "Paid" chip (with an invented amount, see commissionOf)
+  // for money finance never touched.
+  if (window.LIVE) return 'awaiting';
   var age = (NOW - wonDate(lead)) / DAY;
   if (age > 60) return 'paid';
   if (age > 25) return 'approved';

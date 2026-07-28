@@ -119,6 +119,16 @@
   if (settings.commissionRate) COMMISSION_RATE = settings.commissionRate;
   if (settings.vatRate) VAT_RATE = settings.vatRate;
   function ratePct() { return Math.round(COMMISSION_RATE * 100) + '%'; }
+
+  // Shared label for a commissionStatus() value, used everywhere a status
+  // chip or <select> option is rendered. 'awaiting' is a live-mode-only
+  // state — a won deal Metabase hasn't calculated a commission for yet —
+  // kept distinct from 'pending' so it never reads as something finance
+  // can act on (nothing exists yet to approve or pay).
+  function statusLabel(cs) {
+    return cs === 'paid' ? t('paid') : cs === 'approved' ? t('approved')
+      : cs === 'awaiting' ? t('awaitingCalc') : t('pendingApproval');
+  }
   function vatPct() { return Math.round(VAT_RATE * 100) + '%'; }
 
   /* Audit log for sensitive actions (backoffice) */
@@ -1157,7 +1167,7 @@
       var cs = commissionStatus(lead);
       commissionRow =
         '<dt>' + t('commissionPct', { rate: ratePct() }) + '</dt><dd class="money-pos">' + fmtMoney(commissionOf(lead)) +
-        ' <span class="status-chip ' + cs + '">' + (cs === 'paid' ? t('paid') : cs === 'approved' ? t('approved') : t('pendingApproval')) + '</span></dd>';
+        ' <span class="status-chip ' + cs + '">' + statusLabel(cs) + '</span></dd>';
     }
     var reasonRow = '';
     if (lead.stage === 'lost' && lead.lostReason) reasonRow = '<dt>' + t('lostReason') + '</dt><dd>' + esc(trReason(lead.lostReason)) + '</dd>';
@@ -1440,7 +1450,7 @@
         '<td>' + fmtDate(wonDate(l)) + '</td>' +
         '<td class="num">' + fmtMoney(l.amountNet) + '</td>' +
         '<td class="num"><b>' + fmtMoney(commissionOf(l)) + '</b></td>' +
-        '<td><span class="status-chip ' + cs + '">' + (cs === 'paid' ? t('paid') : cs === 'approved' ? t('approved') : t('pendingApproval')) + '</span>' +
+        '<td><span class="status-chip ' + cs + '">' + statusLabel(cs) + '</span>' +
           (cs === 'paid' && hasSlip(l.id) ? '<span class="cell-sub">' + slipLink(l.id) + '</span>' : '') + '</td>' +
       '</tr>';
     }).join('');
@@ -3030,12 +3040,15 @@
           '<td>' + esc(l.salesOwner) + '</td>' +
           '<td class="num">' + fmtMoney(l.amountNet) + '</td>' +
           '<td class="num"><b class="money-pos">' + fmtMoney(commissionOf(l)) + '</b></td>' +
-          '<td>' + (canAct
+          '<td>' + (canAct && cs !== 'awaiting'
             ? '<select class="status-select" data-deal="' + esc(l.id) + '" aria-label="Payment status for deal ' + esc(l.id) + '">' +
               [['pending', t('pendingApproval')], ['approved', t('approved')], ['paid', t('paid')]].map(function (o) {
                 return '<option value="' + o[0] + '"' + (o[0] === cs ? ' selected' : '') + '>' + o[1] + '</option>';
               }).join('') + '</select>'
-            : '<span class="status-chip ' + cs + '">' + (cs === 'paid' ? t('paid') : cs === 'approved' ? t('approved') : t('pendingApproval')) + '</span>') + '</td>' +
+            // No commissions row exists yet — there is nothing to approve
+            // or pay, so a select implying an action finance can take
+            // would just throw when clicked. Show the state instead.
+            : '<span class="status-chip ' + cs + '" title="' + (cs === 'awaiting' ? esc(t('awaitingCalcHint')) : '') + '">' + statusLabel(cs) + '</span>') + '</td>' +
           '<td>' + (cs === 'paid'
             ? (hasSlip(l.id)
                 ? slipLink(l.id) + (canAct ? '<span class="cell-sub"><button class="linklike slip-up" data-deal="' + esc(l.id) + '">' + t('replace') + '</button></span>' : '')

@@ -185,6 +185,7 @@ en: {
   valueIncVat: 'Value (incl. VAT)', valueLbl: 'Value', scopedBySales: 'To be scoped by sales',
   commissionPct: 'Commission ({rate})', lostReason: 'Lost reason', unqReason: 'Unqualified reason',
   timeline: 'Activity timeline', paid: 'Paid', approved: 'Approved', pendingApproval: 'Pending approval',
+  awaitingCalc: 'Awaiting calculation', awaitingCalcHint: 'Metabase has not calculated a commission for this deal yet — nothing to approve or pay.',
   yearOne: ' · 1 year', yearTwo: ' · 2 years', close: 'Close',
 
   merchantNameLbl: 'Merchant name *', merchantEmail: 'Merchant email', phoneReq: 'Phone number *',
@@ -496,6 +497,7 @@ ar: {
   valueIncVat: 'القيمة (شاملة الضريبة)', valueLbl: 'القيمة', scopedBySales: 'يحددها فريق المبيعات',
   commissionPct: 'العمولة ({rate})', lostReason: 'سبب الخسارة', unqReason: 'سبب عدم التأهيل',
   timeline: 'سجل النشاط', paid: 'مدفوعة', approved: 'معتمدة', pendingApproval: 'بانتظار الاعتماد',
+  awaitingCalc: 'بانتظار الاحتساب', awaitingCalcHint: 'لم يحتسب ميتابيس عمولة لهذه الصفقة بعد — لا يوجد شيء لاعتماده أو دفعه.',
   yearOne: ' · سنة واحدة', yearTwo: ' · سنتان', close: 'إغلاق',
 
   merchantNameLbl: 'اسم التاجر *', merchantEmail: 'ايميل التاجر', phoneReq: 'رقم الجوال *',
