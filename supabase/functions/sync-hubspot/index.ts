@@ -125,19 +125,34 @@ async function saveAccountInfo(token: string) {
   ]);
 }
 
+// The search endpoint hard-caps total paging at 10,000 results — request
+// page 101 and it errors, regardless of how the cursor got there. With a
+// null bookmark (first run, or a backlog built up during downtime) and
+// more than 10k matching deals, that turned into a permanent stall: the
+// run throws every time before it can write anything, so the bookmark
+// never advances and the next hourly run hits the exact same wall.
+// Capping how much a single invocation will fetch keeps every run well
+// under that ceiling structurally — it can never ask for page 101 — and
+// also bounds each run's time and memory to a known-safe size instead of
+// buffering however many thousands of deals a large backlog holds.
+// Catching up from a big backlog just takes more hourly runs, each
+// making real, saved progress, rather than one run trying everything and
+// failing outright.
+const MAX_PAGES_PER_RUN = 20; // 2,000 deals/run — comfortably inside HubSpot's page cap and the function's time budget
+
 async function fetchModifiedDeals(token: string, settings: HSSettings, properties: string[], since: string | null) {
   const filters: Record<string, unknown>[] = [];
-  if (since) filters.push({ propertyName: "hs_lastmodifieddate", operator: "GT", value: since });
+  if (since) filters.push({ propertyName: "hs_lastmodifieddate", operator: "GTE", value: since });
   if (settings.pipelines?.length) filters.push({ propertyName: "pipeline", operator: "IN", values: settings.pipelines });
   if (settings.target_type) filters.push({ propertyName: "target_type", operator: "EQ", value: settings.target_type });
 
-  // The search endpoint caps at 100 results per page. Without following
-  // the cursor this poll only ever saw the oldest 100 modified deals and
-  // needed as many hourly runs as there were pages to catch up, so stage
-  // changes showed up in the app hours late. Page until HubSpot stops
-  // handing back a cursor.
+  // Page until HubSpot stops handing back a cursor, or the per-run cap is
+  // hit — whichever comes first. `more` tells the caller (and the run's
+  // own response) whether there is a further page left for the next run.
   const all: Record<string, never>[] = [];
   let after: string | null = null;
+  let pages = 0;
+  let more = false;
   do {
     const body: Record<string, unknown> = {
       filterGroups: filters.length ? [{ filters }] : [],
@@ -155,8 +170,10 @@ async function fetchModifiedDeals(token: string, settings: HSSettings, propertie
     const page = await res.json();
     all.push(...(page.results ?? []));
     after = page.paging?.next?.after ?? null;
+    pages++;
+    if (after && pages >= MAX_PAGES_PER_RUN) { more = true; break; }
   } while (after);
-  return all;
+  return { deals: all, more };
 }
 
 function mockDeals(hunterProp: string) {
@@ -202,12 +219,25 @@ Deno.serve(async () => {
       ...extraProps,
     ]));
 
-    const { data: state } = await supabase.from("sync_state").select().eq("source", "hubspot").maybeSingle();
+    // Checked, not just optional-chained: a transient read failure here
+    // must not read as "no bookmark yet" — that would look like a full
+    // backfill request every time it happened.
+    const { data: state, error: stateErr } = await supabase.from("sync_state").select().eq("source", "hubspot").maybeSingle();
+    if (stateErr) throw stateErr;
     let bookmark = state?.bookmark ?? null;
 
-    const deals = conn.configured
-      ? await fetchModifiedDeals(conn.token, settings, properties, bookmark)
-      : mockDeals(hunterProp);
+    // HubSpot's search index lags real writes by a little. A strict "only
+    // things modified after the bookmark" filter could ask before a
+    // just-modified deal is indexed and never see it — the deal wouldn't
+    // resurface until its next edit. Query a few minutes further back
+    // than the bookmark actually is; upserts are idempotent, so
+    // re-fetching a handful of already-seen deals at the edge is free.
+    const OVERLAP_MS = 5 * 60 * 1000;
+    const queryFrom = bookmark ? new Date(new Date(bookmark).getTime() - OVERLAP_MS).toISOString() : null;
+
+    const { deals, more } = conn.configured
+      ? await fetchModifiedDeals(conn.token, settings, properties, queryFrom)
+      : { deals: mockDeals(hunterProp), more: false };
     if (conn.configured) await saveAccountInfo(conn.token);
 
     // Metabase is the source of truth for amount once a deal has a real
@@ -296,7 +326,10 @@ Deno.serve(async () => {
     if (configured) {
       await supabase.from("integration_config").update({ last_synced_at: started, last_status: "ok" }).eq("name", "hubspot");
     }
-    return Response.json({ ok: true, synced: deals.length, mock: !conn.configured });
+    // `more: true` means a further page was left for the next scheduled
+    // run rather than fetched here — expected and self-resolving during
+    // a large backlog, not an error.
+    return Response.json({ ok: true, synced: deals.length, more, mock: !conn.configured });
   } catch (e) {
     await supabase.from("sync_state").upsert({
       source: "hubspot", last_run_at: started, last_status: "error", last_error: String(e),
