@@ -186,6 +186,18 @@ window.SH_API = (function () {
   // written under, so this has to be handled here rather than upstream.
   var PLAN_ALIASES = { 'ZidLite': 'Rise' };
 
+  // `subscriptions.started_at` is a Postgres `date` column, so PostgREST
+  // sends it as a bare "2026-07-01" with no time or timezone. new
+  // Date('2026-07-01') parses that as UTC midnight, which local getters
+  // (monthKey's getMonth/getFullYear, used for the "won this month"
+  // tiles and the 12-month charts) can read as the PREVIOUS calendar day
+  // for anyone west of UTC — harmless in Saudi Arabia (UTC+3), wrong
+  // wherever the viewer isn't. Parsed as local midnight instead.
+  function parseDateOnly(s) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ''));
+    return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(s);
+  }
+
   function basePlanName(purchasable) {
     if (!purchasable) return null;
     var base = String(purchasable).split(' - ')[0].trim();
@@ -225,7 +237,7 @@ window.SH_API = (function () {
       // 12-month charts entirely, and made open deals report a "last
       // activity" that hadn't happened yet.
       var TERMINAL_STAGE = { won: 1, lost: 1, unqualified: 1 };
-      var stageDate = (wonByInvoice && sub && sub.started_at) ? new Date(sub.started_at)
+      var stageDate = (wonByInvoice && sub && sub.started_at) ? parseDateOnly(sub.started_at)
         : (TERMINAL_STAGE[stage] && d.hs_closed_at) ? new Date(d.hs_closed_at)
         : new Date(d.synced_at);
       evs.push({ stage: stage, date: stageDate });
@@ -336,6 +348,13 @@ window.SH_API = (function () {
     // under-reporting revenue whenever a deal had more than one. Every
     // row for a deal is grouped here so the amount is a real sum and the
     // status reflects all of them, not an arbitrary survivor.
+    // Cleared, not just overwritten: a commission row that got deleted
+    // or re-keyed (sync-metabase's merged-deal remap does exactly this)
+    // used to leave its old status behind in this module-level map
+    // forever — a deal could keep showing a stale "Paid" chip from a
+    // previous session's data until a full page reload happened to
+    // start with an empty object.
+    COMMISSION_STATUS_OVERRIDES = {};
     var commAmount = {}, commByDeal = {}, commRowsByDeal = {}, payslipByComm = {};
     results[3].forEach(function (c) {
       (commRowsByDeal[c.hubspot_deal_id] = commRowsByDeal[c.hubspot_deal_id] || []).push(c);

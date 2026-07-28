@@ -299,13 +299,25 @@ function commissionOf(lead) {
   // used to fall through to the demo 20%-of-net formula — an amount
   // finance never calculated, shown as real. In live mode there is
   // either a real Metabase figure or nothing; 0 is correct, a guess is not.
+  // Not rounded here — this value gets SUMMED (statsFor, CSV exports,
+  // month totals) before anything is displayed, and rounding each deal
+  // first drifted the total away from Metabase's own raw sum by up to
+  // half a riyal per deal. fmtMoney/fmtMoneyC already round at display,
+  // which is the only place it needs to happen.
   if (window.LIVE) {
     return window.LIVE.commAmount && window.LIVE.commAmount[lead.id] !== undefined
-      ? Math.round(window.LIVE.commAmount[lead.id]) : 0;
+      ? window.LIVE.commAmount[lead.id] : 0;
   }
-  return lead.stage === 'won' ? Math.round(lead.amountNet * COMMISSION_RATE) : 0;
+  return lead.stage === 'won' ? lead.amountNet * COMMISSION_RATE : 0;
 }
-function grossOf(lead) { return Math.round(lead.amountNet * (1 + VAT_RATE)); }
+// Live mode: prefer the real invoiced gross from Metabase (statsFor's
+// revenueGross does the same). Deriving it from amountNet unconditionally
+// used to disagree with that total whenever a purchase carried a discount
+// or VAT exemption, so the lead drawer's figure and the dashboard tile's
+// figure could show two different numbers for the same deal.
+function grossOf(lead) {
+  return lead.amountGross || Math.round(lead.amountNet * (1 + VAT_RATE));
+}
 
 // Commission payout status: finance can override it (persisted by the
 // app); otherwise it is derived from how long ago the deal closed.

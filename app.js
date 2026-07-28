@@ -1492,7 +1492,7 @@
     document.getElementById('dl-statement').addEventListener('click', function () {
       var lines = ['Deal ID,Company,Closed Won Date,Subscription (SAR excl. VAT),Commission (SAR),Status'];
       wonLeads.forEach(function (l) {
-        lines.push([l.id, '"' + l.company.replace(/"/g, '""') + '"', fmtDate(wonDate(l)), l.amountNet, commissionOf(l), commissionStatus(l)].join(','));
+        lines.push([l.id, '"' + l.company.replace(/"/g, '""') + '"', fmtDate(wonDate(l)), l.amountNet, Math.round(commissionOf(l)), commissionStatus(l)].join(','));
       });
       var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
       var a = document.createElement('a');
@@ -3182,7 +3182,7 @@
           hunter ? hunter.dept : '', l.id,
           '"' + l.company.replace(/"/g, '""') + '"',
           fmtDate(wonDate(l)), '"' + l.salesOwner + '"',
-          l.amountNet, commissionOf(l), commissionStatus(l),
+          l.amountNet, Math.round(commissionOf(l)), commissionStatus(l),
           '"' + pay.bank + '"', pay.iban || ''
         ].join(','));
       });
