@@ -289,6 +289,7 @@ en: {
   badgeTop: '🚀 Top hunter this month', badgeSharp: '🎯 Sharp eye',
   registered: 'Registered', notRegistered: 'Not registered',
   nSelected: '{n} selected', primaryAccess: 'Primary', msReset: 'Reset', msSelectAll: 'Select all',
+  lockedTag: 'Locked', ownAccessLocked: 'You cannot remove your own management access — only management can reach this page, so it would lock you out.',
   accessHintHunter: 'Submit leads and track their own commission',
   accessHintMgmt: 'Full program overview, hunters and integrations',
   accessHintFin: 'Payouts, payslips and bank details',
@@ -322,7 +323,7 @@ en: {
   ssoHint: 'In production this sends an SSO invite instead of creating a login.',
   createUser: 'Create user', saveChanges: 'Save changes', cancel: 'Cancel', user: 'User', active: 'Active', disabled: 'Disabled',
   disable: 'Disable', enable: 'Enable', you: 'you',
-  teamNote: 'You cannot change or disable your own account. Disabled users keep their history but can no longer sign in.',
+  teamNote: 'You can add accesses to your own account but not remove your own management access, and you cannot disable yourself. Disabled users keep their history but can no longer sign in.',
   userAddedToast: '{name} added — they now appear on the sign-in screen.',
   roleUpdated: 'Role updated to {role}.', userDisabled: '{name} disabled.', userEnabled: '{name} enabled.',
 
@@ -599,6 +600,7 @@ ar: {
   badgeTop: '🚀 أفضل صياد هذا الشهر', badgeSharp: '🎯 عين ثاقبة',
   registered: 'مسجّل', notRegistered: 'غير مسجّل',
   nSelected: '{n} محدد', primaryAccess: 'أساسي', msReset: 'إعادة تعيين', msSelectAll: 'تحديد الكل',
+  lockedTag: 'مقفل', ownAccessLocked: 'لا يمكنك إزالة صلاحية الإدارة الخاصة بك — هذه الصفحة متاحة للإدارة فقط، وستفقد الوصول نهائياً.',
   accessHintHunter: 'إرسال العملاء المحتملين ومتابعة عمولته',
   accessHintMgmt: 'نظرة شاملة على البرنامج والصيادين والتكاملات',
   accessHintFin: 'المدفوعات وقسائم الدفع والبيانات البنكية',
@@ -632,7 +634,7 @@ ar: {
   ssoHint: 'في الإنتاج تُرسل دعوة عبر الدخول الموحّد بدلاً من إنشاء حساب.',
   createUser: 'إنشاء المستخدم', saveChanges: 'حفظ التغييرات', cancel: 'إلغاء', user: 'المستخدم', active: 'نشط', disabled: 'معطّل',
   disable: 'تعطيل', enable: 'تفعيل', you: 'أنت',
-  teamNote: 'لا يمكنك تعديل أو تعطيل حسابك. المستخدمون المعطّلون يحتفظون بسجلهم لكن لا يمكنهم الدخول.',
+  teamNote: 'يمكنك إضافة صلاحيات لحسابك لكن لا يمكنك إزالة صلاحية الإدارة الخاصة بك، ولا يمكنك تعطيل نفسك. المستخدمون المعطّلون يحتفظون بسجلهم لكن لا يمكنهم الدخول.',
   userAddedToast: 'أُضيف {name} — يظهر الآن في شاشة الدخول.',
   roleUpdated: 'تم تحديث الدور إلى {role}.', userDisabled: 'عُطّل {name}.', userEnabled: 'فُعّل {name}.',
 

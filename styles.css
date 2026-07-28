@@ -1072,7 +1072,10 @@ fieldset { border: none; margin: 0; padding: 0; }
 .ms-trigger svg { width: 15px; height: 15px; flex: none; color: var(--muted); }
 
 .ms-menu {
-  position: absolute; z-index: 40; inset-inline-start: 0; top: calc(100% + 5px);
+  /* fixed, not absolute: the picker sits inside a horizontally scrolling
+     table wrapper, which would otherwise clip the open menu. Coordinates
+     are set in JS on open and kept in step on scroll/resize. */
+  position: fixed; z-index: 60;
   min-width: 268px; padding: 5px;
   background: var(--surface); border: 1px solid var(--hairline);
   border-radius: 10px; box-shadow: var(--shadow);
@@ -1102,6 +1105,8 @@ fieldset { border: none; margin: 0; padding: 0; }
   color: var(--ink-2); background: var(--surface-2);
   border-radius: 999px; padding: 2px 7px;
 }
+.ms-opt.locked { cursor: default; opacity: 0.75; }
+.ms-opt.locked:hover { background: none; }
 .ms-foot {
   display: flex; justify-content: space-between; gap: 8px;
   margin-top: 4px; padding: 6px 4px 2px;

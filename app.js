@@ -1708,7 +1708,7 @@
     // Accesses are a set, not a primary plus a spare, so they get one
     // control: a summary button that opens a checkbox list. Beats stacking
     // a select per access in a table cell, and scales past two.
-    function accessPicker(u) {
+    function accessPicker(u, isSelf) {
       var held = accessesOf(u);
       // One access needs no count and no list — repeating the same word
       // twice reads as a glitch.
@@ -1725,12 +1725,18 @@
           ROLE_OPTS.map(function (r) {
             var on = held.indexOf(r) >= 0;
             var isPrimary = r === u.role;
-            return '<label class="ms-opt' + (on ? ' on' : '') + '" role="option" aria-selected="' + on + '">' +
-              '<input type="checkbox" value="' + r + '"' + (on ? ' checked' : '') + '>' +
+            // Only the Team page can grant access, and only management can
+            // reach it — so letting someone drop their own management
+            // access locks the last admin out of the app for good.
+            var locked = isSelf && r === 'mgr';
+            return '<label class="ms-opt' + (on ? ' on' : '') + (locked ? ' locked' : '') + '" role="option" aria-selected="' + on + '"' +
+              (locked ? ' title="' + esc(t('ownAccessLocked')) + '"' : '') + '>' +
+              '<input type="checkbox" value="' + r + '"' + (on ? ' checked' : '') + (locked ? ' disabled' : '') + '>' +
               '<span class="ms-box">' + ICONS.tick + '</span>' +
               '<span class="ms-txt"><b>' + roleName(r) + '</b>' +
               '<span class="ms-hint">' + t(ACCESS_HINT[r]) + '</span></span>' +
-              (isPrimary ? '<span class="ms-tag">' + t('primaryAccess') + '</span>' : '') +
+              (locked ? '<span class="ms-tag">' + t('lockedTag') + '</span>'
+                      : isPrimary ? '<span class="ms-tag">' + t('primaryAccess') + '</span>' : '') +
             '</label>';
           }).join('') +
           '<div class="ms-foot">' +
@@ -1757,10 +1763,27 @@
             opt.setAttribute('aria-selected', String(b.checked));
           });
         }
+        // The menu lives inside .tbl-wrap, which scrolls — an absolutely
+        // positioned dropdown gets sliced off by that overflow. Fixed
+        // positioning escapes it; the coordinates are recomputed here and
+        // on scroll/resize, and the menu flips above the trigger when
+        // there isn't room below (the last row in the table).
+        function place() {
+          var r = trigger.getBoundingClientRect();
+          var h = menu.offsetHeight || 220;
+          var below = window.innerHeight - r.bottom;
+          var flip = below < h + 12 && r.top > h + 12;
+          menu.style.top = (flip ? r.top - h - 5 : r.bottom + 5) + 'px';
+          var w = menu.offsetWidth || 268;
+          var left = isAr() ? r.right - w : r.left;
+          menu.style.left = Math.max(8, Math.min(left, window.innerWidth - w - 8)) + 'px';
+        }
         function closeMenu() {
           if (menu.hidden) return;
           menu.hidden = true;
           trigger.setAttribute('aria-expanded', 'false');
+          window.removeEventListener('scroll', place, true);
+          window.removeEventListener('resize', place);
           commit();
         }
         function commit() {
@@ -1794,16 +1817,25 @@
           document.querySelectorAll('.ms-menu').forEach(function (m) { if (m !== menu) m.hidden = true; });
           menu.hidden = !open;
           trigger.setAttribute('aria-expanded', String(open));
-          if (!open) commit();
+          if (open) {
+            place();
+            window.addEventListener('scroll', place, true);
+            window.addEventListener('resize', place);
+          } else {
+            window.removeEventListener('scroll', place, true);
+            window.removeEventListener('resize', place);
+            commit();
+          }
         });
         menu.addEventListener('click', function (e) { e.stopPropagation(); });
         boxes.forEach(function (b) { b.addEventListener('change', sync); });
         ms.querySelector('.ms-reset').addEventListener('click', function () {
-          boxes.forEach(function (b) { b.checked = b.value === (usersAll().find(function (x) { return x.id === id; }) || {}).role; });
+          var primary = (usersAll().find(function (x) { return x.id === id; }) || {}).role;
+          boxes.forEach(function (b) { if (!b.disabled) b.checked = b.value === primary; });
           sync();
         });
         ms.querySelector('.ms-all').addEventListener('click', function () {
-          boxes.forEach(function (b) { b.checked = true; });
+          boxes.forEach(function (b) { if (!b.disabled) b.checked = true; });
           sync();
         });
         ms.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeMenu(); trigger.focus(); } });
@@ -1832,9 +1864,7 @@
             : '<span class="dot-badge off"><i></i>' + t('disabled') + '</span>') + '</td>' +
           '<td>' + esc(trDept(u.dept) || '—') + '</td>' +
           '<td><div class="access-cell">' +
-            (isSelf
-              ? accessesOf(u).map(roleBadge).join(' ')
-              : accessPicker(u)) +
+            accessPicker(u, isSelf) +
           '</div></td>' +
           '<td style="white-space:nowrap; text-align:end">' +
             '<button class="tbl-icon edit-user" data-user="' + esc(u.id) + '" title="' + t('editBtn') + '" aria-label="' + t('editBtn') + '">' + ICONS.pencil + '</button>' +
