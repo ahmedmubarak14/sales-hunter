@@ -330,7 +330,23 @@ function isOpen(lead) { return STAGE_BY_ID[lead.stage].group === 'open'; }
 
 // Did this lead ever reach the given funnel stage?
 function reached(lead, stageId) {
-  for (var i = 0; i < lead.events.length; i++) if (lead.events[i].stage === stageId) return true;
+  var target = FUNNEL_ORDER.indexOf(stageId);
+  // Off-funnel stage (lost, unqualified, re-engage): exact match only —
+  // there's no "further along" to infer from.
+  if (target < 0) {
+    for (var i = 0; i < lead.events.length; i++) if (lead.events[i].stage === stageId) return true;
+    return false;
+  }
+  // Reaching any LATER funnel stage implies every earlier one. Synced
+  // deals mostly carry only a synthetic [new, currentStage] history —
+  // the first sync records no stage event, so the stages a deal actually
+  // passed through were never written down. Matching exactly therefore
+  // undercounted the middle of the funnel while the ends stayed right,
+  // and a Closed Won deal that never logged a Commit event made "won"
+  // exceed "commit" — rendering as a conversion above 100%.
+  for (var j = 0; j < lead.events.length; j++) {
+    if (FUNNEL_ORDER.indexOf(lead.events[j].stage) >= target) return true;
+  }
   return false;
 }
 

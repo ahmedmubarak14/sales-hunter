@@ -2315,10 +2315,13 @@
           '<p class="sub">' + t('rulesSub') + '</p></div></div>' +
           '<form id="settings-form"><div class="form-grid">' +
             '<div><label class="f-label" for="set-rate">' + t('commissionPctLbl') + '</label>' +
-              '<input type="number" id="set-rate" min="1" max="50" step="0.5" value="' + (COMMISSION_RATE * 100) + '">' +
+              // Trim float noise: 0.07*100 is 7.000000000000001, which
+              // fails the input's own step="0.5" and blocks the NEXT save
+              // with a validation bubble on a number nobody typed.
+              '<input type="number" id="set-rate" min="1" max="50" step="0.5" value="' + +(COMMISSION_RATE * 100).toFixed(2) + '">' +
               '<p class="f-hint">' + t('currentRate', { rate: ratePct() }) + '</p></div>' +
             '<div><label class="f-label" for="set-vat">' + t('vatLbl') + '</label>' +
-              '<input type="number" id="set-vat" min="0" max="30" step="1" value="' + (VAT_RATE * 100) + '">' +
+              '<input type="number" id="set-vat" min="0" max="30" step="1" value="' + +(VAT_RATE * 100).toFixed(2) + '">' +
               '<p class="f-hint">' + t('vatHint') + '</p></div>' +
           '</div>' +
           '<div style="margin-top:14px"><button type="submit" class="btn">' + t('saveRules') + '</button></div></form>' +
@@ -3227,8 +3230,13 @@
       }).join('');
     var st = statsFor(leadsOf(user.id));
     var owed = st.commissionPending + st.commissionApproved;
-    // photo controls are live-mode only (they need storage)
-    var canEditPhoto = !!window.LIVE;
+    // Photo controls are live-mode only (they need storage) — and never
+    // while standing in for someone else. They sit in the summary aside,
+    // outside #profile-form, so the read-only sweep at the end of this
+    // view (which only disables form controls) never reached them; worse,
+    // uploadAvatar/removeAvatar act on LIVE.me, so a manager clicking
+    // "Remove photo" while viewing a hunter deleted their OWN photo.
+    var canEditPhoto = !!window.LIVE && !readOnlyView();
     var googleAvail = canEditPhoto && SH_API.googleAvatarAvailable();
     var photoLinks = [];
     if (canEditPhoto) {

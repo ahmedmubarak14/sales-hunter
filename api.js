@@ -210,14 +210,23 @@ window.SH_API = (function () {
     if (wonByInvoice) stage = 'won';
     if (evs[evs.length - 1].stage !== stage) {
       // deal_stage_events has no real history yet, so this synthetic
-      // "arrived at current stage" event needs a real date — HubSpot's
-      // own close date when the deal is actually closed, not synced_at
-      // (which is just whenever a sync job last touched the row, i.e.
-      // today, making every closed deal look like it closed "just now").
-      // A deal won by invoice alone has no HubSpot close date, so use the
-      // purchase date rather than letting it fall through to synced_at.
-      var stageDate = d.hs_closed_at ? new Date(d.hs_closed_at)
-        : (stage === 'won' && sub && sub.started_at) ? new Date(sub.started_at)
+      // "arrived at current stage" event needs a real date. Order matters:
+      //
+      // 1. Won by invoice → the purchase date IS the moment it was won.
+      //    These deals are usually still open in HubSpot, so their
+      //    closedate is a forecast, not a close.
+      // 2. Genuinely closed (won/lost/unqualified) → HubSpot's close date.
+      // 3. Anything else → synced_at, as a last resort.
+      //
+      // hs_closed_at used to win outright, but HubSpot populates
+      // `closedate` on OPEN deals too as a forecast — often a future
+      // date. That put invoice-won deals in the wrong (sometimes future)
+      // month, dropping them out of the this-month tiles and the
+      // 12-month charts entirely, and made open deals report a "last
+      // activity" that hadn't happened yet.
+      var TERMINAL_STAGE = { won: 1, lost: 1, unqualified: 1 };
+      var stageDate = (wonByInvoice && sub && sub.started_at) ? new Date(sub.started_at)
+        : (TERMINAL_STAGE[stage] && d.hs_closed_at) ? new Date(d.hs_closed_at)
         : new Date(d.synced_at);
       evs.push({ stage: stage, date: stageDate });
     }
