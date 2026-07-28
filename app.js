@@ -55,7 +55,7 @@
   }
   function viewAsId() { return LS.get('viewAs', null); }
   function canImpersonate(u) {
-    return !!u && (u.role === 'mgr' || u.secondaryRole === 'mgr');
+    return !!u && accessesOf(u).indexOf('mgr') >= 0;
   }
   function viewAsUser() {
     var id = viewAsId();
@@ -86,6 +86,21 @@
   }
   /* A user with a secondary access (e.g. finance who also hunts) can
      switch which one is active; the choice sticks until sign-out. */
+  /* A user can hold any combination of the three accesses. `role` is the
+     primary — it decides the landing view — and the rest ride alongside.
+     Demo users predate this and only carry `role`. */
+  function accessesOf(u) {
+    if (!u) return [];
+    var list = (u.accesses && u.accesses.length ? u.accesses.slice() : [u.role]);
+    // primary always first, duplicates dropped
+    return [u.role].concat(list).filter(function (r, i, all) {
+      return r && all.indexOf(r) === i;
+    });
+  }
+  function extraAccessesOf(u) {
+    return accessesOf(u).filter(function (r) { return r !== (u && u.role); });
+  }
+
   function roleOf() {
     var u = currentUser();
     if (!u) return 'emp';
@@ -93,7 +108,7 @@
     // while impersonating, always render that person's own primary role.
     if (isViewingAs()) return u.role;
     var act = LS.get('activeRole', null);
-    if (act && u.secondaryRole && (act === u.role || act === u.secondaryRole)) return act;
+    if (act && accessesOf(u).indexOf(act) >= 0) return act;
     return u.role;
   }
   function isManager() { return roleOf() === 'mgr'; }
@@ -222,6 +237,8 @@
   var ICONS = {
     pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
     chevronLeft: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 18l-6-6 6-6"/></svg>',
+    chevronDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 9l6 6 6-6"/></svg>',
+    tick: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12.5l4.5 4.5L19 7"/></svg>',
     ban: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>',
     camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.2l1.1-1.8A1 1 0 0 1 8.7 4.7h6.6a1 1 0 0 1 .9.5L17.3 7h2.2A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-9Z"/><circle cx="12" cy="12.8" r="3.3"/></svg>',
     menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
@@ -341,7 +358,7 @@
     var cu = currentUser();
     // The access chooser is about the signed-in user's own two accesses —
     // it must not appear when standing in for someone else.
-    if (!isViewingAs() && cu.secondaryRole && !LS.get('activeRole', null)) { renderAccessChooser(cu); return; }
+    if (!isViewingAs() && accessesOf(cu).length > 1 && !LS.get('activeRole', null)) { renderAccessChooser(cu); return; }
     var home = homeOf(roleOf());
     if (!ROUTES[h]) { location.hash = '#' + home; return; }
     var r = ROUTES[h];
@@ -578,7 +595,7 @@
   function renderAccessChooser(user) {
     var DESC = { emp: 'accessHunter', mgr: 'accessMgmt', fin: 'accessFin' };
     var ICON = { emp: 'dash', mgr: 'manager', fin: 'money' };
-    var cards = [user.role, user.secondaryRole].map(function (rr) {
+    var cards = accessesOf(user).map(function (rr) {
       var dark = rr !== 'emp' ? ' style="background: var(--ink); color: var(--ground)"' : '';
       return '<button class="persona" data-access="' + rr + '">' +
         '<span class="avatar"' + dark + '>' + ICONS[ICON[rr]] + '</span>' +
@@ -625,8 +642,7 @@
     if (document.getElementById('ob-overlay')) return;
     var user = currentUser();
     /* a staff access they can fall back to instead of onboarding now */
-    var otherAccess = user.role !== 'emp' ? user.role
-      : (user.secondaryRole && user.secondaryRole !== 'emp' ? user.secondaryRole : null);
+    var otherAccess = accessesOf(user).filter(function (r) { return r !== 'emp'; })[0] || null;
     var root = el('<div id="ob-overlay" class="ob-overlay" role="dialog" aria-modal="true" aria-label="' + t('obTitle') + '">' +
       '<div class="card ob-modal">' +
         '<h2>' + t('obTitle') + '</h2><p class="sub">' + t('obSub') + '</p>' +
@@ -751,8 +767,8 @@
           '<div class="topbar">' +
             '<div class="crumbs"><h1>' + esc(t(r.titleKey)) + '</h1>' + (window.LIVE ? '' : '<span class="demo-pill">' + t('demoPill') + '</span>') + '</div>' +
             '<div class="actions">' +
-              (user.secondaryRole && !isViewingAs() ? '<div class="role-switch" role="group" aria-label="' + t('switchAccess') + '">' +
-                [user.role, user.secondaryRole].map(function (rr) {
+              (accessesOf(user).length > 1 && !isViewingAs() ? '<div class="role-switch" role="group" aria-label="' + t('switchAccess') + '">' +
+                accessesOf(user).map(function (rr) {
                   return '<button class="rs-btn' + (rr === roleOf() ? ' active' : '') + '" data-role="' + rr + '">' + roleName(rr) + '</button>';
                 }).join('') + '</div>' : '') +
               (window.LIVE ? '<span class="freshness" id="freshness"></span>' +
@@ -1685,13 +1701,114 @@
 
     var editingId = null, page = 1, PER = 10, query = '';
     var ROLE_OPTS = ['emp', 'mgr', 'fin'];
+  var ACCESS_HINT = { emp: 'accessHintHunter', mgr: 'accessHintMgmt', fin: 'accessHintFin' };
 
     function roleBadge(r) { return '<span class="role-badge ' + r + '">' + roleName(r) + '</span>'; }
 
-    function secOptions(primary, current) {
-      return [''].concat(ROLE_OPTS.filter(function (r) { return r !== primary; })).map(function (r) {
-        return '<option value="' + r + '"' + ((current || '') === r ? ' selected' : '') + '>' + (r ? roleName(r) : t('noneOpt')) + '</option>';
-      }).join('');
+    // Accesses are a set, not a primary plus a spare, so they get one
+    // control: a summary button that opens a checkbox list. Beats stacking
+    // a select per access in a table cell, and scales past two.
+    function accessPicker(u) {
+      var held = accessesOf(u);
+      // One access needs no count and no list — repeating the same word
+      // twice reads as a glitch.
+      var single = held.length === 1;
+      var summary = single ? roleName(held[0]) : t('nSelected', { n: held.length });
+      return '<div class="ms" data-user="' + esc(u.id) + '">' +
+        '<button type="button" class="ms-trigger" aria-haspopup="listbox" aria-expanded="false">' +
+          '<span class="ms-summary">' + esc(summary) + '</span>' +
+          (single ? '<span class="ms-sub"></span>'
+                  : '<span class="ms-sub">' + esc(held.map(roleName).join(' · ')) + '</span>') +
+          ICONS.chevronDown +
+        '</button>' +
+        '<div class="ms-menu" hidden role="listbox" aria-multiselectable="true">' +
+          ROLE_OPTS.map(function (r) {
+            var on = held.indexOf(r) >= 0;
+            var isPrimary = r === u.role;
+            return '<label class="ms-opt' + (on ? ' on' : '') + '" role="option" aria-selected="' + on + '">' +
+              '<input type="checkbox" value="' + r + '"' + (on ? ' checked' : '') + '>' +
+              '<span class="ms-box">' + ICONS.tick + '</span>' +
+              '<span class="ms-txt"><b>' + roleName(r) + '</b>' +
+              '<span class="ms-hint">' + t(ACCESS_HINT[r]) + '</span></span>' +
+              (isPrimary ? '<span class="ms-tag">' + t('primaryAccess') + '</span>' : '') +
+            '</label>';
+          }).join('') +
+          '<div class="ms-foot">' +
+            '<button type="button" class="ghost-btn ms-reset">' + t('msReset') + '</button>' +
+            '<button type="button" class="ghost-btn ms-all">' + t('msSelectAll') + '</button>' +
+          '</div>' +
+        '</div></div>';
+    }
+
+    // Saving is deferred to menu-close: checking three boxes should be one
+    // save, not three round-trips with three toasts.
+    function wireAccessPickers(root) {
+      root.querySelectorAll('.ms').forEach(function (ms) {
+        var trigger = ms.querySelector('.ms-trigger');
+        var menu = ms.querySelector('.ms-menu');
+        var boxes = Array.prototype.slice.call(ms.querySelectorAll('.ms-opt input'));
+        var id = ms.getAttribute('data-user');
+        var before = boxes.filter(function (b) { return b.checked; }).map(function (b) { return b.value; });
+
+        function sync() {
+          boxes.forEach(function (b) {
+            var opt = b.closest('.ms-opt');
+            opt.classList.toggle('on', b.checked);
+            opt.setAttribute('aria-selected', String(b.checked));
+          });
+        }
+        function closeMenu() {
+          if (menu.hidden) return;
+          menu.hidden = true;
+          trigger.setAttribute('aria-expanded', 'false');
+          commit();
+        }
+        function commit() {
+          var now = boxes.filter(function (b) { return b.checked; }).map(function (b) { return b.value; });
+          if (now.join() === before.join()) return;
+          var u = usersAll().find(function (x) { return x.id === id; });
+          // A user with no access at all could never sign in; keep the
+          // primary rather than saving something unusable.
+          if (!now.length) { render(); return; }
+          // Primary decides the landing view: keep the existing one when
+          // it survives, otherwise fall back to the most privileged left.
+          var primary = now.indexOf(u && u.role) >= 0 ? u.role
+            : (['mgr', 'fin', 'emp'].filter(function (r) { return now.indexOf(r) >= 0; })[0]);
+          var patch = { role: primary, accesses: now };
+          if (window.LIVE) {
+            SH_API.patchUser(id, patch).then(function () {
+              toast(t('accessUpdated')); render();
+            }).catch(function (e2) { toast(String(e2.message)); render(); });
+            return;
+          }
+          saveOverride(id, patch);
+          audit('Set access of ' + (u ? u.name : id) + ' to ' + now.map(roleName).join(', '));
+          toast(t('accessUpdated'));
+          render();
+        }
+
+        trigger.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var open = menu.hidden;
+          // only one picker open at a time
+          document.querySelectorAll('.ms-menu').forEach(function (m) { if (m !== menu) m.hidden = true; });
+          menu.hidden = !open;
+          trigger.setAttribute('aria-expanded', String(open));
+          if (!open) commit();
+        });
+        menu.addEventListener('click', function (e) { e.stopPropagation(); });
+        boxes.forEach(function (b) { b.addEventListener('change', sync); });
+        ms.querySelector('.ms-reset').addEventListener('click', function () {
+          boxes.forEach(function (b) { b.checked = b.value === (usersAll().find(function (x) { return x.id === id; }) || {}).role; });
+          sync();
+        });
+        ms.querySelector('.ms-all').addEventListener('click', function () {
+          boxes.forEach(function (b) { b.checked = true; });
+          sync();
+        });
+        ms.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeMenu(); trigger.focus(); } });
+        document.addEventListener('click', closeMenu);
+      });
     }
 
     function render(focusSearch) {
@@ -1716,10 +1833,8 @@
           '<td>' + esc(trDept(u.dept) || '—') + '</td>' +
           '<td><div class="access-cell">' +
             (isSelf
-              ? roleBadge(u.role)
-              : '<select class="mini-select role-select" data-user="' + esc(u.id) + '" aria-label="' + t('role').replace(' *', '') + '">' +
-                  ROLE_OPTS.map(function (r) { return '<option value="' + r + '"' + (r === u.role ? ' selected' : '') + '>' + roleName(r) + '</option>'; }).join('') + '</select>') +
-            '<select class="mini-select sec-select" data-user="' + esc(u.id) + '" aria-label="' + t('extraAccess') + '">' + secOptions(u.role, u.secondaryRole) + '</select>' +
+              ? accessesOf(u).map(roleBadge).join(' ')
+              : accessPicker(u)) +
           '</div></td>' +
           '<td style="white-space:nowrap; text-align:end">' +
             '<button class="tbl-icon edit-user" data-user="' + esc(u.id) + '" title="' + t('editBtn') + '" aria-label="' + t('editBtn') + '">' + ICONS.pencil + '</button>' +
@@ -1750,7 +1865,6 @@
                 '<div id="nu-role-group"><label class="f-label" for="nu-role">' + t('role') + '</label><select id="nu-role">' +
                   '<option value="emp">' + t('roleHunter') + '</option><option value="mgr">' + t('roleMgmt') + '</option><option value="fin">' + t('roleFin') + '</option>' +
                 '</select><p class="f-hint">' + t('ssoHint') + '</p></div>' +
-                '<div id="nu-sec-group"><label class="f-label" for="nu-sec">' + t('extraAccess') + '</label><select id="nu-sec">' + secOptions('emp', '') + '</select></div>' +
               '</div>' +
               '<div class="au-actions">' +
                 '<button type="button" class="btn secondary" id="add-user-cancel">' + t('cancel') + '</button>' +
@@ -1780,12 +1894,6 @@
       document.getElementById('pg-prev').addEventListener('click', function () { if (page > 1) { page--; render(); } });
       document.getElementById('pg-next').addEventListener('click', function () { if (page < totalPages) { page++; render(); } });
 
-      function syncSec() {
-        var primary = document.getElementById('nu-role').value;
-        var sec = document.getElementById('nu-sec');
-        var cur = sec.value;
-        sec.innerHTML = secOptions(primary, cur === primary ? '' : cur);
-      }
       function openForm(u) {
         editingId = u ? u.id : null;
         document.getElementById('au-title').textContent = u ? t('editUserTitle', { name: u.name }) : t('addUserTitle');
@@ -1796,11 +1904,9 @@
         document.getElementById('nu-dept').value = u ? u.dept : '';
         document.getElementById('nu-title').value = u ? u.title : '';
         document.getElementById('nu-role').value = u ? u.role : 'emp';
-        document.getElementById('nu-sec').innerHTML = secOptions(u ? u.role : 'emp', u ? u.secondaryRole : '');
-        // role + extra access are edited inline in the table; the form
-        // only sets them when creating a new user.
+        // Role is only chosen at creation; accesses are edited inline in
+        // the table with the access picker.
         document.getElementById('nu-role-group').hidden = !!u;
-        document.getElementById('nu-sec-group').hidden = !!u;
         document.getElementById('au-overlay').hidden = false;
         if (auRelease) auRelease();
         auRelease = trapOverlay(document.querySelector('.au-drawer'), closeForm);
@@ -1812,7 +1918,6 @@
         document.getElementById('au-overlay').hidden = true;
         editingId = null;
       }
-      document.getElementById('nu-role').addEventListener('change', syncSec);
       document.getElementById('add-user-btn').addEventListener('click', function () { openForm(null); });
       document.getElementById('add-user-cancel').addEventListener('click', closeForm);
       document.getElementById('au-close').addEventListener('click', closeForm);
@@ -1823,8 +1928,6 @@
         var email = document.getElementById('nu-email').value.trim();
         if (!name || !email) return;
         var nuRole = document.getElementById('nu-role').value;
-        var nuSec = document.getElementById('nu-sec').value || null;
-        if (nuSec === nuRole) nuSec = null;
         var nu = {
           name: name, email: email,
           dept: document.getElementById('nu-dept').value.trim() || 'General',
@@ -1847,15 +1950,13 @@
           return;
         }
         if (window.LIVE) {
-          SH_API.addUser(nu).then(function (created) {
-            if (nuSec && created) return SH_API.patchUser(created.email, { secondaryRole: nuSec });
-          }).then(function () {
+          SH_API.addUser(nu).then(function () {
             toast(t('userAddedToast', { name: name })); render();
           }).catch(function (e2) { toast(String(e2.message)); });
           return;
         }
         var custom = LS.get('users', []);
-        custom.push(Object.assign({ id: 'u' + (100 + custom.length), code: String(8681849300 + custom.length), secondaryRole: nuSec }, nu));
+        custom.push(Object.assign({ id: 'u' + (100 + custom.length), code: String(8681849300 + custom.length) }, nu));
         LS.set('users', custom);
         audit('Added user ' + name + ' (' + roleName(nuRole) + ')');
         toast(t('userAddedToast', { name: name }));
@@ -1867,41 +1968,7 @@
           if (u) openForm(u);
         });
       });
-      content.querySelectorAll('.role-select').forEach(function (sel) {
-        sel.addEventListener('change', function () {
-          var id = sel.getAttribute('data-user');
-          var u = usersAll().find(function (x) { return x.id === id; });
-          // if the new primary role collides with the extra access, clear the extra
-          var patch = { role: sel.value };
-          if (u && u.secondaryRole === sel.value) patch.secondaryRole = null;
-          if (window.LIVE) {
-            SH_API.patchUser(id, patch).then(function () {
-              toast(t('roleUpdated', { role: roleName(sel.value) })); render();
-            }).catch(function (e2) { toast(String(e2.message)); render(); });
-            return;
-          }
-          saveOverride(id, patch);
-          audit('Changed role of ' + (u ? u.name : id) + ' to ' + roleName(sel.value));
-          toast(t('roleUpdated', { role: roleName(sel.value) }));
-          render();
-        });
-      });
-      content.querySelectorAll('.sec-select').forEach(function (sel) {
-        sel.addEventListener('change', function () {
-          var id = sel.getAttribute('data-user');
-          var val = sel.value || null;
-          if (window.LIVE) {
-            SH_API.patchUser(id, { secondaryRole: val }).then(function () {
-              toast(t('accessUpdated')); render();
-            }).catch(function (e2) { toast(String(e2.message)); render(); });
-            return;
-          }
-          saveOverride(id, { secondaryRole: val });
-          audit('Set extra access of ' + id + ' to ' + (val ? roleName(val) : 'none'));
-          toast(t('accessUpdated'));
-          render();
-        });
-      });
+      wireAccessPickers(content);
       content.querySelectorAll('.toggle-active').forEach(function (btn) {
         btn.addEventListener('click', function () {
           var id = btn.getAttribute('data-user');
@@ -2746,7 +2813,9 @@
 
     var owed = s.commissionPending + s.commissionApproved;
     var roleTag = '<span class="role-badge ' + emp.role + '">' + roleName(emp.role) + '</span>' +
-      (emp.secondaryRole ? ' <span class="role-badge ' + emp.secondaryRole + '">' + roleName(emp.secondaryRole) + '</span>' : '');
+      extraAccessesOf(emp).map(function (rr) {
+        return ' <span class="role-badge ' + rr + '">' + roleName(rr) + '</span>';
+      }).join('');
     function kv(label, val, cls) { return '<dt>' + label + '</dt><dd' + (cls ? ' class="' + cls + '"' : '') + '>' + val + '</dd>'; }
     var root = el('<div id="drawer-root">' +
       '<div class="drawer-backdrop"></div>' +
@@ -3087,7 +3156,9 @@
     }
 
     var roleTag = '<span class="role-badge ' + user.role + '">' + roleName(user.role) + '</span>' +
-      (user.secondaryRole ? ' <span class="role-badge ' + user.secondaryRole + '">' + roleName(user.secondaryRole) + '</span>' : '');
+      extraAccessesOf(user).map(function (rr) {
+        return ' <span class="role-badge ' + rr + '">' + roleName(rr) + '</span>';
+      }).join('');
     var st = statsFor(leadsOf(user.id));
     var owed = st.commissionPending + st.commissionApproved;
     // photo controls are live-mode only (they need storage)

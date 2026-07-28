@@ -1049,3 +1049,61 @@ fieldset { border: none; margin: 0; padding: 0; }
 }
 .viewas-bar .va-exit:hover { background: var(--ink-2); }
 .hd-viewas { width: 100%; justify-content: center; }
+
+/* ---- Access multi-select ----
+   A user can hold any combination of the three accesses, so one control
+   owns the whole set: a summary trigger over a checkbox list. No search
+   field — with three options it would be more chrome than help. */
+.ms { position: relative; }
+.ms-trigger {
+  width: 100%; min-width: 190px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border-radius: 8px;
+  background: var(--surface); border: 1px solid var(--hairline);
+  color: var(--ink); text-align: start; line-height: 1.25;
+}
+.ms-trigger:hover { border-color: var(--brand); }
+.ms-trigger[aria-expanded="true"] { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.ms-trigger .ms-summary { font-weight: 600; white-space: nowrap; }
+.ms-trigger .ms-sub {
+  flex: 1; min-width: 0; color: var(--muted); font-size: 12px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ms-trigger svg { width: 15px; height: 15px; flex: none; color: var(--muted); }
+
+.ms-menu {
+  position: absolute; z-index: 40; inset-inline-start: 0; top: calc(100% + 5px);
+  min-width: 268px; padding: 5px;
+  background: var(--surface); border: 1px solid var(--hairline);
+  border-radius: 10px; box-shadow: var(--shadow);
+}
+.ms-opt {
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 8px 9px; border-radius: 7px; cursor: pointer;
+}
+.ms-opt:hover { background: var(--surface-2); }
+.ms-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.ms-box {
+  flex: none; width: 16px; height: 16px; margin-top: 1px;
+  border: 1px solid var(--hairline); border-radius: 5px;
+  background: var(--surface);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.ms-box svg { width: 11px; height: 11px; color: var(--brand-ink); opacity: 0; }
+.ms-opt.on .ms-box { background: var(--brand); border-color: var(--brand); }
+.ms-opt.on .ms-box svg { opacity: 1; }
+.ms-opt input:focus-visible + .ms-box { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ms-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ms-txt b { font-weight: 600; }
+.ms-hint { color: var(--muted); font-size: 11.5px; line-height: 1.35; }
+.ms-tag {
+  flex: none; align-self: center;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--ink-2); background: var(--surface-2);
+  border-radius: 999px; padding: 2px 7px;
+}
+.ms-foot {
+  display: flex; justify-content: space-between; gap: 8px;
+  margin-top: 4px; padding: 6px 4px 2px;
+  border-top: 1px solid var(--hairline);
+}

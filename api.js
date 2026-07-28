@@ -239,7 +239,11 @@ window.SH_API = (function () {
       title: u.title || '',
       email: String(u.zid_email).toLowerCase(),
       role: fromDbRole(u.role),
-      secondaryRole: u.secondary_role ? fromDbRole(u.secondary_role) : null,
+      // Every access this user holds, primary first. `role` stays the
+      // landing view; the database grants on the whole set (has_access).
+      accesses: [fromDbRole(u.role)].concat(
+        (u.extra_roles || []).map(fromDbRole)
+      ).filter(function (r, i, all) { return all.indexOf(r) === i; }),
       active: u.active !== false,
       avatar: u.avatar_url || null,
       avatarSource: u.avatar_source || 'google',
@@ -585,7 +589,12 @@ window.SH_API = (function () {
   async function patchUser(email, patch) {
     var body = {};
     if (patch.role) body.role = toDbRole(patch.role);
-    if ('secondaryRole' in patch) body.secondary_role = patch.secondaryRole ? toDbRole(patch.secondaryRole) : null;
+    // accesses includes the primary; extra_roles is everything else.
+    if (patch.accesses) {
+      body.extra_roles = patch.accesses
+        .filter(function (r) { return r !== (patch.role || 'emp'); })
+        .map(toDbRole);
+    }
     if (patch.active !== undefined) body.active = patch.active;
     if (patch.name) body.name = patch.name;
     if (patch.dept) body.dept = patch.dept;
@@ -598,7 +607,7 @@ window.SH_API = (function () {
       ['role', 'active', 'name', 'dept', 'title'].forEach(function (k) {
         if (patch[k] !== undefined) u[k] = patch[k];
       });
-      if ('secondaryRole' in patch) u.secondaryRole = patch.secondaryRole || null;
+      if (patch.accesses) u.accesses = patch.accesses.slice();
     }
   }
 

@@ -288,6 +288,10 @@ en: {
   badgeFirst: '🏆 First sale', badgeWins: '🔥 5 wins', badge500k: '💎 SAR 500K generated',
   badgeTop: '🚀 Top hunter this month', badgeSharp: '🎯 Sharp eye',
   registered: 'Registered', notRegistered: 'Not registered',
+  nSelected: '{n} selected', primaryAccess: 'Primary', msReset: 'Reset', msSelectAll: 'Select all',
+  accessHintHunter: 'Submit leads and track their own commission',
+  accessHintMgmt: 'Full program overview, hunters and integrations',
+  accessHintFin: 'Payouts, payslips and bank details',
   notRegisteredHint: 'Has leads in HubSpot but no app account yet — linked automatically the moment someone signs up with this email.',
   noHuntersFilter: 'No hunters match this filter.',
 
@@ -594,6 +598,10 @@ ar: {
   badgeFirst: '🏆 أول صفقة', badgeWins: '🔥 5 انتصارات', badge500k: '💎 حقق 500 ألف ر.س',
   badgeTop: '🚀 أفضل صياد هذا الشهر', badgeSharp: '🎯 عين ثاقبة',
   registered: 'مسجّل', notRegistered: 'غير مسجّل',
+  nSelected: '{n} محدد', primaryAccess: 'أساسي', msReset: 'إعادة تعيين', msSelectAll: 'تحديد الكل',
+  accessHintHunter: 'إرسال العملاء المحتملين ومتابعة عمولته',
+  accessHintMgmt: 'نظرة شاملة على البرنامج والصيادين والتكاملات',
+  accessHintFin: 'المدفوعات وقسائم الدفع والبيانات البنكية',
   notRegisteredHint: 'لديه صفقات في HubSpot لكن بلا حساب في التطبيق بعد — سيُربط تلقائياً بمجرد تسجيله بهذا البريد.',
   noHuntersFilter: 'لا يوجد صيادون مطابقون لهذا الفلتر.',
 
