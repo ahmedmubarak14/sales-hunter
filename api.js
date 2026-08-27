@@ -409,7 +409,12 @@ window.SH_API = (function () {
        nothing, so fall back to the lite view without order volumes. */
     var showcaseRows = results[7];
     if (!showcaseRows.length) {
-      showcaseRows = await req('/rest/v1/store_showcase_lite?select=*').catch(function () { return []; });
+      // Paged like every other full-table read: the showcase carries the
+      // top ten of every category Zid sells into, and a single request
+      // stops at PostgREST's 1000-row cap — which would silently drop
+      // whole categories off the end of the page.
+      showcaseRows = await reqAll('/rest/v1/store_showcase_lite?select=*', 'store_id.asc')
+        .catch(function () { return []; });
     }
     var byCat = {};
     showcaseRows.forEach(function (r) {
@@ -422,6 +427,16 @@ window.SH_API = (function () {
     });
     var showcase = Object.keys(byCat).map(function (c) {
       return { category: c, stores: byCat[c].sort(function (a, b) { return a.rank - b.rank; }) };
+    });
+    /* Categories arrive in whatever order the rows paged in, which is by
+       store id — meaningless to a reader. Lead with the biggest category
+       (by its number-one store's volume) where that figure is visible,
+       and fall back to alphabetical for hunters, whose reduced view
+       carries no order counts at all. */
+    showcase.sort(function (a, b) {
+      var av = a.stores[0] && a.stores[0].ordersCount, bv = b.stores[0] && b.stores[0].ordersCount;
+      if (av != null && bv != null) return bv - av;
+      return a.category.localeCompare(b.category);
     });
 
     return {
