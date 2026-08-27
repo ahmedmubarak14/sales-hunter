@@ -5,11 +5,10 @@
 //   card_subscriptions → "Sales Hunter Deals Details" — invoice-level:
 //     purchasable name, VAT-excluded amount, and commission amount,
 //     joined by hubspot_deal_id.
-//   card_topstores → Top Zid Stores showcase card (all-time orders per
-//     store; ranked within each category, no per-category cap).
-// Deal owner names are resolved separately (syncOwnerNames) via a native
-// query against the warehouse table directly, covering every deal, not
-// just the ones with a purchase.
+// Deal owner names (syncOwnerNames) and the Top Zid Stores showcase
+// (syncTopStores) are not cards: both run native queries against the
+// warehouse tables directly, so neither can be narrowed by an edit to
+// someone else's saved question.
 // Runs in MOCK mode (no-op) until a Metabase connection has been saved.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -43,7 +42,6 @@ type MBSettings = {
   base_url?: string;
   card_subscriptions?: string;
   card_commissions?: string;
-  card_topstores?: string;
 };
 
 async function loadConnection() {
@@ -298,36 +296,66 @@ async function syncOwnerNames(base: string, key: string) {
   return await patchDeals(ownerRows);
 }
 
-// Ranked by all-time order count within each category, no per-category
-// cap — every store the card returns gets a showcase row. Written as one
-// batched upsert (not one round-trip per store) since this card returns
-// hundreds of rows.
-async function syncTopStores(base: string, key: string, cardId: string) {
-  const rows = await runCard(base, key, cardId);
-  const byCategory = new Map<string, Record<string, unknown>[]>();
-  for (const r of rows) {
-    const category = String(r["Store Category Name"] ?? "");
-    if (!category) continue;
-    if (!byCategory.has(category)) byCategory.set(category, []);
-    byCategory.get(category)!.push(r);
-  }
+// How many stores each category keeps in the showcase.
+const TOP_PER_CATEGORY = 10;
+
+// Top stores per category, ranked by all-time order count, read straight
+// from the warehouse table.
+//
+// This used to run a saved Metabase question ("Top Stores by Category",
+// configured as card_topstores). A saved question is someone else's to
+// edit, and that one carries its own filters — an orders_count > 10000
+// threshold on top of two hard-coded category whitelists — which in
+// practice collapsed it to a SINGLE row: one store, in one category.
+// The sync faithfully wrote that one row, reported "ok", and the Top Zid
+// Stores page had exactly one category to show. Nothing downstream was
+// wrong; the source was. So the showcase now reads the same warehouse
+// table the question is built on and does its own ranking — the approach
+// syncOwnerNames already takes, and one no BI edit can silently narrow.
+//
+// Test and spam stores are excluded, as are stores that never sold
+// anything and rows with no category to file them under. Written as
+// batched upserts (not one round-trip per store) since this covers every
+// category Zid sells into.
+async function syncTopStores(base: string, key: string) {
+  const rows = await runNativeQuery(
+    base, key,
+    // Grouped on the TRIMMED category, and the trimmed value is what
+    // gets stored: the warehouse holds both "Electronics" and
+    // "Electronics " with a trailing space, which would otherwise rank
+    // as two categories and show up twice on the page.
+    "select store_id, store_name, category, orders_count, orders_total_sar, rank_in_category from (" +
+      "select store_id, store_name, trim(store_category_name) as category, orders_count, orders_total_sar, " +
+      "row_number() over (partition by trim(store_category_name) order by orders_count desc, store_id asc) as rank_in_category " +
+      "from platinum.zid_insights__stores " +
+      "where is_paid_active = true and is_store_test = false and is_store_spam = false " +
+      "and store_category_name is not null and trim(store_category_name) <> '' " +
+      "and store_name is not null and orders_count > 0" +
+    ") ranked where rank_in_category <= " + TOP_PER_CATEGORY + " " +
+    "order by category asc, rank_in_category asc",
+  );
 
   const now = new Date().toISOString();
   const showcaseRows: Record<string, unknown>[] = [];
-  for (const [category, stores] of byCategory) {
-    stores.sort((a, b) => Number(b["Orders Count"] ?? 0) - Number(a["Orders Count"] ?? 0));
-    stores.forEach((r, i) => {
-      const storeId = r["Store ID"];
-      if (storeId == null) return;
-      showcaseRows.push({
-        store_id: String(storeId),
-        name: r["Store Name"] ?? String(storeId),
-        category,
-        orders_count: r["Orders Count"] ?? null,
-        orders_total_sar: r["Orders Total Sar"] ?? null,
-        rank_in_category: i + 1,
-        synced_at: now,
-      });
+  // store_id is store_showcase's primary key, so a duplicate inside one
+  // upsert batch fails the whole batch ("ON CONFLICT DO UPDATE command
+  // cannot affect row a second time") — keep the first (best-ranked) one.
+  const seen = new Set<string>();
+  for (const r of rows) {
+    const storeId = r[0];
+    const category = String(r[2] ?? "").trim();
+    if (storeId == null || !category) continue;
+    const id = String(storeId);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    showcaseRows.push({
+      store_id: id,
+      name: r[1] ?? id,
+      category,
+      orders_count: r[3] ?? null,
+      orders_total_sar: r[4] ?? null,
+      rank_in_category: Number(r[5]),
+      synced_at: now,
     });
   }
 
@@ -336,13 +364,13 @@ async function syncTopStores(base: string, key: string, cardId: string) {
     const { error } = await supabase.from("store_showcase").upsert(showcaseRows.slice(i, i + CHUNK));
     if (error) throw error;
   }
-  // A store that drops out of this run's card results (fell out of the
-  // top ranking, or its whole category disappeared) never gets touched
-  // by the upsert above and its row stuck around forever. Sweep it out
-  // by synced_at AFTER the upsert (not delete-then-insert), so
+  // A store that drops out of this run's results (fell out of its
+  // category's top ten, or the whole category disappeared) never gets
+  // touched by the upsert above and its row stuck around forever. Sweep
+  // it out by synced_at AFTER the upsert (not delete-then-insert), so
   // store_showcase_lite never sees a window with zero rows for a
   // category mid-sync. Only sweep when this run actually returned rows —
-  // an empty or failed card response must never be allowed to wipe the
+  // an empty or failed query response must never be allowed to wipe the
   // whole table.
   if (showcaseRows.length > 0) {
     const { error: sweepError } = await supabase.from("store_showcase").delete().lt("synced_at", now);
@@ -376,9 +404,7 @@ Deno.serve(async () => {
       ? await syncDealDetails(conn.base, conn.key, conn.settings.card_subscriptions)
       : { subscriptions: 0, commissions: 0, deals_amount_updated: 0 };
     const ownersResolved = await syncOwnerNames(conn.base, conn.key);
-    const storesSeen = conn.settings.card_topstores
-      ? await syncTopStores(conn.base, conn.key, conn.settings.card_topstores)
-      : 0;
+    const storesSeen = await syncTopStores(conn.base, conn.key);
 
     await supabase.from("sync_state").upsert({ source: "metabase", last_run_at: started, last_status: "ok", last_error: null });
     await supabase.from("integration_config").update({ last_synced_at: started, last_status: "ok" }).eq("name", "metabase");

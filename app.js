@@ -378,6 +378,10 @@
   }
 
   function route() {
+    // A re-render replaces the view wholesale, so whatever the user had
+    // typed is gone by definition — the dirty flag that protects forms
+    // from auto-refresh resets here rather than lingering forever.
+    clearDirty();
     var h = location.hash.replace(/^#/, '') || '/';
     if (!currentUser()) { renderLogin(); return; }
     /* users holding two accesses pick which one to enter with, once per sign-in */
@@ -2255,8 +2259,13 @@
               fieldRow('mb-key', t('intgMbKey'), '', mb && mb.secret_set ? t('intgSecretSaved', { hint: mbS.secret_hint || '••••' }) : 'mb_…', 'password') +
               fieldRow('mb-comm', t('intgCardComm'), mbS.card_commissions || '', 'e.g. 142') +
               fieldRow('mb-subs', t('intgCardSubs'), mbS.card_subscriptions || '', 'e.g. 143') +
-              fieldRow('mb-stores', t('intgCardStores'), mbS.card_topstores || '', 'e.g. 144') +
             '</div>' +
+            // No top-stores card ID: the showcase is ranked from the
+            // warehouse table by the sync itself. It used to point at a
+            // saved question, whose own filters quietly cut it down to a
+            // single store — a knob that could break the page from
+            // outside the app is worse than no knob.
+            '<p class="f-hint">' + t('intgStoresAuto') + '</p>' +
             '<div class="intg-actions"><span class="sub">' + lastSync(mb) + '</span>' +
               '<button type="submit" class="btn">' + t('saveChanges') + '</button></div>' +
           '</form>' +
@@ -2309,8 +2318,7 @@
         save('metabase', {
           base_url: document.getElementById('mb-url').value.trim(),
           card_commissions: document.getElementById('mb-comm').value.trim(),
-          card_subscriptions: document.getElementById('mb-subs').value.trim(),
-          card_topstores: document.getElementById('mb-stores').value.trim()
+          card_subscriptions: document.getElementById('mb-subs').value.trim()
         }, document.getElementById('mb-key').value);
       });
     }
@@ -3442,13 +3450,45 @@
      we re-pull on demand, when the tab regains focus, and periodically.
      Auto-refreshes never re-render over a form the user is using. */
   var refreshing = false;
+  /* The lead form is the one view a re-render can't put back. In live
+     mode it's a HubSpot embed we don't own: hbspt.forms.create() builds
+     it into an empty slot, so replacing content.innerHTML drops every
+     field the hunter had filled in and starts them over. With the
+     default one-minute auto-refresh that happened WHILE they were
+     typing — the form appeared to reload itself every minute and throw
+     the entry away. Data still refreshes underneath; only the re-render
+     is skipped, and route() runs normally the moment they navigate. */
+  function onLeadForm() { return location.hash.replace(/^#/, '') === '/submit'; }
+  /* Set the moment the user types into a form, cleared by route() (which
+     has just rebuilt the view, so nothing typed survives anyway). The
+     activeElement check below only covers a field that still has focus —
+     someone who fills a form and then clicks a label, scrolls, or tabs
+     to the submit button has a page full of entered data and a focused
+     BODY, and used to lose the lot to the next auto-refresh.
+     Scoped to fields inside a <form> so the table search and filter
+     boxes, which live in plain .filter-row divs and hold nothing worth
+     protecting, don't freeze the refresh for as long as someone leaves a
+     search term typed in. */
+  var formDirty = false;
+  function markDirty(e) {
+    var el2 = e.target;
+    if (!el2 || !/^(INPUT|SELECT|TEXTAREA)$/.test(el2.tagName || '')) return;
+    if (el2.closest && el2.closest('form')) formDirty = true;
+  }
+  document.addEventListener('input', markDirty, true);
+  document.addEventListener('change', markDirty, true);
+  function clearDirty() { formDirty = false; }
   function safeToRerender() {
     if (document.getElementById('ob-overlay') || document.getElementById('drawer-root')) return false;
     var ov = document.getElementById('au-overlay');
     if (ov && !ov.hidden) return false;
     if (document.querySelector('.ms-menu:not([hidden])')) return false; // access picker open
+    if (onLeadForm() || formDirty) return false;
     var a = document.activeElement;
     if (a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) return false;
+    // Focus inside an embedded form (HubSpot renders into an iframe on
+    // some portals) surfaces as the IFRAME itself, never the field.
+    if (a && a.tagName === 'IFRAME') return false;
     return true;
   }
   function doRefresh(manual) {
@@ -3458,7 +3498,10 @@
     var btn = document.getElementById('refresh-btn');
     if (btn) btn.classList.add('spinning');
     SH_API.refresh().then(function (ok) {
-      if (ok && (manual || safeToRerender())) route();
+      // Even an explicit refresh-button press leaves the lead form
+      // standing: the fresh snapshot is loaded either way, and there is
+      // nothing on that page a re-render would update.
+      if (ok && !onLeadForm() && (manual || safeToRerender())) route();
       if (manual) toast(t('refreshed'));
     }).catch(function (e) {
       SH_API.logError(String(e.message), 'refresh');

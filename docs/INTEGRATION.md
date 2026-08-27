@@ -102,9 +102,14 @@ only workflow state on top (pending approval → approved → paid + payslip).
 billing cycle, start date, renewal/churn status, amounts. Used for the
 package analytics and, later, renewal commissions / clawback rules.
 
-**Q3 — Top stores by category** (daily). `store_id`, store name, category,
-orders per month, growth. Feeds the Top Zid Stores pages. If merchant
-names are sensitive, an approved allow-list or anonymized top-N works too.
+**Top stores by category** (every sync). No saved question: the sync
+ranks `platinum.zid_insights__stores` itself — top ten per category by
+all-time `orders_count`, paid-active stores only, test/spam excluded —
+and writes them to `store_showcase`. It reads the warehouse table rather
+than a saved question on purpose: a question's filters belong to whoever
+edits it, and one narrow filter there silently empties the Top Zid Stores
+pages. Order volume and revenue stay management/finance-only in the
+database; hunters get names and ranks through `store_showcase_lite`.
 
 Please send the column headers of the existing commission question — the
 schema above adapts to what already exists rather than the reverse.
