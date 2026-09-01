@@ -570,6 +570,29 @@ window.SH_API = (function () {
      "Not on the list" is only meaningful when the list was actually read,
      and treating an error as a pass is the one mistake here that costs a
      hunter real work. */
+  /* A table that does not exist yet is a SETUP state, not a failed
+     request. PostgREST answers 404/PGRST205 for it, and reporting that as
+     "try again in a moment" sends the hunter round in circles waiting for
+     something that will never happen on its own — which is exactly what
+     shipping the code before applying migration 025 looked like. */
+  function isNotSetUp(e) {
+    var m = String((e && e.message) || '');
+    return /HTTP 404/.test(m) || /PGRST205/.test(m) ||
+      /Could not find the table/i.test(m) || /does not exist/i.test(m);
+  }
+
+  /* Is the list usable at all? Cheap enough to run on view render so the
+     tab can say up front that it is not connected, instead of letting
+     every check discover it separately. */
+  async function dealListStatus() {
+    try {
+      const rows = await req('/rest/v1/deal_checker?select=synced_at&order=synced_at.desc&limit=1');
+      return (rows && rows.length) ? 'ready' : 'notconfigured';
+    } catch (e) {
+      return isNotSetUp(e) ? 'notconfigured' : 'unavailable';
+    }
+  }
+
   async function dealCheck(domain) {
     const miss = (verdict) => ({ verdict, domain, caseText: null, syncedAt: null });
     let res;
@@ -577,7 +600,7 @@ window.SH_API = (function () {
       res = await req('/rest/v1/deal_checker?select=case_text,eligible,package_type,days_since_subscription_ended,synced_at'
         + '&domain=eq.' + encodeURIComponent(domain) + '&limit=1');
     } catch (e) {
-      return miss('unavailable');
+      return miss(isNotSetUp(e) ? 'notconfigured' : 'unavailable');
     }
     const row = Array.isArray(res) ? res[0] : null;
     if (!row) {
@@ -588,7 +611,7 @@ window.SH_API = (function () {
       try {
         any = await req('/rest/v1/deal_checker?select=synced_at&order=synced_at.desc&limit=1');
       } catch (e) {
-        return miss('unavailable');
+        return miss(isNotSetUp(e) ? 'notconfigured' : 'unavailable');
       }
       if (!any || !any.length) return miss('notconfigured');
       return {
@@ -806,6 +829,7 @@ window.SH_API = (function () {
     submitLead: submitLead, saveProfile: saveProfile, onboardingNeeded: onboardingNeeded,
     setCommissionStatus: setCommissionStatus,
     dealCheck: dealCheck,
+    dealListStatus: dealListStatus,
     uploadPayslip: uploadPayslip, openPayslip: openPayslip, hasPayslip: hasPayslip,
     uploadIbanCert: uploadIbanCert, openIbanCert: openIbanCert,
     uploadAvatar: uploadAvatar, removeAvatar: removeAvatar,

@@ -1852,11 +1852,6 @@
      'unavailable' matters as much as the other three: "not on the list"
      only means eligible when the list actually loaded, so a lookup that
      fails must say so rather than fall through to a green tick. */
-  /* Whether the sales list can be consulted at all. Demo mode always can
-     (DEAL_CHECK_ROWS stands in); live mode needs the synced card, which
-     does not exist until the Metabase side is wired. */
-  function dealListConnected() { return !window.LIVE || !!SH_API.dealCheck; }
-
   function checkDeal(domain) {
     if (window.LIVE) {
       // Not connected is a different answer from a failed request, and
@@ -1910,9 +1905,7 @@
         '</form>' +
         '<div id="dc-result" aria-live="polite"></div>' +
       '</section>' +
-      (dealListConnected() ? '' :
-        '<section class="card dc-notice"><b>' + t('dcNotWiredBanner') + '</b>' +
-        '<p>' + t('dcNotWiredBannerSub') + '</p></section>') +
+      '<div id="dc-notice-slot"></div>' +
       '<section class="card">' +
         '<div class="card-head"><div><h3>' + t('dcRulesTitle') + '</h3></div></div>' +
         '<ul class="dc-rules">' +
@@ -1927,6 +1920,21 @@
         '<p class="sub">' + t('dcRecentSub') + '</p></div></div>' +
         '<div id="dc-history"></div>' +
       '</section>';
+
+    /* Whether the list is usable is a question about the DATA, not about
+       whether a function was deployed — the two came apart the moment the
+       lookup shipped ahead of its migration. Demo mode always has rows;
+       live mode has to ask. */
+    function paintNotice(status) {
+      var slot = document.getElementById('dc-notice-slot');
+      if (!slot) return;
+      slot.innerHTML = status === 'ready' ? ''
+        : '<section class="card dc-notice"><b>' + t('dcNotWiredBanner') + '</b>' +
+          '<p>' + t('dcNotWiredBannerSub') + '</p></section>';
+    }
+    if (!window.LIVE) paintNotice('ready');
+    else if (!SH_API.dealListStatus) paintNotice('notconfigured');
+    else SH_API.dealListStatus().then(paintNotice).catch(function () { paintNotice('unavailable'); });
 
     var input = document.getElementById('dc-input');
     var result = document.getElementById('dc-result');
@@ -2005,6 +2013,17 @@
       });
     }
 
+    /* "Not on the list" is only true when the list was actually consulted.
+       Saying it beside "Could not check" reads as though the domain was
+       looked up and found absent — the opposite of what happened. */
+    function reasonCell(r) {
+      if (r.caseText) return esc(trCase(r.caseText));
+      if (r.verdict === 'mine') return esc(t('dcMineShort'));
+      if (r.verdict === 'taken') return esc(t('dcTakenShort'));
+      if (r.verdict === 'yes') return '<span class="cell-sub">' + t('dcNotListed') + '</span>';
+      return '<span class="cell-sub">' + t('dcNoAnswer') + '</span>';
+    }
+
     function renderHistory() {
       document.getElementById('dc-history-card').hidden = !history.length;
       document.getElementById('dc-history').innerHTML =
@@ -2015,10 +2034,7 @@
           var v = VERDICT[r.verdict] || VERDICT.unavailable;
           return '<tr><td><b>' + esc(r.domain) + '</b></td>' +
             '<td><span class="dc-chip ' + v.cls + '">' + t(v.title) + '</span></td>' +
-            '<td>' + (r.caseText ? esc(trCase(r.caseText))
-              : r.verdict === 'mine' || r.verdict === 'taken'
-                ? esc(t(r.verdict === 'mine' ? 'dcMineShort' : 'dcTakenShort'))
-                : '<span class="cell-sub">' + t('dcNotListed') + '</span>') + '</td></tr>';
+            '<td>' + reasonCell(r) + '</td></tr>';
         }).join('') +
         '</tbody></table></div>';
     }
