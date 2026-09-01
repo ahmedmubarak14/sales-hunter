@@ -1849,14 +1849,20 @@
      'unavailable' matters as much as the other three: "not on the list"
      only means eligible when the list actually loaded, so a lookup that
      fails must say so rather than fall through to a green tick. */
+  /* Whether the sales list can be consulted at all. Demo mode always can
+     (DEAL_CHECK_ROWS stands in); live mode needs the synced card, which
+     does not exist until the Metabase side is wired. */
+  function dealListConnected() { return !window.LIVE || !!SH_API.dealCheck; }
+
   function checkDeal(domain) {
     if (window.LIVE) {
-      // The live lookup reads the synced deal-checker card. Until that
-      // sync exists this reports "could not check" rather than throwing —
-      // and a missing backend must never resolve to eligible, which is the
-      // one wrong answer that costs a hunter real work.
+      // Not connected is a different answer from a failed request, and
+      // saying "try again in a moment" about something that will never
+      // succeed on its own just sends the hunter round in circles.
+      // Either way a missing backend must never resolve to eligible —
+      // that is the one wrong answer that costs a hunter real work.
       if (!SH_API.dealCheck) {
-        return Promise.resolve({ verdict: 'unavailable', domain: domain, caseText: null, syncedAt: null });
+        return Promise.resolve({ verdict: 'notconfigured', domain: domain, caseText: null, syncedAt: null });
       }
       return SH_API.dealCheck(domain);
     }
@@ -1900,6 +1906,9 @@
         '</form>' +
         '<div id="dc-result" aria-live="polite"></div>' +
       '</section>' +
+      (dealListConnected() ? '' :
+        '<section class="card dc-notice"><b>' + t('dcNotWiredBanner') + '</b>' +
+        '<p>' + t('dcNotWiredBannerSub') + '</p></section>') +
       '<section class="card">' +
         '<div class="card-head"><div><h3>' + t('dcRulesTitle') + '</h3></div></div>' +
         '<ul class="dc-rules">' +
@@ -1924,6 +1933,10 @@
       mine:        { cls: 'mine',    icon: ICONS.check, title: 'dcMine',        note: 'dcMineNote' },
       taken:       { cls: 'bad',     icon: ICONS.ban,   title: 'dcTaken',       note: 'dcTakenNote' },
       no:          { cls: 'bad',     icon: ICONS.ban,   title: 'dcNo',          note: 'dcNoNote' },
+      // Reached only when no hunter has raised the domain either — that
+      // half of the check DID run and passed, so the message says so
+      // rather than implying nothing could be determined at all.
+      notconfigured: { cls: 'warn', icon: ICONS.ban,   title: 'dcNotWired',    note: 'dcNotWiredNote' },
       unclear:     { cls: 'warn',    icon: ICONS.ban,   title: 'dcUnclear',     note: 'dcUnclearNote' },
       unavailable: { cls: 'unknown', icon: ICONS.ban,   title: 'dcUnavailable', note: 'dcUnavailableNote' }
     };
