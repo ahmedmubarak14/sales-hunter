@@ -128,13 +128,32 @@ function errMsg(e: unknown): string {
   return String(e);
 }
 
+/* The browser calls this function directly, and every call carries
+   Authorization, apikey and Content-Type — three headers that make it a
+   non-simple request, so Chrome sends an OPTIONS preflight first. Without
+   these headers the preflight is rejected and the real POST is never
+   sent: fetch rejects with a TypeError, which the tab could only report
+   as "could not check". A function only cron calls never needs this;
+   one a page calls always does. */
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Max-Age": "86400",
+};
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { ...CORS, "Content-Type": "application/json" },
   });
 
 Deno.serve(async (req) => {
+  // Answer the preflight before anything else — it carries no body and no
+  // JWT, so parsing or authorising it would fail on a request that is
+  // only asking whether the real one is allowed.
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+
   try {
     const input = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
