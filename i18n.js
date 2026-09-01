@@ -86,8 +86,24 @@ var STORY_AR = {
   unqualified: 'صُنّف كغير مؤهل من فريق ما قبل المبيعات.',
   reengage: 'مؤجل لإعادة التواصل — سيحاول فريق المبيعات في الربع القادم.'
 };
+/* Deal-checker case values. These arrive from the Metabase card, not from
+   the app, so they are data labels rather than UI strings — same treatment
+   as stages and lost reasons above. tr() passes anything unmapped straight
+   through, so a case value nobody has translated yet still displays (in
+   English) instead of vanishing. Add real card values here as they appear. */
+var CASE_AR = {
+  'Active merchant': 'متجر نشط',
+  'Open opportunity with sales': 'فرصة مفتوحة لدى المبيعات',
+  'Existing subscription': 'اشتراك قائم',
+  'Inbound lead already in pipeline': 'عميل وارد ضمن خط المبيعات',
+  'Duplicate of an existing account': 'مكرر لحساب قائم',
+  'Churned over 12 months ago': 'انقطع منذ أكثر من 12 شهراً',
+  'Lost deal, cooling period passed': 'صفقة خاسرة، انتهت فترة الانتظار'
+};
+
 function trStage(label) { return tr(STAGE_AR, label); }
 function trReason(s) { return tr(REASON_AR, s); }
+function trCase(s) { return tr(CASE_AR, s); }
 function trSource(s) { return tr(SOURCE_AR, s); }
 function trCat(s) { return tr(CAT_AR, s); }
 function trPlan(s) { return tr(PLAN_AR, s); }
@@ -310,6 +326,52 @@ en: {
   drpFieldHint: 'DD/MM/YYYY', drpCancel: 'Cancel', drpApply: 'Apply',
   drpPrevMonth: 'Previous month', drpNextMonth: 'Next month',
   drpFromOnly: 'From {from}', drpToOnly: 'Up to {to}',
+
+  /* Deal checker */
+  navDealChecker: 'Deal Checker',
+  dcTitle: 'Is this deal eligible?',
+  dcSub: 'Check a merchant’s domain before you spend time on it — the answer comes from the same list sales works from.',
+  dcInputLabel: 'Merchant domain or store link',
+  dcPlaceholder: 'example.com or https://example.com/store',
+  dcHint: 'Paste the full link if you have it — the domain is taken from it automatically.',
+  dcCheck: 'Check',
+  dcChecking: 'Checking {domain}…',
+  dcEmpty: 'Enter a domain to check.',
+  dcInvalid: 'That does not look like a domain. Try something like example.com.',
+  dcYes: 'Eligible',
+  dcYesNote: 'Not on the list — nobody has claimed this merchant, so it counts for the program.',
+  dcNo: 'Not eligible',
+  dcNoNote: 'This merchant is already spoken for.',
+  dcMine: 'You already raised this',
+  dcMineNote: 'You submitted {company} on {date}, so it is already counted as yours — no need to raise it again.',
+  dcMineShort: 'Raised by you',
+  dcTaken: 'Not eligible — already raised',
+  dcTakenNote: 'Another hunter raised this merchant on {date}. The first submission keeps the claim, so it will not count for you.',
+  dcTakenShort: 'Raised by another hunter',
+  dcViewLeads: 'Open My Leads',
+  dcUnclear: 'Needs a human check',
+  dcUnclearNote: 'This domain is on the list, but its status is not one this page can read as a yes or no. Ask your manager before working it.',
+  dcUnavailable: 'Could not check',
+  dcUnavailableNote: 'The eligibility list could not be reached, so this is not a "no" — it is unknown. Try again in a moment.',
+  dcCaseLabel: 'Reason: ',
+  dcFresh: 'Checked against the list as of {when}',
+  dcSubmitLead: 'Submit this lead',
+  dcRulesTitle: 'How the answer is decided',
+  dcRule1: 'Sales keeps one list of every domain that is already taken — active merchants, existing subscriptions and open opportunities.',
+  dcRule2: 'If the domain is not on that list, it is yours to go after.',
+  dcRule3: 'If it is on the list, the reason recorded against it is the answer — some entries are still eligible, such as a merchant who churned long enough ago.',
+  dcRule4: 'A merchant another hunter already raised stays theirs, even when the list would allow it. First submission keeps the claim.',
+  dcRecent: 'Checked in this session',
+  dcRecentSub: 'Your last few checks — not saved once you leave the page',
+  dcDomainCol: 'Domain', dcVerdictCol: 'Result', dcCaseCol: 'Reason',
+  dcNotListed: 'Not on the list',
+  /* Program Overview under a date window: the tiles that describe the
+     pipeline as it stands, rather than what happened, need to say so. */
+  submittedInPeriod: 'submitted a lead in this period',
+  ofThoseOpen: '{n} of those still open',
+  openExVatScoped: 'still open, of this period’s leads · excl. VAT',
+  forecastSubScoped: 'this period’s open deals × stage probability',
+  commPeriodTile: 'Commission in period',
   periodRanking: 'Ranking for the selected period',
   rangeNoteAll: 'Every lead ever submitted · {n} leads',
   rangeNote: 'Leads submitted {from} – {to} · {n} leads',
@@ -645,6 +707,51 @@ ar: {
   drpFieldHint: 'يوم/شهر/سنة', drpCancel: 'إلغاء', drpApply: 'تطبيق',
   drpPrevMonth: 'الشهر السابق', drpNextMonth: 'الشهر التالي',
   drpFromOnly: 'من {from}', drpToOnly: 'حتى {to}',
+
+  /* فاحص الصفقات */
+  navDealChecker: 'فاحص الصفقات',
+  dcTitle: 'هل هذه الصفقة مؤهلة؟',
+  dcSub: 'افحص نطاق المتجر قبل أن تبذل فيه جهدك — الإجابة من نفس القائمة التي يعمل عليها فريق المبيعات.',
+  dcInputLabel: 'نطاق المتجر أو رابطه',
+  dcPlaceholder: 'example.com أو https://example.com/store',
+  dcHint: 'الصق الرابط كاملاً إن وُجد — سيُستخرج النطاق منه تلقائياً.',
+  dcCheck: 'افحص',
+  dcChecking: 'جارٍ فحص {domain}…',
+  dcEmpty: 'أدخل نطاقاً لفحصه.',
+  dcInvalid: 'لا يبدو هذا نطاقاً صحيحاً. جرّب مثل example.com.',
+  dcYes: 'مؤهلة',
+  dcYesNote: 'غير مدرج في القائمة — لم يحجز أحد هذا المتجر، فهو محتسب لك في البرنامج.',
+  dcNo: 'غير مؤهلة',
+  dcNoNote: 'هذا المتجر محجوز مسبقاً.',
+  dcMine: 'سجّلته أنت بالفعل',
+  dcMineNote: 'سجّلت {company} بتاريخ {date}، فهو محتسب لك أصلاً — لا حاجة لتسجيله مرة أخرى.',
+  dcMineShort: 'سجّلته أنت',
+  dcTaken: 'غير مؤهلة — مسجّلة مسبقاً',
+  dcTakenNote: 'سجّل صياد آخر هذا المتجر بتاريخ {date}. الأسبقية للتسجيل الأول، فلن يُحتسب لك.',
+  dcTakenShort: 'سجّله صياد آخر',
+  dcViewLeads: 'افتح عملائي',
+  dcUnclear: 'تحتاج مراجعة بشرية',
+  dcUnclearNote: 'النطاق مدرج في القائمة، لكن حالته غير واضحة لتُقرأ كنعم أو لا. راجع مديرك قبل العمل عليه.',
+  dcUnavailable: 'تعذّر الفحص',
+  dcUnavailableNote: 'تعذّر الوصول إلى قائمة الأهلية، وهذا ليس رفضاً بل حالة غير معروفة. أعد المحاولة بعد قليل.',
+  dcCaseLabel: 'السبب: ',
+  dcFresh: 'فُحص مقابل القائمة بتاريخ {when}',
+  dcSubmitLead: 'سجّل هذا العميل',
+  dcRulesTitle: 'كيف تُحدَّد الإجابة',
+  dcRule1: 'يحتفظ فريق المبيعات بقائمة واحدة لكل نطاق محجوز — متاجر نشطة، واشتراكات قائمة، وفرص مفتوحة.',
+  dcRule2: 'إذا لم يكن النطاق في تلك القائمة، فهو متاح لك.',
+  dcRule3: 'وإذا كان مدرجاً، فالسبب المسجّل أمامه هو الإجابة — بعض الحالات تبقى مؤهلة، مثل متجر انقطع منذ مدة طويلة.',
+  dcRule4: 'والمتجر الذي سجّله صياد آخر يبقى له، حتى لو سمحت به القائمة. الأسبقية للتسجيل الأول.',
+  dcRecent: 'فحوصات هذه الجلسة',
+  dcRecentSub: 'آخر فحوصاتك — لا تُحفظ بعد مغادرة الصفحة',
+  dcDomainCol: 'النطاق', dcVerdictCol: 'النتيجة', dcCaseCol: 'السبب',
+  dcNotListed: 'غير مدرج',
+  /* نظرة عامة على البرنامج ضمن فترة محددة */
+  submittedInPeriod: 'سجّلوا عملاء في هذه الفترة',
+  ofThoseOpen: '{n} منها ما زالت مفتوحة',
+  openExVatScoped: 'ما زالت مفتوحة، من عملاء هذه الفترة · دون الضريبة',
+  forecastSubScoped: 'صفقات هذه الفترة المفتوحة × احتمال المرحلة',
+  commPeriodTile: 'عمولات الفترة',
   periodRanking: 'ترتيب الفترة المحددة',
   rangeNoteAll: 'كل العملاء المحتملين المسجّلين · {n} عميل',
   rangeNote: 'العملاء المسجّلون من {from} إلى {to} · {n} عميل',
