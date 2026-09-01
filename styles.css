@@ -699,6 +699,31 @@ td .cell-sub { display: block; color: var(--muted); font-size: 11.5px; }
   font-size: 12.5px; color: var(--ink-2); font-weight: 500;
 }
 .seg button.active { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+
+/* ---- Filter bar: preset segments + a custom date range ---- */
+.filter-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  margin: 2px 0 14px;
+}
+.filter-bar .seg { flex-wrap: wrap; }
+.date-range { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+/* The UA's [hidden] rule loses to any class selector that sets display,
+   so the custom pickers need to opt out of their own flex explicitly —
+   otherwise they stay on screen under every preset. */
+.date-range[hidden] { display: none; }
+.date-range label.f-label { margin: 0; white-space: nowrap; }
+/* Not covered by the generic input rule below (which lists types
+   explicitly), and a bare date picker inherits none of the app's chrome. */
+.date-range input[type="date"] {
+  font: inherit; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--hairline);
+  border-radius: 8px; padding: 6px 9px; width: auto; min-width: 148px;
+}
+.sub.err { color: var(--critical); font-weight: 500; }
+/* Period totals sitting above a table, rather than alone in a card:
+   they need a rule of their own so the tile labels do not read as a
+   second header row. */
+.tiles-strip { padding: 4px 0 16px; border-bottom: 1px solid var(--hairline); margin-bottom: 4px; }
 input[type="text"], input[type="email"], input[type="tel"], input[type="number"], input[type="password"], input[type="search"], select, textarea {
   font: inherit; color: var(--ink);
   background: var(--surface); border: 1px solid var(--hairline);

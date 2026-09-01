@@ -1549,15 +1549,25 @@
     return out;
   }
 
-  function leaderboardData() {
+  /* inRange (optional) scopes the numbers to a period — a predicate over
+     leads, see rangePredicate() below. Rows always carry BOTH the scoped stats
+     (`s`) and the lifetime ones (`allS`), because not everything on the
+     row means the same thing under a filter: badges are achievements
+     someone has already earned ("first sale", "5 wins"), so they read off
+     `allS` and never shrink when the table is narrowed to a window. */
+  function leaderboardData(inRange) {
     var thisMonthKey = monthKey(NOW);
     var rows = EMPLOYEES.map(function (e) {
       var leads = leadsOf(e.id);
-      var s = statsFor(leads);
+      var s = statsFor(inRange ? leads.filter(inRange) : leads);
+      var allS = inRange ? statsFor(leads) : s;
+      // "Top hunter this month" is likewise an award about the current
+      // month, not about whatever window happens to be on screen — so it
+      // is measured on the full history either way.
       var revThisMonth = leads.filter(function (l) {
         return l.stage === 'won' && monthKey(wonDate(l)) === thisMonthKey;
       }).reduce(function (a, l) { return a + l.amountNet; }, 0);
-      return { emp: e, s: s, revThisMonth: revThisMonth };
+      return { emp: e, s: s, allS: allS, revThisMonth: revThisMonth };
     });
     var topThisMonth = rows.slice().sort(function (a, b) { return b.revThisMonth - a.revThisMonth; })[0];
     return { rows: rows, topThisMonthId: topThisMonth && topThisMonth.revThisMonth > 0 ? topThisMonth.emp.id : null };
@@ -1650,7 +1660,7 @@
     return out;
   }
 
-  function unregisteredHunterRows() {
+  function unregisteredHunterRows(inRange) {
     var known = {};
     EMPLOYEES.forEach(function (e) {
       known[e.id] = true;
@@ -1664,31 +1674,159 @@
       seen[id] = true;
       var local = id.split('@')[0].replace(/[._]+/g, ' ').trim();
       var name = local.replace(/\w\S*/g, function (w) { return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(); });
-      out.push({ emp: { id: id, name: name || id, dept: '', title: '', email: id, avatar: null }, s: statsFor(leadsOf(id)) });
+      // The hunter is discovered from the UNFILTERED lead list, then scored
+      // on the window — so someone whose only deals fall outside it still
+      // resolves to a row (an all-zero one the period view then drops)
+      // rather than the roster changing shape with the filter.
+      var hLeads = leadsOf(id);
+      var hs = statsFor(inRange ? hLeads.filter(inRange) : hLeads);
+      out.push({ emp: { id: id, name: name || id, dept: '', title: '', email: id, avatar: null }, s: hs, allS: hs });
     });
     return out;
+  }
+
+  /* ---- Date-range filter ----
+     Everything resolves against NOW, the app's single "today" (a fixed
+     date in demo mode, the real clock in live mode — see api.js), so the
+     presets agree with every other "this month" in the app.
+     A range is {from, to} of inclusive day boundaries; a null bound is
+     open-ended, and {null, null} means no filtering at all. */
+  function startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+  function endOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999); }
+
+  var PERF_RANGES = {
+    all: function () { return { from: null, to: null }; },
+    d30: function () { return { from: startOfDay(new Date(NOW.getTime() - 29 * DAY)), to: endOfDay(NOW) }; },
+    d90: function () { return { from: startOfDay(new Date(NOW.getTime() - 89 * DAY)), to: endOfDay(NOW) }; },
+    mtd: function () { return { from: new Date(NOW.getFullYear(), NOW.getMonth(), 1), to: endOfDay(NOW) }; },
+    lastMonth: function () {
+      // Day 0 of this month is the last day of the previous one.
+      return { from: new Date(NOW.getFullYear(), NOW.getMonth() - 1, 1),
+               to: endOfDay(new Date(NOW.getFullYear(), NOW.getMonth(), 0)) };
+    },
+    qtd: function () { return { from: new Date(NOW.getFullYear(), Math.floor(NOW.getMonth() / 3) * 3, 1), to: endOfDay(NOW) }; },
+    ytd: function () { return { from: new Date(NOW.getFullYear(), 0, 1), to: endOfDay(NOW) }; }
+  };
+
+  /* <input type="date"> speaks 'YYYY-MM-DD'. new Date(that) parses it as
+     UTC midnight, which lands on the previous day for anyone west of
+     Greenwich and shifts every boundary by one — so build the local date
+     from the parts instead. */
+  function parseDayInput(v) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || '');
+    if (!m) return null;
+    var d = new Date(+m[1], +m[2] - 1, +m[3]);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  function toDayInput(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+      '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  /* A lead belongs to the window by when it was SUBMITTED, not by when it
+     closed. That keeps the window a cohort: the leads counted are exactly
+     the ones the conversion rates are measured over, so "35 leads, 20%
+     reached SQL" is always 7 of those same 35. Scoring revenue by close
+     date instead would let won deals outnumber the leads in the window and
+     push conversion past 100%. */
+  function rangePredicate(r) {
+    if (!r || (!r.from && !r.to)) return null;
+    return function (l) {
+      var d = l.createdAt;
+      return (!r.from || d >= r.from) && (!r.to || d <= r.to);
+    };
   }
 
   /* Management-only ranking (replaces the shared leaderboard — hunters
      see only their own numbers, for privacy) */
   function viewPerformance(content) {
-    var data = leaderboardData();
-    var regRows = data.rows.map(function (r) { return Object.assign({ registered: true }, r); });
-    var unregRows = unregisteredHunterRows().map(function (r) { return Object.assign({ registered: false }, r); });
     var regFilter = 'all';
+    var rangeKey = 'all';
+    // Custom bounds live outside the preset table so switching away to a
+    // preset and back does not lose what was typed.
+    var custom = { from: null, to: null };
 
-    function rowsFor() {
-      var rows = regFilter === 'reg' ? regRows : regFilter === 'unreg' ? unregRows : regRows.concat(unregRows);
-      return rows.slice().sort(function (a, b) { return b.s.revenueNet - a.s.revenueNet; });
+    var RANGE_OPTS = [
+      ['all', 'rangeAll'], ['mtd', 'rangeMtd'], ['lastMonth', 'rangeLastMonth'],
+      ['d30', 'range30'], ['d90', 'range90'], ['qtd', 'rangeQtd'],
+      ['ytd', 'rangeYtd'], ['custom', 'rangeCustom']
+    ];
+
+    function currentRange() {
+      if (rangeKey !== 'custom') return PERF_RANGES[rangeKey]();
+      return { from: custom.from, to: custom.to ? endOfDay(custom.to) : null };
+    }
+    // Only a custom window can be nonsense; the presets are built from NOW.
+    function rangeInvalid() {
+      return rangeKey === 'custom' && custom.from && custom.to && custom.from > custom.to;
     }
 
-    function renderTable() {
-      var rows = rowsFor();
+    function model() {
+      var range = currentRange();
+      var pred = rangePredicate(range);
+      var data = leaderboardData(pred);
+      var rows = data.rows.map(function (r) { return Object.assign({ registered: true }, r); })
+        .concat(unregisteredHunterRows(pred).map(function (r) { return Object.assign({ registered: false }, r); }));
+      if (regFilter === 'reg') rows = rows.filter(function (r) { return r.registered; });
+      else if (regFilter === 'unreg') rows = rows.filter(function (r) { return !r.registered; });
+      // Under a window, a hunter with nothing submitted in it has no
+      // standing to rank — keeping them would pad the table with a tail of
+      // identical all-zero rows. All-time keeps everyone, as before, so
+      // the roster still shows who has yet to submit anything at all.
+      if (pred) rows = rows.filter(function (r) { return r.s.total > 0; });
+      rows.sort(function (a, b) { return b.s.revenueNet - a.s.revenueNet; });
+
+      var totals = rows.reduce(function (a, r) {
+        a.leads += r.s.total; a.sql += r.s.reachedSql; a.won += r.s.reachedWon;
+        a.revenueNet += r.s.revenueNet;
+        return a;
+      }, { leads: 0, sql: 0, won: 0, revenueNet: 0 });
+
+      return { rows: rows, totals: totals, range: range, topId: data.topThisMonthId };
+    }
+
+    function rangeNote(m) {
+      var r = m.range, n = fmtNum(m.totals.leads);
+      if (!r.from && !r.to) return t('rangeNoteAll', { n: n });
+      if (r.from && r.to) return t('rangeNote', { from: fmtDate(r.from), to: fmtDate(r.to), n: n });
+      if (r.from) return t('rangeNoteFrom', { from: fmtDate(r.from), n: n });
+      return t('rangeNoteTo', { to: fmtDate(r.to), n: n });
+    }
+
+    // Percentage plus the raw counts underneath it: 25% off 4 leads and
+    // 25% off 400 are the same number and very different facts.
+    function convCell(hit, total) {
+      if (!total) return '<td class="num">—</td>';
+      return '<td class="num">' + fmtPct(hit / total, 0) +
+        '<span class="cell-sub">' + t('ofTotal', { n: fmtNum(hit), total: fmtNum(total) }) + '</span></td>';
+    }
+
+    function renderSummary(m) {
+      var tot = m.totals;
+      var tiles = [
+        { v: fmtNum(tot.leads), label: t('leads') },
+        { v: tot.leads ? fmtPct(tot.sql / tot.leads, 0) : '—', label: t('newToSql'),
+          hint: t('ofTotal', { n: fmtNum(tot.sql), total: fmtNum(tot.leads) }) },
+        { v: tot.leads ? fmtPct(tot.won / tot.leads, 0) : '—', label: t('newToWon'),
+          hint: t('ofTotal', { n: fmtNum(tot.won), total: fmtNum(tot.leads) }) },
+        { v: fmtMoneyC(tot.revenueNet), label: t('revenue') }
+      ];
+      document.getElementById('perf-summary').innerHTML =
+        '<div class="tiles-strip"><div class="reason-tiles">' + tiles.map(function (x) {
+          return '<div class="reason-tile"' + (x.hint ? ' title="' + esc(x.hint) + '"' : '') + '>' +
+            '<div class="rt-value">' + esc(x.v) + '</div>' +
+            '<div class="rt-label">' + esc(x.label) + '</div></div>';
+        }).join('') + '</div></div>';
+    }
+
+    function renderTable(m) {
+      var rows = m.rows;
       var maxRev = Math.max.apply(null, rows.map(function (r) { return r.s.revenueNet; }).concat([1]));
 
       var body = rows.map(function (r, i) {
         var rankCls = i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : '';
-        var badges = r.registered ? badgesFor(r.emp.id, r.s, data.topThisMonthId) : [];
+        // Lifetime stats, deliberately: see leaderboardData().
+        var badges = r.registered ? badgesFor(r.emp.id, r.allS || r.s, m.topId) : [];
         var who = r.registered
           ? esc(trDept(r.emp.dept))
           : '<span class="unreg-pill" title="' + esc(t('notRegisteredHint')) + '">' + t('notRegistered') + '</span>';
@@ -1697,7 +1835,8 @@
           '<td><b>' + esc(r.emp.name) + '</b><span class="cell-sub">' + who + '</span></td>' +
           '<td class="num">' + fmtNum(r.s.total) + '</td>' +
           '<td class="num">' + fmtNum(r.s.won) + '</td>' +
-          '<td class="num">' + fmtPct(r.s.conversion, 0) + '</td>' +
+          convCell(r.s.reachedSql, r.s.total) +
+          convCell(r.s.reachedWon, r.s.total) +
           '<td style="min-width:120px"><div class="progress-track"><div class="progress-fill" style="width:' + Math.round(r.s.revenueNet / maxRev * 100) + '%"></div></div></td>' +
           '<td class="num"><b>' + fmtMoneyC(r.s.revenueNet) + '</b></td>' +
           '<td class="num">' + fmtMoneyC(r.s.commission) + '</td>' +
@@ -1705,22 +1844,65 @@
         '</tr>';
       }).join('');
 
+      var empty = rangeKey === 'all' ? t('noHuntersFilter') : t('noHuntersPeriod');
+
       document.getElementById('perf-table').innerHTML =
         '<div class="tbl-wrap"><table>' +
-          '<thead><tr><th></th><th>' + t('hunter') + '</th><th class="num">' + t('leads') + '</th><th class="num">' + t('won') + '</th><th class="num">' + t('conversion') + '</th><th>' + t('revenue') + '</th><th class="num"></th><th class="num">' + t('commissionCol') + '</th><th>' + t('achievements') + '</th></tr></thead>' +
-          '<tbody>' + (body || '<tr><td colspan="9"><div class="empty">' + t('noHuntersFilter') + '</div></td></tr>') + '</tbody>' +
+          '<thead><tr><th></th><th>' + t('hunter') + '</th><th class="num">' + t('leads') + '</th>' +
+          '<th class="num">' + t('won') + '</th>' +
+          '<th class="num" title="' + esc(t('newToSqlHint')) + '">' + t('newToSql') + '</th>' +
+          '<th class="num" title="' + esc(t('newToWonHint')) + '">' + t('newToWon') + '</th>' +
+          '<th>' + t('revenue') + '</th><th class="num"></th><th class="num">' + t('commissionCol') + '</th>' +
+          '<th>' + t('achievements') + '</th></tr></thead>' +
+          '<tbody>' + (body || '<tr><td colspan="10"><div class="empty">' + empty + '</div></td></tr>') + '</tbody>' +
         '</table></div>';
     }
 
+    function renderAll() {
+      var custWrap = document.getElementById('range-custom');
+      custWrap.hidden = rangeKey !== 'custom';
+
+      var note = document.getElementById('perf-range-note');
+      if (rangeInvalid()) {
+        note.className = 'sub err';
+        note.textContent = t('rangeInvalid');
+        document.getElementById('perf-summary').innerHTML = '';
+        document.getElementById('perf-table').innerHTML =
+          '<div class="empty">' + t('rangeInvalid') + '</div>';
+        return;
+      }
+      var m = model();
+      note.className = 'sub';
+      note.textContent = rangeNote(m);
+      document.getElementById('perf-title').textContent =
+        rangeKey === 'all' ? t('allTimeRanking') : t('periodRanking');
+      renderSummary(m);
+      renderTable(m);
+    }
+
     var segOpts = [['all', t('all')], ['reg', t('registered')], ['unreg', t('notRegistered')]];
+    var today = toDayInput(NOW);
     content.innerHTML =
       '<section class="card">' +
-        '<div class="card-head"><div><h3>' + t('allTimeRanking') + '</h3>' +
-        '<p class="sub">' + t('rankingSub') + '</p></div>' +
+        '<div class="card-head"><div><h3 id="perf-title">' + t('allTimeRanking') + '</h3>' +
+        '<p class="sub">' + t('rankingSub') + '</p>' +
+        '<p class="sub" id="perf-range-note"></p></div>' +
         '<div class="seg" id="reg-seg">' + segOpts.map(function (s, i) {
           return '<button data-seg="' + s[0] + '" class="' + (i === 0 ? 'active' : '') + '">' + s[1] + '</button>';
         }).join('') + '</div>' +
         '</div>' +
+        '<div class="filter-bar">' +
+          '<div class="seg" id="range-seg">' + RANGE_OPTS.map(function (o, i) {
+            return '<button data-range="' + o[0] + '" class="' + (i === 0 ? 'active' : '') + '">' + t(o[1]) + '</button>';
+          }).join('') + '</div>' +
+          '<div class="date-range" id="range-custom" hidden>' +
+            '<label class="f-label" for="range-from">' + t('dateFrom') + '</label>' +
+            '<input type="date" id="range-from" max="' + today + '">' +
+            '<label class="f-label" for="range-to">' + t('dateTo') + '</label>' +
+            '<input type="date" id="range-to" max="' + today + '">' +
+          '</div>' +
+        '</div>' +
+        '<div id="perf-summary"></div>' +
         '<div id="perf-table"></div>' +
       '</section>';
 
@@ -1729,10 +1911,38 @@
         document.querySelectorAll('#reg-seg button').forEach(function (x) { x.classList.remove('active'); });
         b.classList.add('active');
         regFilter = b.getAttribute('data-seg');
-        renderTable();
+        renderAll();
       });
     });
-    renderTable();
+
+    var fromInput = document.getElementById('range-from');
+    var toInput = document.getElementById('range-to');
+    document.querySelectorAll('#range-seg button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        document.querySelectorAll('#range-seg button').forEach(function (x) { x.classList.remove('active'); });
+        b.classList.add('active');
+        rangeKey = b.getAttribute('data-range');
+        // Opening Custom on empty inputs would show "all time" under a
+        // label that says otherwise; seed it from the last 30 days so the
+        // pickers start somewhere the user can adjust rather than fill in.
+        if (rangeKey === 'custom' && !custom.from && !custom.to) {
+          var seed = PERF_RANGES.d30();
+          custom.from = seed.from; custom.to = startOfDay(seed.to);
+          fromInput.value = toDayInput(custom.from);
+          toInput.value = toDayInput(custom.to);
+        }
+        renderAll();
+      });
+    });
+    [fromInput, toInput].forEach(function (input) {
+      input.addEventListener('change', function () {
+        custom.from = parseDayInput(fromInput.value);
+        custom.to = parseDayInput(toInput.value);
+        renderAll();
+      });
+    });
+
+    renderAll();
   }
 
   // Access picker (Team page): at most one open at a time. Tracked here,
