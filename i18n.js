@@ -93,6 +93,7 @@ var STORY_AR = {
    English) instead of vanishing. Add real card values here as they appear. */
 var CASE_AR = {
   'eligible for hunting': 'قابل للاصطياد',
+  'not eligible': 'غير مؤهل',
   'Eligible for Upgrade': 'قابل للترقية',
   'Active subscription': 'اشتراك نشط',
   'Pending review': 'قيد المراجعة'
