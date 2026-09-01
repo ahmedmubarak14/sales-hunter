@@ -351,7 +351,7 @@ en: {
   dcNotWired: 'No hunter has this — sales list not connected',
   dcNotWiredNote: 'Nobody in the program has raised this merchant, so it is not a duplicate. The sales eligibility list is not connected yet, though, so this is not the full answer — confirm with your manager before working it.',
   dcNotWiredBanner: 'The sales eligibility list is not connected yet',
-  dcNotWiredBannerSub: 'Checks against other hunters\u2019 leads are live and accurate. The sales list — active merchants, subscriptions and open opportunities — cannot be consulted until the Metabase connection is set up on the Integrations page.',
+  dcNotWiredBannerSub: 'Checks against other hunters\u2019 leads are live and accurate. The sales list cannot be consulted until it has been set up and synced — an admin does that from the Integrations page.',
   dcUnavailable: 'Could not check',
   dcUnavailableNote: 'The eligibility list could not be reached, so this is not a "no" — it is unknown. Try again in a moment.',
   dcCaseLabel: 'Reason: ',
@@ -370,6 +370,7 @@ en: {
   dcRecentSub: 'Your last few checks — not saved once you leave the page',
   dcDomainCol: 'Domain', dcVerdictCol: 'Result', dcCaseCol: 'Reason',
   dcNotListed: 'Not on the list',
+  dcNoAnswer: 'No answer — list not read',
   /* Program Overview under a date window: the tiles that describe the
      pipeline as it stands, rather than what happened, need to say so. */
   submittedInPeriod: 'submitted a lead in this period',
@@ -740,7 +741,7 @@ ar: {
   dcNotWired: 'لم يسجّله أي صياد — قائمة المبيعات غير موصولة',
   dcNotWiredNote: 'لم يسجّل أحد في البرنامج هذا المتجر، فهو ليس مكرراً. لكن قائمة الأهلية لدى المبيعات غير موصولة بعد، لذا هذه ليست الإجابة الكاملة — تأكّد من مديرك قبل العمل عليه.',
   dcNotWiredBanner: 'قائمة الأهلية لدى المبيعات غير موصولة بعد',
-  dcNotWiredBannerSub: 'فحص التكرار مقابل عملاء الصيادين الآخرين يعمل بدقة. أما قائمة المبيعات — المتاجر النشطة والاشتراكات والفرص المفتوحة — فلا يمكن الرجوع إليها حتى يتم إعداد اتصال Metabase من صفحة التكاملات.',
+  dcNotWiredBannerSub: 'فحص التكرار مقابل عملاء الصيادين الآخرين يعمل بدقة. أما قائمة المبيعات فلا يمكن الرجوع إليها حتى يتم إعدادها ومزامنتها — يتولى ذلك المشرف من صفحة التكاملات.',
   dcUnavailable: 'تعذّر الفحص',
   dcUnavailableNote: 'تعذّر الوصول إلى قائمة الأهلية، وهذا ليس رفضاً بل حالة غير معروفة. أعد المحاولة بعد قليل.',
   dcCaseLabel: 'السبب: ',
@@ -759,6 +760,7 @@ ar: {
   dcRecentSub: 'آخر فحوصاتك — لا تُحفظ بعد مغادرة الصفحة',
   dcDomainCol: 'النطاق', dcVerdictCol: 'النتيجة', dcCaseCol: 'السبب',
   dcNotListed: 'غير مدرج',
+  dcNoAnswer: 'بلا إجابة — لم تُقرأ القائمة',
   /* نظرة عامة على البرنامج ضمن فترة محددة */
   submittedInPeriod: 'سجّلوا عملاء في هذه الفترة',
   ofThoseOpen: '{n} منها ما زالت مفتوحة',
