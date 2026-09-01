@@ -435,6 +435,21 @@ function statsFor(leads) {
       count: leads.filter(function (l) { return reached(l, stageId); }).length
     };
   });
+  // Cohort conversion. Every lead enters the pipeline at New, so the whole
+  // set is the "new" base: newToSql is the share that ever reached SQL,
+  // newToWon the share that ever reached Closed Won. Counted with reached()
+  // — the same rule the funnel card uses — so a synced deal that jumped
+  // straight to a later stage still counts as having passed through SQL.
+  // That makes newToWon marginally broader than `conversion` above, which
+  // counts only deals PARKED in won right now: a deal won and later
+  // re-opened into the nurturing pipeline counts here, not there.
+  // Reuses the funnel pass rather than filtering the list twice more.
+  var reachedCount = {};
+  s.funnel.forEach(function (f, i) { reachedCount[FUNNEL_ORDER[i]] = f.count; });
+  s.reachedSql = reachedCount.sql || 0;
+  s.reachedWon = reachedCount.won || 0;
+  s.newToSql = s.total ? s.reachedSql / s.total : 0;
+  s.newToWon = s.total ? s.reachedWon / s.total : 0;
   return s;
 }
 
