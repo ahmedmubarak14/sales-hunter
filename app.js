@@ -1806,6 +1806,9 @@
      ends up working a domain that was already gone. */
   function verdictOfRow(row) {
     if (typeof row.eligible === 'boolean') return row.eligible ? 'yes' : 'no';
+    // An explicit null means the sync read the row but could not read its
+    // wording — distinct from the field being absent altogether.
+    if (row.eligible === null && 'eligible' in row) return 'unclear';
     var v = String(row.case || '').toLowerCase();
     if (!v.trim()) return 'unclear';
     if (/\bnot eligible\b|\bineligible\b|\bnot_eligible\b/.test(v)) return 'no';
@@ -1871,7 +1874,8 @@
     return new Promise(function (resolve) {
       setTimeout(function () {
         resolve(hit
-          ? { verdict: verdictOfRow(hit), domain: domain, caseText: hit.case, syncedAt: NOW }
+          ? { verdict: verdictOfRow(hit), domain: domain, caseText: hit.case, syncedAt: NOW,
+              packageType: hit.package, daysSinceEnded: hit.days }
           : { verdict: 'yes', domain: domain, caseText: null, syncedAt: NOW });
       }, 260);
     });
@@ -1960,6 +1964,22 @@
       return '<p class="dc-case">' + t(v.note) + '</p>';
     }
 
+    /* The card also carries the store's package and how long since its
+       subscription ended. Neither decides the verdict, but both tell a
+       hunter what they are walking into — an upgrade play on a live plan
+       reads very differently from a store that lapsed a year ago. A
+       negative day count means the subscription has not ended yet. */
+    function contextHtml(r) {
+      var bits = [];
+      if (r.packageType) bits.push(t('dcPackage', { name: esc(trPlan(r.packageType)) }));
+      if (typeof r.daysSinceEnded === 'number') {
+        bits.push(r.daysSinceEnded < 0
+          ? t('dcEndsIn', { n: fmtNum(Math.abs(r.daysSinceEnded)) })
+          : t('dcEndedAgo', { n: fmtNum(r.daysSinceEnded) }));
+      }
+      return bits.length ? '<p class="dc-context">' + bits.join(' · ') + '</p>' : '';
+    }
+
     function renderResult(r) {
       var v = VERDICT[r.verdict] || VERDICT.unavailable;
       result.innerHTML =
@@ -1969,6 +1989,7 @@
             '<b class="dc-headline">' + t(v.title) + '</b>' +
             '<span class="dc-domain">' + esc(r.domain) + '</span>' +
             reasonHtml(r, v) +
+            contextHtml(r) +
             (r.syncedAt ? '<p class="dc-fresh">' + t('dcFresh', { when: fmtDate(r.syncedAt) }) + '</p>' : '') +
           '</div>' +
           (r.verdict === 'yes'
@@ -2707,6 +2728,7 @@
               fieldRow('mb-key', t('intgMbKey'), '', mb && mb.secret_set ? t('intgSecretSaved', { hint: mbS.secret_hint || '••••' }) : 'mb_…', 'password') +
               fieldRow('mb-comm', t('intgCardComm'), mbS.card_commissions || '', 'e.g. 142') +
               fieldRow('mb-subs', t('intgCardSubs'), mbS.card_subscriptions || '', 'e.g. 143') +
+              fieldRow('mb-deal', t('intgCardDealChecker'), mbS.card_deal_checker || '', 'e.g. 18789') +
             '</div>' +
             // No top-stores card ID: the showcase is ranked from the
             // warehouse table by the sync itself. It used to point at a
@@ -2766,7 +2788,8 @@
         save('metabase', {
           base_url: document.getElementById('mb-url').value.trim(),
           card_commissions: document.getElementById('mb-comm').value.trim(),
-          card_subscriptions: document.getElementById('mb-subs').value.trim()
+          card_subscriptions: document.getElementById('mb-subs').value.trim(),
+          card_deal_checker: document.getElementById('mb-deal').value.trim()
         }, document.getElementById('mb-key').value);
       });
     }

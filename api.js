@@ -562,6 +562,50 @@ window.SH_API = (function () {
     return !(pr && pr.onboarded_at);
   }
 
+  /* Deal checker: one indexed lookup against the synced list (migration
+     025, filled by sync-metabase). Returns the same shape the demo path
+     does, so the view does not care which mode it is in.
+
+     Every failure path resolves to a non-answer rather than to eligible.
+     "Not on the list" is only meaningful when the list was actually read,
+     and treating an error as a pass is the one mistake here that costs a
+     hunter real work. */
+  async function dealCheck(domain) {
+    const miss = (verdict) => ({ verdict, domain, caseText: null, syncedAt: null });
+    let res;
+    try {
+      res = await req('/rest/v1/deal_checker?select=case_text,eligible,package_type,days_since_subscription_ended,synced_at'
+        + '&domain=eq.' + encodeURIComponent(domain) + '&limit=1');
+    } catch (e) {
+      return miss('unavailable');
+    }
+    const row = Array.isArray(res) ? res[0] : null;
+    if (!row) {
+      // Absent from the list — but only trustworthy if the list has
+      // anything in it at all. An empty table would otherwise report every
+      // domain as eligible, which is exactly how this feature does damage.
+      let any = [];
+      try {
+        any = await req('/rest/v1/deal_checker?select=synced_at&order=synced_at.desc&limit=1');
+      } catch (e) {
+        return miss('unavailable');
+      }
+      if (!any || !any.length) return miss('notconfigured');
+      return {
+        verdict: 'yes', domain: domain, caseText: null,
+        syncedAt: any[0].synced_at ? new Date(any[0].synced_at) : null
+      };
+    }
+    return {
+      verdict: row.eligible === true ? 'yes' : row.eligible === false ? 'no' : 'unclear',
+      domain: domain,
+      caseText: row.case_text || null,
+      packageType: row.package_type || null,
+      daysSinceEnded: row.days_since_subscription_ended,
+      syncedAt: row.synced_at ? new Date(row.synced_at) : null
+    };
+  }
+
   async function setCommissionStatus(dealId, status) {
     // A deal can back more than one commissions row (one per invoice
     // period); the payouts page has a single status control per deal, so
@@ -761,6 +805,7 @@ window.SH_API = (function () {
     signInWithGoogle: signInWithGoogle,
     submitLead: submitLead, saveProfile: saveProfile, onboardingNeeded: onboardingNeeded,
     setCommissionStatus: setCommissionStatus,
+    dealCheck: dealCheck,
     uploadPayslip: uploadPayslip, openPayslip: openPayslip, hasPayslip: hasPayslip,
     uploadIbanCert: uploadIbanCert, openIbanCert: openIbanCert,
     uploadAvatar: uploadAvatar, removeAvatar: removeAvatar,

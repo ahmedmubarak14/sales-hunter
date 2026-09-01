@@ -92,13 +92,10 @@ var STORY_AR = {
    through, so a case value nobody has translated yet still displays (in
    English) instead of vanishing. Add real card values here as they appear. */
 var CASE_AR = {
-  'Active merchant': 'متجر نشط',
-  'Open opportunity with sales': 'فرصة مفتوحة لدى المبيعات',
-  'Existing subscription': 'اشتراك قائم',
-  'Inbound lead already in pipeline': 'عميل وارد ضمن خط المبيعات',
-  'Duplicate of an existing account': 'مكرر لحساب قائم',
-  'Churned over 12 months ago': 'انقطع منذ أكثر من 12 شهراً',
-  'Lost deal, cooling period passed': 'صفقة خاسرة، انتهت فترة الانتظار'
+  'eligible for hunting': 'قابل للاصطياد',
+  'Eligible for Upgrade': 'قابل للترقية',
+  'Active subscription': 'اشتراك نشط',
+  'Pending review': 'قيد المراجعة'
 };
 
 function trStage(label) { return tr(STAGE_AR, label); }
@@ -358,12 +355,16 @@ en: {
   dcUnavailable: 'Could not check',
   dcUnavailableNote: 'The eligibility list could not be reached, so this is not a "no" — it is unknown. Try again in a moment.',
   dcCaseLabel: 'Reason: ',
+  dcPackage: 'Package: {name}',
+  dcEndsIn: 'subscription ends in {n} days',
+  dcEndedAgo: 'subscription ended {n} days ago',
+  intgCardDealChecker: 'Deal checker card ID',
   dcFresh: 'Checked against the list as of {when}',
   dcSubmitLead: 'Submit this lead',
   dcRulesTitle: 'How the answer is decided',
-  dcRule1: 'Sales keeps one list of every domain that is already taken — active merchants, existing subscriptions and open opportunities.',
-  dcRule2: 'If the domain is not on that list, it is yours to go after.',
-  dcRule3: 'If it is on the list, the reason recorded against it is the answer — some entries are still eligible, such as a merchant who churned long enough ago.',
+  dcRule1: 'Sales keeps one list of Zid stores with a status against each — whether it can still be hunted, is an upgrade opportunity, or is off limits.',
+  dcRule2: 'A domain that is not on the list is not a Zid store at all, so it is yours to go after.',
+  dcRule3: 'If it is on the list, the status recorded against it is the answer — plenty of listed stores are still eligible.',
   dcRule4: 'A merchant another hunter already raised stays theirs, even when the list would allow it. First submission keeps the claim.',
   dcRecent: 'Checked in this session',
   dcRecentSub: 'Your last few checks — not saved once you leave the page',
@@ -743,12 +744,16 @@ ar: {
   dcUnavailable: 'تعذّر الفحص',
   dcUnavailableNote: 'تعذّر الوصول إلى قائمة الأهلية، وهذا ليس رفضاً بل حالة غير معروفة. أعد المحاولة بعد قليل.',
   dcCaseLabel: 'السبب: ',
+  dcPackage: 'الباقة: {name}',
+  dcEndsIn: 'ينتهي الاشتراك خلال {n} يوماً',
+  dcEndedAgo: 'انتهى الاشتراك منذ {n} يوماً',
+  intgCardDealChecker: 'معرّف بطاقة فاحص الصفقات',
   dcFresh: 'فُحص مقابل القائمة بتاريخ {when}',
   dcSubmitLead: 'سجّل هذا العميل',
   dcRulesTitle: 'كيف تُحدَّد الإجابة',
-  dcRule1: 'يحتفظ فريق المبيعات بقائمة واحدة لكل نطاق محجوز — متاجر نشطة، واشتراكات قائمة، وفرص مفتوحة.',
-  dcRule2: 'إذا لم يكن النطاق في تلك القائمة، فهو متاح لك.',
-  dcRule3: 'وإذا كان مدرجاً، فالسبب المسجّل أمامه هو الإجابة — بعض الحالات تبقى مؤهلة، مثل متجر انقطع منذ مدة طويلة.',
+  dcRule1: 'يحتفظ فريق المبيعات بقائمة لمتاجر زد مع حالة لكل متجر — هل ما زال قابلاً للاصطياد، أم فرصة ترقية، أم غير متاح.',
+  dcRule2: 'النطاق غير المدرج في القائمة ليس متجر زد أصلاً، فهو متاح لك.',
+  dcRule3: 'وإذا كان مدرجاً، فالحالة المسجّلة أمامه هي الإجابة — وكثير من المتاجر المدرجة تبقى مؤهلة.',
   dcRule4: 'والمتجر الذي سجّله صياد آخر يبقى له، حتى لو سمحت به القائمة. الأسبقية للتسجيل الأول.',
   dcRecent: 'فحوصات هذه الجلسة',
   dcRecentSub: 'آخر فحوصاتك — لا تُحفظ بعد مغادرة الصفحة',
