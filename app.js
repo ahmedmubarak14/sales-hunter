@@ -1977,9 +1977,19 @@
        hunter what they are walking into — an upgrade play on a live plan
        reads very differently from a store that lapsed a year ago. A
        negative day count means the subscription has not ended yet. */
+    /* package_type arrives as a warehouse code — "new_professional",
+       "rise" — which reads as a database column, not a plan name. Only
+       cosmetic: trPlan still gets first refusal so a properly translated
+       name wins, and an unmapped code is merely tidied rather than hidden. */
+    function prettyPackage(code) {
+      var name = trPlan(code);
+      if (name !== code) return name;
+      return code.replace(/[_-]+/g, ' ').replace(/^./, function (c) { return c.toUpperCase(); });
+    }
+
     function contextHtml(r) {
       var bits = [];
-      if (r.packageType) bits.push(t('dcPackage', { name: esc(trPlan(r.packageType)) }));
+      if (r.packageType) bits.push(t('dcPackage', { name: esc(prettyPackage(r.packageType)) }));
       if (typeof r.daysSinceEnded === 'number') {
         bits.push(r.daysSinceEnded < 0
           ? t('dcEndsIn', { n: fmtNum(Math.abs(r.daysSinceEnded)) })
