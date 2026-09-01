@@ -109,6 +109,24 @@ var STORE_SHOWCASE = [
     { name: 'Paws Riyadh', ordersCount: 310, revenue: 46500 }
   ]}
 ];
+/* ---- Deal checker (demo stand-in for Metabase card 18789) ----
+   The real card lists domains that are already spoken for, one row each,
+   with a `case` column saying what the situation is. The rule the hunter
+   is given: a domain that is NOT on the list is eligible; a domain that
+   IS on the list takes its answer from that case column.
+   These rows exist so the tab is usable in demo mode; live mode reads the
+   synced card instead. */
+var DEAL_CHECK_ROWS = [
+  { domain: 'noorabaya.com',       eligible: false, case: 'Active merchant' },
+  { domain: 'tamrhouse.sa',        eligible: false, case: 'Open opportunity with sales' },
+  { domain: 'binsaifroastery.com', eligible: false, case: 'Existing subscription' },
+  { domain: 'volt-store.sa',       eligible: false, case: 'Inbound lead already in pipeline' },
+  { domain: 'mishkahabayas.com',   eligible: false, case: 'Duplicate of an existing account' },
+  { domain: 'wardco.sa',           eligible: true,  case: 'Churned over 12 months ago' },
+  { domain: 'qalamstudio.com',     eligible: true,  case: 'Lost deal, cooling period passed' },
+  { domain: 'pawsriyadh.com',      eligible: false, case: 'Duplicate of an existing account' }
+];
+
 var SALES_OWNERS = ['Fahad Al-Otaibi', 'Sara Al-Zahrani', 'Mohammed Iqbal', 'Lama Al-Harbi'];
 var BANKS = ['Al Rajhi Bank', 'Saudi National Bank', 'Riyad Bank', 'Alinma Bank', 'SAB',
   'Bank Albilad', 'Arab National Bank', 'Banque Saudi Fransi', 'Bank AlJazira',
@@ -279,6 +297,14 @@ EMPLOYEES.forEach(function (emp) {
   for (var i = 0; i < n; i++) LEADS.push(makeLead(emp.id));
 });
 LEADS.sort(function (a, b) { return b.createdAt - a.createdAt; });
+/* Demo leads carry no store link of their own, but the deal checker matches
+   on domain — so derive a stable one per merchant. Live leads already have
+   store_url from the submitted form (see toLead in api.js). */
+LEADS.forEach(function (l) {
+  if (!l.storeUrl) {
+    l.storeUrl = 'https://' + l.company.toLowerCase().replace(/[^a-z0-9]+/g, '') + '.sa';
+  }
+});
 
 /* ---- Derived helpers (single source of truth for all views) ---- */
 

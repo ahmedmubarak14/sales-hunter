@@ -342,6 +342,7 @@
     '/dashboard':  { titleKey: 'navDashboard',   icon: 'dash',    render: viewDashboard, who: 'emp', section: 'main' },
     '/leads':      { titleKey: 'navLeads',        icon: 'leads',   render: viewLeads,     who: 'emp', section: 'work' },
     '/submit':     { titleKey: 'navSubmit',       icon: 'plus',    render: viewSubmit,    who: 'emp', section: 'work' },
+    '/deal-checker':{ titleKey: 'navDealChecker', icon: 'check',   render: viewDealChecker, who: 'emp', section: 'work' },
     '/commission': { titleKey: 'navCommission',   icon: 'money',   render: viewCommission,who: 'emp', section: 'work' },
     '/stores':     { titleKey: 'navStores',       icon: 'store',   render: viewTopStores, who: 'all', section: 'insights' },
     '/manager':    { titleKey: 'navOverview',     icon: 'manager', render: viewManager,   who: 'mgr', section: 'main' },
@@ -1257,7 +1258,7 @@
             '<div class="full"><span class="f-label">' + t('platformLbl') + '</span>' +
               '<div class="radio-list" id="f-platform-group">' + radios + '</div></div>' +
             '<div class="full"><label class="f-label" for="f-store">' + t('storeLink') + '</label>' +
-              '<input type="url" id="f-store" placeholder="https://">' +
+              '<input type="url" id="f-store" placeholder="https://" value="' + esc(takeStorePrefill()) + '">' +
               '<p class="f-hint">' + t('storeLinkHint') + '</p></div>' +
             '<div class="full"><label class="f-label" for="f-notes">' + t('extraNotes') + '</label>' +
               '<textarea id="f-notes" rows="3"></textarea>' +
@@ -1705,7 +1706,7 @@
     return new Date(d.getFullYear(), d.getMonth(), d.getDate() - back);
   }
 
-  function perfPresets() {
+  function datePresets() {
     var td = startOfDay(NOW);
     return [
       { key: 'all', label: t('rangeAll'), range: function () { return { from: null, to: null }; } },
@@ -1751,12 +1752,270 @@
      reached SQL" is always 7 of those same 35. Scoring revenue by close
      date instead would let won deals outnumber the leads in the window and
      push conversion past 100%. */
+  /* The caption that says which window is on screen and how many leads
+     fell in it. Every page carrying the picker needs to state the basis,
+     because "submitted in the window" is what makes the numbers a cohort. */
+  function rangeNote(r, leadCount) {
+    var n = fmtNum(leadCount);
+    if (!r.from && !r.to) return t('rangeNoteAll', { n: n });
+    if (r.from && r.to) return t('rangeNote', { from: fmtDate(r.from), to: fmtDate(r.to), n: n });
+    if (r.from) return t('rangeNoteFrom', { from: fmtDate(r.from), n: n });
+    return t('rangeNoteTo', { to: fmtDate(r.to), n: n });
+  }
+
   function rangePredicate(r) {
     if (!r || (!r.from && !r.to)) return null;
     return function (l) {
       var d = l.createdAt;
       return (!r.from || d >= r.from) && (!r.to || d <= r.to);
     };
+  }
+
+  /* ---- Deal checker ----
+     Answers one question before a hunter spends effort on a merchant: is
+     this domain still up for grabs? The rule comes from the Metabase
+     "deal checker" card, which lists every domain that is already spoken
+     for along with a `case` saying why. Not on the list means nobody has
+     claimed it; on the list means the case column is the answer. */
+
+  /* Hunters paste whatever they have — a full URL, a store link with a
+     path, sometimes just the bare host — so everything is reduced to a
+     comparable host before it is looked up. */
+  function normalizeDomain(raw) {
+    var v = String(raw || '').trim().toLowerCase();
+    if (!v) return '';
+    v = v.replace(/^[a-z][a-z0-9+.-]*:\/\//, '');   // scheme
+    v = v.replace(/^[^@\/]*@/, '');                 // userinfo, and bare emails
+    v = v.split(/[\/?#]/)[0];                       // path, query, fragment
+    v = v.replace(/:\d+$/, '');                     // port
+    v = v.replace(/^www\./, '').replace(/\.$/, ''); // www. and a trailing root dot
+    return v;
+  }
+  function looksLikeDomain(d) {
+    return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(d) && !/^-|-$/.test(d);
+  }
+
+  /* A row's verdict. Preferred form is an explicit `eligible` boolean
+     decided where the card is read, which keeps the yes/no separate from
+     the human-readable reason — that separation is what lets the reason be
+     translated while the verdict stays machine-readable.
+     The text fallback exists for a row that carries only prose. It tests
+     "not eligible" before "eligible" because the first contains the second,
+     and anything it cannot read becomes 'unclear' rather than a pass:
+     inventing a verdict from unfamiliar wording is exactly how a hunter
+     ends up working a domain that was already gone. */
+  function verdictOfRow(row) {
+    if (typeof row.eligible === 'boolean') return row.eligible ? 'yes' : 'no';
+    var v = String(row.case || '').toLowerCase();
+    if (!v.trim()) return 'unclear';
+    if (/\bnot eligible\b|\bineligible\b|\bnot_eligible\b/.test(v)) return 'no';
+    if (/\beligible\b/.test(v)) return 'yes';
+    return 'unclear';
+  }
+
+  /* A lead already in the program for this domain. Matched on the store
+     link the hunter submitted, normalised the same way as the input. */
+  function leadForDomain(domain) {
+    return allLeads().find(function (l) {
+      return l.storeUrl && normalizeDomain(l.storeUrl) === domain;
+    });
+  }
+
+  /* The full answer, in precedence order:
+       1. the signed-in hunter already raised it — theirs, nothing to do
+       2. another hunter raised it first — the earlier claim stands, so no
+          list verdict can give it back
+       3. otherwise the sales list decides
+     Step 2 outranks the list deliberately: a domain the list calls eligible
+     (a merchant who churned, say) is still gone if a colleague got there
+     first, and telling this hunter "eligible" would send them to work a
+     lead they cannot be paid for. */
+  function resolveEligibility(domain) {
+    var lead = leadForDomain(domain);
+    if (lead) {
+      var me = currentUser();
+      var mine = !!me && lead.hunterId === me.id;
+      return Promise.resolve({
+        verdict: mine ? 'mine' : 'taken',
+        domain: domain, caseText: null, syncedAt: null,
+        company: lead.company, raisedAt: lead.createdAt, stage: lead.stage
+      });
+    }
+    return checkDeal(domain);
+  }
+
+  /* Resolves to { verdict, domain, caseText, syncedAt }.
+     verdict: 'yes' | 'no' | 'unclear' | 'unavailable'.
+     'unavailable' matters as much as the other three: "not on the list"
+     only means eligible when the list actually loaded, so a lookup that
+     fails must say so rather than fall through to a green tick. */
+  function checkDeal(domain) {
+    if (window.LIVE) {
+      // The live lookup reads the synced deal-checker card. Until that
+      // sync exists this reports "could not check" rather than throwing —
+      // and a missing backend must never resolve to eligible, which is the
+      // one wrong answer that costs a hunter real work.
+      if (!SH_API.dealCheck) {
+        return Promise.resolve({ verdict: 'unavailable', domain: domain, caseText: null, syncedAt: null });
+      }
+      return SH_API.dealCheck(domain);
+    }
+    var hit = DEAL_CHECK_ROWS.find(function (r) { return normalizeDomain(r.domain) === domain; });
+    // Demo mode fakes the round trip so the loading state is real.
+    return new Promise(function (resolve) {
+      setTimeout(function () {
+        resolve(hit
+          ? { verdict: verdictOfRow(hit), domain: domain, caseText: hit.case, syncedAt: NOW }
+          : { verdict: 'yes', domain: domain, caseText: null, syncedAt: NOW });
+      }, 260);
+    });
+  }
+
+  // Set by an eligible check so the submit form can open pre-filled —
+  // the next thing a hunter wants after a green light is the form.
+  // Read once and cleared, so coming back to Submit later starts blank
+  // rather than carrying a domain the hunter checked an hour ago.
+  var prefillStoreUrl = null;
+  function takeStorePrefill() {
+    var v = prefillStoreUrl || '';
+    prefillStoreUrl = null;
+    return v;
+  }
+
+  function viewDealChecker(content) {
+    var history = [];
+
+    content.innerHTML =
+      '<section class="card">' +
+        '<div class="card-head"><div><h3>' + t('dcTitle') + '</h3>' +
+        '<p class="sub">' + t('dcSub') + '</p></div></div>' +
+        '<form class="dc-form" id="dc-form" novalidate>' +
+          '<div class="dc-field">' +
+            '<label class="f-label" for="dc-input">' + t('dcInputLabel') + '</label>' +
+            '<input type="text" id="dc-input" inputmode="url" autocomplete="off" spellcheck="false" ' +
+              'placeholder="' + esc(t('dcPlaceholder')) + '" aria-describedby="dc-hint">' +
+            '<p class="f-hint" id="dc-hint">' + t('dcHint') + '</p>' +
+          '</div>' +
+          '<button type="submit" class="btn" id="dc-go">' + t('dcCheck') + '</button>' +
+        '</form>' +
+        '<div id="dc-result" aria-live="polite"></div>' +
+      '</section>' +
+      '<section class="card">' +
+        '<div class="card-head"><div><h3>' + t('dcRulesTitle') + '</h3></div></div>' +
+        '<ul class="dc-rules">' +
+          '<li>' + t('dcRule1') + '</li>' +
+          '<li>' + t('dcRule2') + '</li>' +
+          '<li>' + t('dcRule3') + '</li>' +
+          '<li>' + t('dcRule4') + '</li>' +
+        '</ul>' +
+      '</section>' +
+      '<section class="card" id="dc-history-card" hidden>' +
+        '<div class="card-head"><div><h3>' + t('dcRecent') + '</h3>' +
+        '<p class="sub">' + t('dcRecentSub') + '</p></div></div>' +
+        '<div id="dc-history"></div>' +
+      '</section>';
+
+    var input = document.getElementById('dc-input');
+    var result = document.getElementById('dc-result');
+    var goBtn = document.getElementById('dc-go');
+
+    var VERDICT = {
+      yes:         { cls: 'ok',      icon: ICONS.check, title: 'dcYes',         note: 'dcYesNote' },
+      mine:        { cls: 'mine',    icon: ICONS.check, title: 'dcMine',        note: 'dcMineNote' },
+      taken:       { cls: 'bad',     icon: ICONS.ban,   title: 'dcTaken',       note: 'dcTakenNote' },
+      no:          { cls: 'bad',     icon: ICONS.ban,   title: 'dcNo',          note: 'dcNoNote' },
+      unclear:     { cls: 'warn',    icon: ICONS.ban,   title: 'dcUnclear',     note: 'dcUnclearNote' },
+      unavailable: { cls: 'unknown', icon: ICONS.ban,   title: 'dcUnavailable', note: 'dcUnavailableNote' }
+    };
+
+    // The reason line. A case value from Metabase is a data label, so it
+    // goes through trCase() the way stages and lost reasons do — otherwise
+    // an Arabic user reads Arabic chrome wrapped around an English reason.
+    function reasonHtml(r, v) {
+      if (r.caseText) {
+        return '<p class="dc-case"><span class="dc-case-lbl">' + t('dcCaseLabel') + '</span>' +
+          esc(trCase(r.caseText)) + '</p>';
+      }
+      if (r.verdict === 'mine' || r.verdict === 'taken') {
+        // Deliberately no hunter name: the app shows a hunter only their
+        // own numbers, and "someone else got here first" is the whole of
+        // what this one needs to know.
+        return '<p class="dc-case">' + t(v.note, {
+          company: esc(r.company || ''), date: esc(fmtDate(r.raisedAt))
+        }) + '</p>';
+      }
+      return '<p class="dc-case">' + t(v.note) + '</p>';
+    }
+
+    function renderResult(r) {
+      var v = VERDICT[r.verdict] || VERDICT.unavailable;
+      result.innerHTML =
+        '<div class="dc-verdict ' + v.cls + '">' +
+          '<span class="dc-icon">' + v.icon + '</span>' +
+          '<div class="dc-body">' +
+            '<b class="dc-headline">' + t(v.title) + '</b>' +
+            '<span class="dc-domain">' + esc(r.domain) + '</span>' +
+            reasonHtml(r, v) +
+            (r.syncedAt ? '<p class="dc-fresh">' + t('dcFresh', { when: fmtDate(r.syncedAt) }) + '</p>' : '') +
+          '</div>' +
+          (r.verdict === 'yes'
+            ? '<button type="button" class="btn dc-submit" data-domain="' + esc(r.domain) + '">' + t('dcSubmitLead') + '</button>'
+            : r.verdict === 'mine'
+              ? '<a class="btn secondary dc-mine-link" href="#/leads">' + t('dcViewLeads') + '</a>'
+              : '') +
+        '</div>';
+      var sub = result.querySelector('.dc-submit');
+      if (sub) sub.addEventListener('click', function () {
+        prefillStoreUrl = 'https://' + sub.getAttribute('data-domain');
+        location.hash = '#/submit';
+      });
+    }
+
+    function renderHistory() {
+      document.getElementById('dc-history-card').hidden = !history.length;
+      document.getElementById('dc-history').innerHTML =
+        '<div class="tbl-wrap"><table class="mini"><thead><tr>' +
+          '<th>' + t('dcDomainCol') + '</th><th>' + t('dcVerdictCol') + '</th><th>' + t('dcCaseCol') + '</th>' +
+        '</tr></thead><tbody>' +
+        history.map(function (r) {
+          var v = VERDICT[r.verdict] || VERDICT.unavailable;
+          return '<tr><td><b>' + esc(r.domain) + '</b></td>' +
+            '<td><span class="dc-chip ' + v.cls + '">' + t(v.title) + '</span></td>' +
+            '<td>' + (r.caseText ? esc(trCase(r.caseText))
+              : r.verdict === 'mine' || r.verdict === 'taken'
+                ? esc(t(r.verdict === 'mine' ? 'dcMineShort' : 'dcTakenShort'))
+                : '<span class="cell-sub">' + t('dcNotListed') + '</span>') + '</td></tr>';
+        }).join('') +
+        '</tbody></table></div>';
+    }
+
+    function showError(key) {
+      result.innerHTML = '<div class="dc-verdict warn"><span class="dc-icon">' + ICONS.ban + '</span>' +
+        '<div class="dc-body"><b class="dc-headline">' + t(key) + '</b></div></div>';
+    }
+
+    document.getElementById('dc-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var domain = normalizeDomain(input.value);
+      if (!domain) { showError('dcEmpty'); input.focus(); return; }
+      if (!looksLikeDomain(domain)) { showError('dcInvalid'); input.focus(); return; }
+
+      goBtn.disabled = true;
+      result.innerHTML = '<div class="dc-verdict loading"><div class="dc-body">' +
+        '<b class="dc-headline">' + t('dcChecking', { domain: esc(domain) }) + '</b></div></div>';
+
+      resolveEligibility(domain).then(function (r) {
+        renderResult(r);
+        // Newest first, and one row per domain so re-checking the same
+        // one corrects the entry instead of stacking duplicates.
+        history = [r].concat(history.filter(function (h) { return h.domain !== r.domain; })).slice(0, 8);
+        renderHistory();
+      }).catch(function () {
+        renderResult({ verdict: 'unavailable', domain: domain, caseText: null, syncedAt: null });
+      }).then(function () { goBtn.disabled = false; });
+    });
+
+    input.focus();
   }
 
   /* Management-only ranking (replaces the shared leaderboard — hunters
@@ -1796,13 +2055,6 @@
       return { rows: rows, totals: totals, range: range, topId: data.topThisMonthId };
     }
 
-    function rangeNote(m) {
-      var r = m.range, n = fmtNum(m.totals.leads);
-      if (!r.from && !r.to) return t('rangeNoteAll', { n: n });
-      if (r.from && r.to) return t('rangeNote', { from: fmtDate(r.from), to: fmtDate(r.to), n: n });
-      if (r.from) return t('rangeNoteFrom', { from: fmtDate(r.from), n: n });
-      return t('rangeNoteTo', { to: fmtDate(r.to), n: n });
-    }
 
     // Percentage plus the raw counts underneath it: 25% off 4 leads and
     // 25% off 400 are the same number and very different facts.
@@ -1874,7 +2126,7 @@
 
     function renderAll() {
       var m = model();
-      document.getElementById('perf-range-note').textContent = rangeNote(m);
+      document.getElementById('perf-range-note').textContent = rangeNote(m.range, m.totals.leads);
       document.getElementById('perf-title').textContent =
         range.key === 'all' ? t('allTimeRanking') : t('periodRanking');
       renderSummary(m);
@@ -1908,7 +2160,7 @@
     // Presets live inside the picker's rail, so the filter bar is just
     // the one control. Nothing re-renders until Apply.
     var picker = createDateRangePicker({
-      presets: perfPresets(),
+      presets: datePresets(),
       value: range,
       max: NOW,
       onApply: function (v) { range = v; renderAll(); }
@@ -2739,346 +2991,406 @@
 
   /* ---- Manager dashboard ---- */
   function viewManager(content) {
-    var all = allLeads();
-    var s = statsFor(all);
-    var months = last12Months();
-    // Most people submitting leads in HubSpot have never signed into the
-    // app, so counting only registered users badly understates how many
-    // hunters are actually running. Count everyone with at least one lead
-    // and report sign-ups as the sub-figure instead.
-    var signedUp = EMPLOYEES.filter(function (e) { return leadsOf(e.id).length > 0; }).length;
-    var participants = signedUp + unregisteredHunterRows().length;
-    // Merchants who have paid but whose deal is still sitting in an open
-    // stage in HubSpot. The app counts them as won off the invoice, so
-    // this is purely a nudge to go and fix the CRM record.
-    var pendingClosure = all.filter(function (l) { return l.wonByInvoice; });
-    var pendingAmount = pendingClosure.reduce(function (a, l) { return a + l.amountNet; }, 0);
-
-    var byMonth = months.map(function (m) {
-      return all.filter(function (l) { return monthKey(l.createdAt) === m.key; }).length;
-    });
-    var revByMonth = months.map(function (m) {
-      return all.filter(function (l) { return l.stage === 'won' && monthKey(wonDate(l)) === m.key; })
-        .reduce(function (a, l) { return a + l.amountNet; }, 0);
-    });
-
-    // Department comparison
-    var depts = {};
-    EMPLOYEES.forEach(function (e) {
-      if (!depts[e.dept]) depts[e.dept] = { leads: 0, won: 0, revenue: 0 };
-      var ls = leadsOf(e.id);
-      depts[e.dept].leads += ls.length;
-      ls.forEach(function (l) {
-        if (l.stage === 'won') { depts[e.dept].won += 1; depts[e.dept].revenue += l.amountNet; }
-      });
-    });
-    var deptRows = Object.keys(depts).map(function (d) {
-      return { label: d, count: depts[d].leads, won: depts[d].won, revenue: depts[d].revenue };
-    }).sort(function (a, b) { return b.revenue - a.revenue; });
-
-    // Source performance — win rate over DECIDED leads only (same
-    // definition as everywhere else), hidden below 3 decided.
-    var sources = {};
-    all.forEach(function (l) {
-      if (!l.source) return; // portal submissions carry no source field
-      if (!sources[l.source]) sources[l.source] = { total: 0, won: 0, decided: 0 };
-      sources[l.source].total += 1;
-      if (closedDate(l)) sources[l.source].decided += 1;
-      if (l.stage === 'won') sources[l.source].won += 1;
-    });
-    var srcRows = Object.keys(sources).map(function (k) {
-      return { label: k, count: sources[k].won, total: sources[k].total, decided: sources[k].decided };
-    }).sort(function (a, b) { return b.count - a.count; });
-
-    // Month-over-month comparison (this month vs last)
-    var thisKey = monthKey(NOW);
-    var lastKey = monthKey(new Date(NOW.getFullYear(), NOW.getMonth() - 1, 1));
-    function aggMonth(key) {
-      var wonM = all.filter(function (l) { return l.stage === 'won' && monthKey(wonDate(l)) === key; });
-      return {
-        leads: all.filter(function (l) { return monthKey(l.createdAt) === key; }).length,
-        won: wonM.length,
-        revenue: wonM.reduce(function (a, l) { return a + l.amountNet; }, 0),
-        commission: wonM.reduce(function (a, l) { return a + commissionOf(l); }, 0)
-      };
-    }
-    var mThis = aggMonth(thisKey), mLast = aggMonth(lastKey);
-    function momDelta(cur, prev) {
-      if (!prev && !cur) return '<span class="mom-flat">—</span>';
-      if (!prev) return '<span class="mom-up">' + t('newDelta') + '</span>';
-      var ch = (cur - prev) / prev;
-      var cls = ch >= 0 ? 'mom-up' : 'mom-down';
-      return '<span class="' + cls + '">' + (ch >= 0 ? '▲' : '▼') + ' ' + Math.abs(Math.round(ch * 100)) + '%</span>';
-    }
-    var momRows = [
-      [t('momLeads'), fmtNum(mThis.leads), fmtNum(mLast.leads), momDelta(mThis.leads, mLast.leads)],
-      [t('momStores'), fmtNum(mThis.won), fmtNum(mLast.won), momDelta(mThis.won, mLast.won)],
-      [t('momRevenue'), fmtMoneyC(mThis.revenue), fmtMoneyC(mLast.revenue), momDelta(mThis.revenue, mLast.revenue)],
-      [t('momCommission'), fmtMoneyC(mThis.commission), fmtMoneyC(mLast.commission), momDelta(mThis.commission, mLast.commission)]
-    ];
-
-    // Top packages sold (won deals by Zid plan) — the plan names come
-    // straight from Metabase's Purchasable Name (via subscriptions), not
-    // a fixed list, so whatever plans actually sold show up here.
-    var planAgg = {};
-    all.forEach(function (l) {
-      if (l.stage !== 'won' || !l.plan) return;
-      if (!planAgg[l.plan]) planAgg[l.plan] = { count: 0, revenue: 0 };
-      planAgg[l.plan].count += 1;
-      planAgg[l.plan].revenue += l.amountNet;
-    });
-    var planNames = Object.keys(planAgg).sort(function (a, b) { return planAgg[b].revenue - planAgg[a].revenue; });
-    var planRevTotal = planNames.reduce(function (a, name) { return a + planAgg[name].revenue; }, 0) || 1;
-    var PLAN_SHADES = ['f1', 'f2', 'f3', 'f4', 'f5', 'f6'];
-    var PLAN_CLS = {};
-    planNames.forEach(function (name, i) { PLAN_CLS[name] = PLAN_SHADES[i % PLAN_SHADES.length]; });
-
-    // Category performance of won stores
-    var catAgg = {};
-    all.forEach(function (l) {
-      if (l.stage !== 'won') return;
-      if (!catAgg[l.industry]) catAgg[l.industry] = { count: 0, revenue: 0 };
-      catAgg[l.industry].count += 1;
-      catAgg[l.industry].revenue += l.amountNet;
-    });
-    var catRows = Object.keys(catAgg).map(function (k) {
-      return { label: k, count: catAgg[k].count, revenue: catAgg[k].revenue };
-    }).sort(function (a, b) { return b.revenue - a.revenue; }).slice(0, 6);
-
-    // Sales rep performance on hunter leads
-        var reps = {};
-    all.forEach(function (l) {
-      if (!reps[l.salesOwner]) reps[l.salesOwner] = { leads: 0, won: 0, lost: 0, unq: 0, open: 0, revenue: 0, stages: {} };
-      var r = reps[l.salesOwner];
-      r.leads += 1;
-      if (l.stage === 'won') { r.won += 1; r.revenue += l.amountNet; }
-      else if (l.stage === 'lost') r.lost += 1;
-      else if (l.stage === 'unqualified') r.unq += 1;
-      else { r.open += 1; r.stages[l.stage] = (r.stages[l.stage] || 0) + 1; }
-    });
-    var repRows = Object.keys(reps).map(function (name) {
-      var r = reps[name];
-      var decided = r.won + r.lost + r.unq;
-      return { name: name, r: r, winRate: decided >= 3 ? r.won / decided : null };
-    }).sort(function (a, b) { return b.r.revenue - a.r.revenue; });
-
-    // Weighted forecast from the open pipeline (stage probability x value)
-    var STAGE_WEIGHTS = { new: 0.1, prospect: 0.2, qualified: 0.35, sql: 0.5, commit: 0.75, reengage: 0.05 };
-    var forecast = all.reduce(function (a, l) {
-      return isOpen(l) ? a + l.amountNet * (STAGE_WEIGHTS[l.stage] || 0) : a;
-    }, 0);
-
-    // Coaching: enough leads, weak conversion
-    var lb = leaderboardData().rows;
-    var avgConv = s.conversion;
-    var coach = lb.filter(function (r) { return r.s.total >= 8 && r.s.conversion < avgConv * 0.55; })
-      .sort(function (a, b) { return a.s.conversion - b.s.conversion; });
-
-    var reasonsLost = reasonTiles(s.lostReasons, s.lostNoReason);
-    var reasonsUnq = reasonTiles(s.unqualReasons, s.unqualNoReason);
-
-    // Live pipeline board: current count + value sitting in each stage
-    var stageValue = {};
-    STAGES.forEach(function (st) { stageValue[st.id] = 0; });
-    all.forEach(function (l) { stageValue[l.stage] += l.amountNet; });
-    var stageNowRows = STAGES.map(function (st) {
-      var count = s.byStage[st.id];
-      var val;
-      if (st.group === 'open') val = fmtMoneyC(stageValue[st.id]);
-      else if (st.group === 'won') val = '<b class="money-pos">' + fmtMoneyC(stageValue[st.id]) + '</b>';
-      else val = '—';
-      return '<tr><td>' + stagePill(st.id) + '</td><td class="num"><b>' + fmtNum(count) + '</b></td><td class="num">' + val + '</td></tr>';
-    }).join('');
+    var range = { key: 'all', from: null, to: null };
 
     content.innerHTML =
-      '<div class="kpis">' +
-        tile(t('activeHunters'), fmtNum(participants), t('ofSignedUp', { n: fmtNum(signedUp) })) +
-        tile(t('totalLeads'), fmtNum(s.total), t('currentlyOpen', { n: fmtNum(s.open) })) +
-        tile(t('newStores'), fmtNum(s.won), (s.avgCycleDays ? t('avgCycle', { n: s.avgCycleDays }) : t('wonMerchants'))) +
-        tile(t('programConv'), fmtPct(s.conversion), t('convSub')) +
-        tile(t('revenueClosed'), fmtMoneyC(s.revenueNet), s.won ? t('avgPerStore', { v: fmtMoneyC(s.revenueNet / s.won) }) : t('exVat')) +
-        tile(t('revenueClosedGross'), fmtMoneyC(s.revenueGross), s.won ? t('avgPerStoreInc', { v: fmtMoneyC(s.revenueGross / s.won) }) : t('incVat')) +
-        tile(t('pipelineValue'), fmtMoneyC(s.pipelineValue), t('openExVat')) +
-        tile(t('commMonthTile'), fmtMoneyC(commThisMonthOf(all)), t('wonThisMonthSub')) +
-        tile(t('commOwedPaid'), fmtMoneyC(s.commission), t('alreadyPaid', { v: fmtMoneyC(s.commissionPaid) })) +
-        tile(t('forecastTile'), fmtMoneyC(forecast), t('forecastSub')) +
-      '</div>' +
+      '<div class="filter-bar"><div id="ov-picker"></div>' +
+      '<p class="sub" id="ov-range-note"></p></div>' +
+      '<div id="ov-body"></div>';
 
-      // Only worth showing when there is something to chase; an
-      // always-present "0" tile would just be noise on the dashboard.
-      (pendingClosure.length ? pendingClosureCard(pendingClosure, pendingAmount) : '') +
+    var picker = createDateRangePicker({
+      presets: datePresets(),
+      value: range,
+      max: NOW,
+      onApply: function (v) { range = v; render(); }
+    });
+    document.getElementById('ov-picker').appendChild(picker.el);
 
-      '<div class="grid-2">' +
+    function render() {
+    var period = { from: range.from, to: range.to ? endOfDay(range.to) : null };
+    var inRange = rangePredicate(period);
+    // `scoped` decides wording, not arithmetic: several tiles describe the
+    // pipeline as it stands rather than what happened in a window, and
+    // under a filter they are counting a subset — the caption has to say so
+    // or the tile quietly means something else than its label.
+    var scoped = !!inRange;
+    var all = inRange ? allLeads().filter(inRange) : allLeads();
+      var s = statsFor(all);
+      var months = last12Months();
+      // Most people submitting leads in HubSpot have never signed into the
+      // app, so counting only registered users badly understates how many
+      // hunters are actually running. Count everyone with at least one lead
+      // and report sign-ups as the sub-figure instead.
+      function leadsOfScoped(id) {
+        var ls = leadsOf(id);
+        return inRange ? ls.filter(inRange) : ls;
+      }
+      var signedUp = EMPLOYEES.filter(function (e) { return leadsOfScoped(e.id).length > 0; }).length;
+      var participants = signedUp + unregisteredHunterRows(inRange)
+        .filter(function (r) { return r.s.total > 0; }).length;
+      // Merchants who have paid but whose deal is still sitting in an open
+      // stage in HubSpot. The app counts them as won off the invoice, so
+      // this is purely a nudge to go and fix the CRM record.
+      var pendingClosure = all.filter(function (l) { return l.wonByInvoice; });
+      var pendingAmount = pendingClosure.reduce(function (a, l) { return a + l.amountNet; }, 0);
+
+      var byMonth = months.map(function (m) {
+        return all.filter(function (l) { return monthKey(l.createdAt) === m.key; }).length;
+      });
+      var revByMonth = months.map(function (m) {
+        return all.filter(function (l) { return l.stage === 'won' && monthKey(wonDate(l)) === m.key; })
+          .reduce(function (a, l) { return a + l.amountNet; }, 0);
+      });
+
+      // Department comparison
+      var depts = {};
+      EMPLOYEES.forEach(function (e) {
+        if (!depts[e.dept]) depts[e.dept] = { leads: 0, won: 0, revenue: 0 };
+        var ls = leadsOfScoped(e.id);
+        depts[e.dept].leads += ls.length;
+        ls.forEach(function (l) {
+          if (l.stage === 'won') { depts[e.dept].won += 1; depts[e.dept].revenue += l.amountNet; }
+        });
+      });
+      var deptRows = Object.keys(depts).map(function (d) {
+        return { label: d, count: depts[d].leads, won: depts[d].won, revenue: depts[d].revenue };
+      }).sort(function (a, b) { return b.revenue - a.revenue; });
+
+      // Source performance — win rate over DECIDED leads only (same
+      // definition as everywhere else), hidden below 3 decided.
+      var sources = {};
+      all.forEach(function (l) {
+        if (!l.source) return; // portal submissions carry no source field
+        if (!sources[l.source]) sources[l.source] = { total: 0, won: 0, decided: 0 };
+        sources[l.source].total += 1;
+        if (closedDate(l)) sources[l.source].decided += 1;
+        if (l.stage === 'won') sources[l.source].won += 1;
+      });
+      var srcRows = Object.keys(sources).map(function (k) {
+        return { label: k, count: sources[k].won, total: sources[k].total, decided: sources[k].decided };
+      }).sort(function (a, b) { return b.count - a.count; });
+
+      // Month-over-month comparison (this month vs last)
+      var thisKey = monthKey(NOW);
+      var lastKey = monthKey(new Date(NOW.getFullYear(), NOW.getMonth() - 1, 1));
+      // Deliberately the UNFILTERED list. This card compares two named
+      // months and says so in its own column headers; running it through
+      // the window would report "0 leads this month" whenever the window
+      // excludes July, which reads as a collapse rather than as a filter.
+      var momAll = allLeads();
+      function aggMonth(key) {
+        var wonM = momAll.filter(function (l) { return l.stage === 'won' && monthKey(wonDate(l)) === key; });
+        return {
+          leads: momAll.filter(function (l) { return monthKey(l.createdAt) === key; }).length,
+          won: wonM.length,
+          revenue: wonM.reduce(function (a, l) { return a + l.amountNet; }, 0),
+          commission: wonM.reduce(function (a, l) { return a + commissionOf(l); }, 0)
+        };
+      }
+      var mThis = aggMonth(thisKey), mLast = aggMonth(lastKey);
+      function momDelta(cur, prev) {
+        if (!prev && !cur) return '<span class="mom-flat">—</span>';
+        if (!prev) return '<span class="mom-up">' + t('newDelta') + '</span>';
+        var ch = (cur - prev) / prev;
+        var cls = ch >= 0 ? 'mom-up' : 'mom-down';
+        return '<span class="' + cls + '">' + (ch >= 0 ? '▲' : '▼') + ' ' + Math.abs(Math.round(ch * 100)) + '%</span>';
+      }
+      var momRows = [
+        [t('momLeads'), fmtNum(mThis.leads), fmtNum(mLast.leads), momDelta(mThis.leads, mLast.leads)],
+        [t('momStores'), fmtNum(mThis.won), fmtNum(mLast.won), momDelta(mThis.won, mLast.won)],
+        [t('momRevenue'), fmtMoneyC(mThis.revenue), fmtMoneyC(mLast.revenue), momDelta(mThis.revenue, mLast.revenue)],
+        [t('momCommission'), fmtMoneyC(mThis.commission), fmtMoneyC(mLast.commission), momDelta(mThis.commission, mLast.commission)]
+      ];
+
+      // Top packages sold (won deals by Zid plan) — the plan names come
+      // straight from Metabase's Purchasable Name (via subscriptions), not
+      // a fixed list, so whatever plans actually sold show up here.
+      var planAgg = {};
+      all.forEach(function (l) {
+        if (l.stage !== 'won' || !l.plan) return;
+        if (!planAgg[l.plan]) planAgg[l.plan] = { count: 0, revenue: 0 };
+        planAgg[l.plan].count += 1;
+        planAgg[l.plan].revenue += l.amountNet;
+      });
+      var planNames = Object.keys(planAgg).sort(function (a, b) { return planAgg[b].revenue - planAgg[a].revenue; });
+      var planRevTotal = planNames.reduce(function (a, name) { return a + planAgg[name].revenue; }, 0) || 1;
+      var PLAN_SHADES = ['f1', 'f2', 'f3', 'f4', 'f5', 'f6'];
+      var PLAN_CLS = {};
+      planNames.forEach(function (name, i) { PLAN_CLS[name] = PLAN_SHADES[i % PLAN_SHADES.length]; });
+
+      // Category performance of won stores
+      var catAgg = {};
+      all.forEach(function (l) {
+        if (l.stage !== 'won') return;
+        if (!catAgg[l.industry]) catAgg[l.industry] = { count: 0, revenue: 0 };
+        catAgg[l.industry].count += 1;
+        catAgg[l.industry].revenue += l.amountNet;
+      });
+      var catRows = Object.keys(catAgg).map(function (k) {
+        return { label: k, count: catAgg[k].count, revenue: catAgg[k].revenue };
+      }).sort(function (a, b) { return b.revenue - a.revenue; }).slice(0, 6);
+
+      // Sales rep performance on hunter leads
+          var reps = {};
+      all.forEach(function (l) {
+        if (!reps[l.salesOwner]) reps[l.salesOwner] = { leads: 0, won: 0, lost: 0, unq: 0, open: 0, revenue: 0, stages: {} };
+        var r = reps[l.salesOwner];
+        r.leads += 1;
+        if (l.stage === 'won') { r.won += 1; r.revenue += l.amountNet; }
+        else if (l.stage === 'lost') r.lost += 1;
+        else if (l.stage === 'unqualified') r.unq += 1;
+        else { r.open += 1; r.stages[l.stage] = (r.stages[l.stage] || 0) + 1; }
+      });
+      var repRows = Object.keys(reps).map(function (name) {
+        var r = reps[name];
+        var decided = r.won + r.lost + r.unq;
+        return { name: name, r: r, winRate: decided >= 3 ? r.won / decided : null };
+      }).sort(function (a, b) { return b.r.revenue - a.r.revenue; });
+
+      // Weighted forecast from the open pipeline (stage probability x value)
+      var STAGE_WEIGHTS = { new: 0.1, prospect: 0.2, qualified: 0.35, sql: 0.5, commit: 0.75, reengage: 0.05 };
+      var forecast = all.reduce(function (a, l) {
+        return isOpen(l) ? a + l.amountNet * (STAGE_WEIGHTS[l.stage] || 0) : a;
+      }, 0);
+
+      // Coaching: enough leads, weak conversion
+      var lb = leaderboardData(inRange).rows;
+      var avgConv = s.conversion;
+      var coach = lb.filter(function (r) { return r.s.total >= 8 && r.s.conversion < avgConv * 0.55; })
+        .sort(function (a, b) { return a.s.conversion - b.s.conversion; });
+
+      var reasonsLost = reasonTiles(s.lostReasons, s.lostNoReason);
+      var reasonsUnq = reasonTiles(s.unqualReasons, s.unqualNoReason);
+
+      // Live pipeline board: current count + value sitting in each stage
+      var stageValue = {};
+      STAGES.forEach(function (st) { stageValue[st.id] = 0; });
+      all.forEach(function (l) { stageValue[l.stage] += l.amountNet; });
+      var stageNowRows = STAGES.map(function (st) {
+        var count = s.byStage[st.id];
+        var val;
+        if (st.group === 'open') val = fmtMoneyC(stageValue[st.id]);
+        else if (st.group === 'won') val = '<b class="money-pos">' + fmtMoneyC(stageValue[st.id]) + '</b>';
+        else val = '—';
+        return '<tr><td>' + stagePill(st.id) + '</td><td class="num"><b>' + fmtNum(count) + '</b></td><td class="num">' + val + '</td></tr>';
+      }).join('');
+
+      body.innerHTML =
+        '<div class="kpis">' +
+          // Flow tiles — counts and sums of what happened — scope cleanly and
+          // need no rewording. The three below them do (see `scoped`).
+          tile(t('activeHunters'), fmtNum(participants),
+            scoped ? t('submittedInPeriod') : t('ofSignedUp', { n: fmtNum(signedUp) })) +
+          tile(t('totalLeads'), fmtNum(s.total),
+            scoped ? t('ofThoseOpen', { n: fmtNum(s.open) }) : t('currentlyOpen', { n: fmtNum(s.open) })) +
+          tile(t('newStores'), fmtNum(s.won), (s.avgCycleDays ? t('avgCycle', { n: s.avgCycleDays }) : t('wonMerchants'))) +
+          tile(t('programConv'), fmtPct(s.conversion), t('convSub')) +
+          tile(t('revenueClosed'), fmtMoneyC(s.revenueNet), s.won ? t('avgPerStore', { v: fmtMoneyC(s.revenueNet / s.won) }) : t('exVat')) +
+          tile(t('revenueClosedGross'), fmtMoneyC(s.revenueGross), s.won ? t('avgPerStoreInc', { v: fmtMoneyC(s.revenueGross / s.won) }) : t('incVat')) +
+          // Pipeline and forecast describe the pipeline as it stands. Under a
+          // window they are the still-open subset submitted in it — a real
+          // number, but not "the pipeline", so the caption says which.
+          tile(t('pipelineValue'), fmtMoneyC(s.pipelineValue), scoped ? t('openExVatScoped') : t('openExVat')) +
+          // "This month" inside a "last quarter" view is either wrong or
+          // redundant, so the tile drops out under a window — where the
+          // lifetime commission tile below is already the period's total,
+          // and keeping both would print the same figure twice.
+          (scoped ? '' : tile(t('commMonthTile'), fmtMoneyC(commThisMonthOf(all)), t('wonThisMonthSub'))) +
+          tile(scoped ? t('commPeriodTile') : t('commOwedPaid'), fmtMoneyC(s.commission),
+            t('alreadyPaid', { v: fmtMoneyC(s.commissionPaid) })) +
+          tile(t('forecastTile'), fmtMoneyC(forecast), scoped ? t('forecastSubScoped') : t('forecastSub')) +
+        '</div>' +
+
+        // Only worth showing when there is something to chase; an
+        // always-present "0" tile would just be noise on the dashboard.
+        (pendingClosure.length ? pendingClosureCard(pendingClosure, pendingAmount) : '') +
+
+        '<div class="grid-2">' +
+          '<section class="card">' +
+            '<div class="card-head"><div><h3>' + t('momTitle') + '</h3>' +
+            '<p class="sub">' + t('momSub', { m1: NOW.toLocaleString(isAr() ? 'ar' : 'en', { month: 'long' }), d: NOW.getDate(), m2: new Date(NOW.getFullYear(), NOW.getMonth() - 1, 1).toLocaleString(isAr() ? 'ar' : 'en', { month: 'long' }) }) + '</p></div></div>' +
+            '<div class="tbl-wrap"><table class="mini">' +
+              '<thead><tr><th>' + t('metric') + '</th><th class="num">' + t('thisMonth') + '</th><th class="num">' + t('lastMonth') + '</th><th class="num">' + t('change') + '</th></tr></thead>' +
+              '<tbody>' + momRows.map(function (r) {
+                return '<tr><td>' + r[0] + '</td><td class="num"><b>' + r[1] + '</b></td><td class="num">' + r[2] + '</td><td class="num">' + r[3] + '</td></tr>';
+              }).join('') + '</tbody>' +
+            '</table></div>' +
+          '</section>' +
+          '<section class="card">' +
+            '<div class="card-head"><div><h3>' + t('topPackages') + '</h3><p class="sub">' + t('topPackagesSub') + '</p></div></div>' +
+            (planNames.length ? '<div class="legend">' + planNames.map(function (name) {
+              return '<span class="lg"><i class="sw ' + PLAN_CLS[name] + '"></i>' + esc(trPlan(name)) + '</span>';
+            }).join('') + '</div>' +
+            stackedBarSVG(planNames.map(function (name) {
+              return { label: t('zidPlan', { name: trPlan(name) }), count: planAgg[name].revenue, cls: PLAN_CLS[name] };
+            }), { money: true, aria: 'Revenue share by package' }) +
+            '<div class="tbl-wrap"><table class="mini">' +
+              '<thead><tr><th>' + t('packageCol') + '</th><th class="num">' + t('stores') + '</th><th class="num">' + t('revenue') + '</th><th class="num">' + t('share') + '</th></tr></thead>' +
+              '<tbody>' + planNames.map(function (name) {
+                var a = planAgg[name];
+                return '<tr><td>' + t('zidPlan', { name: esc(trPlan(name)) }) + '</td><td class="num">' + fmtNum(a.count) + '</td><td class="num"><b>' + fmtMoneyC(a.revenue) + '</b></td><td class="num">' + fmtPct(a.revenue / planRevTotal, 0) + '</td></tr>';
+              }).join('') + '</tbody>' +
+            '</table></div>'
+              : '<div class="empty">' + t('noPackagesYet') + '</div>') +
+          '</section>' +
+        '</div>' +
+
+        '<div class="grid-2">' +
+          chartCard({
+            title: t('programFunnel'), subtitle: t('programFunnelSub'),
+            svg: funnelSVG(trFunnel(s.funnel)),
+            table: { head: [t('stage'), t('reached')], rows: s.funnel.map(function (f) { return [trStage(f.stage), fmtNum(f.count)]; }) }
+          }) +
+          '<section class="card">' +
+            '<div class="card-head"><div><h3>' + t('stageNow') + '</h3>' +
+            '<p class="sub">' + t('stageNowSub') + '</p></div></div>' +
+            '<div class="tbl-wrap"><table class="mini">' +
+              '<thead><tr><th>' + t('stage') + '</th><th class="num">' + t('deals') + '</th><th class="num">' + t('valueExVat') + '</th></tr></thead>' +
+              '<tbody>' + stageNowRows + '</tbody>' +
+            '</table></div>' +
+          '</section>' +
+        '</div>' +
+
+        '<div class="grid-2">' +
+          '<section class="card">' +
+            '<div class="card-head"><div><h3>' + t('outcomeSplit') + '</h3><p class="sub">' + t('allToDate', { n: fmtNum(s.total) }) + '</p></div></div>' +
+            '<div class="legend">' +
+              '<span class="lg"><i class="sw good"></i>' + t('won') + '</span><span class="lg"><i class="sw critical"></i>' + t('lost') + '</span>' +
+              '<span class="lg"><i class="sw gray"></i>' + t('unqualified') + '</span><span class="lg"><i class="sw s1"></i>' + t('stillOpen') + '</span>' +
+            '</div>' +
+            stackedBarSVG([
+              { label: t('closedWon'), count: s.won, cls: 'good' },
+              { label: t('closedLost'), count: s.lost, cls: 'critical' },
+              { label: t('unqualified'), count: s.unqualified, cls: 'gray' },
+              { label: t('stillOpen'), count: s.open, cls: 's1' }
+            ]) +
+            '<div class="tbl-wrap"><table class="mini">' +
+              '<thead><tr><th>' + t('outcome') + '</th><th class="num">' + t('leads') + '</th><th class="num">' + t('amount') + '</th></tr></thead>' +
+              '<tbody>' +
+                '<tr><td>' + t('closedWon') + '</td><td class="num"><b>' + fmtNum(s.won) + '</b></td><td class="num"><b class="money-pos">' + fmtMoneyC(s.revenueNet) + '</b> ' + t('revenueWord') + '</td></tr>' +
+                '<tr><td>' + t('stillOpen') + '</td><td class="num"><b>' + fmtNum(s.open) + '</b></td><td class="num">' + t('inPlayWord', { v: fmtMoneyC(s.pipelineValue) }) + '</td></tr>' +
+                '<tr><td>' + t('closedLost') + '</td><td class="num"><b>' + fmtNum(s.lost) + '</b></td><td class="num">—</td></tr>' +
+                '<tr><td>' + t('unqualified') + '</td><td class="num"><b>' + fmtNum(s.unqualified) + '</b></td><td class="num">—</td></tr>' +
+              '</tbody>' +
+            '</table></div>' +
+          '</section>' +
+          chartCard({
+            title: t('leadsByMonth'), subtitle: t('leadsByMonthProgram'),
+            svg: columnsSVG(months.map(function (m) { return m.label; }), byMonth, { aria: 'Program leads by month' }),
+            table: { head: [t('month'), t('leads')], rows: months.map(function (m, i) { return [m.label, fmtNum(byMonth[i])]; }) }
+          }) +
+        '</div>' +
+
         '<section class="card">' +
-          '<div class="card-head"><div><h3>' + t('momTitle') + '</h3>' +
-          '<p class="sub">' + t('momSub', { m1: NOW.toLocaleString(isAr() ? 'ar' : 'en', { month: 'long' }), d: NOW.getDate(), m2: new Date(NOW.getFullYear(), NOW.getMonth() - 1, 1).toLocaleString(isAr() ? 'ar' : 'en', { month: 'long' }) }) + '</p></div></div>' +
-          '<div class="tbl-wrap"><table class="mini">' +
-            '<thead><tr><th>' + t('metric') + '</th><th class="num">' + t('thisMonth') + '</th><th class="num">' + t('lastMonth') + '</th><th class="num">' + t('change') + '</th></tr></thead>' +
-            '<tbody>' + momRows.map(function (r) {
-              return '<tr><td>' + r[0] + '</td><td class="num"><b>' + r[1] + '</b></td><td class="num">' + r[2] + '</td><td class="num">' + r[3] + '</td></tr>';
+          '<div class="card-head"><div><h3>' + t('repPerf') + '</h3>' +
+          '<p class="sub">' + t('repPerfSub') + '</p></div></div>' +
+          '<div class="tbl-wrap"><table>' +
+            '<thead><tr><th>' + t('salesRep') + '</th><th class="num">' + t('hunterLeads') + '</th><th class="num">' + t('won') + '</th><th class="num">' + t('lost') + '</th><th class="num">' + t('unqualified') + '</th><th class="num">' + t('winRate') + '</th><th class="num">' + t('revenueWon') + '</th><th>' + t('openNow') + '</th></tr></thead>' +
+            '<tbody>' + repRows.map(function (row) {
+              var r = row.r;
+              var stageBits = Object.keys(r.stages).map(function (sid) {
+                return r.stages[sid] + ' ' + trStage(STAGE_BY_ID[sid] ? STAGE_BY_ID[sid].label : sid);
+              }).join(' · ');
+              return '<tr>' +
+                '<td><b>' + esc(row.name) + '</b></td>' +
+                '<td class="num">' + fmtNum(r.leads) + '</td>' +
+                '<td class="num"><b>' + fmtNum(r.won) + '</b></td>' +
+                '<td class="num">' + fmtNum(r.lost) + '</td>' +
+                '<td class="num">' + fmtNum(r.unq) + '</td>' +
+                '<td class="num">' + (row.winRate === null ? '—' : fmtPct(row.winRate, 0)) + '</td>' +
+                '<td class="num"><b>' + (r.revenue ? fmtMoneyC(r.revenue) : '—') + '</b></td>' +
+                '<td>' + (r.open ? '<b>' + fmtNum(r.open) + '</b><span class="cell-sub">' + esc(stageBits) + '</span>' : '—') + '</td>' +
+              '</tr>';
             }).join('') + '</tbody>' +
           '</table></div>' +
         '</section>' +
-        '<section class="card">' +
-          '<div class="card-head"><div><h3>' + t('topPackages') + '</h3><p class="sub">' + t('topPackagesSub') + '</p></div></div>' +
-          (planNames.length ? '<div class="legend">' + planNames.map(function (name) {
-            return '<span class="lg"><i class="sw ' + PLAN_CLS[name] + '"></i>' + esc(trPlan(name)) + '</span>';
-          }).join('') + '</div>' +
-          stackedBarSVG(planNames.map(function (name) {
-            return { label: t('zidPlan', { name: trPlan(name) }), count: planAgg[name].revenue, cls: PLAN_CLS[name] };
-          }), { money: true, aria: 'Revenue share by package' }) +
-          '<div class="tbl-wrap"><table class="mini">' +
-            '<thead><tr><th>' + t('packageCol') + '</th><th class="num">' + t('stores') + '</th><th class="num">' + t('revenue') + '</th><th class="num">' + t('share') + '</th></tr></thead>' +
-            '<tbody>' + planNames.map(function (name) {
-              var a = planAgg[name];
-              return '<tr><td>' + t('zidPlan', { name: esc(trPlan(name)) }) + '</td><td class="num">' + fmtNum(a.count) + '</td><td class="num"><b>' + fmtMoneyC(a.revenue) + '</b></td><td class="num">' + fmtPct(a.revenue / planRevTotal, 0) + '</td></tr>';
-            }).join('') + '</tbody>' +
-          '</table></div>'
-            : '<div class="empty">' + t('noPackagesYet') + '</div>') +
-        '</section>' +
-      '</div>' +
 
-      '<div class="grid-2">' +
-        chartCard({
-          title: t('programFunnel'), subtitle: t('programFunnelSub'),
-          svg: funnelSVG(trFunnel(s.funnel)),
-          table: { head: [t('stage'), t('reached')], rows: s.funnel.map(function (f) { return [trStage(f.stage), fmtNum(f.count)]; }) }
-        }) +
-        '<section class="card">' +
-          '<div class="card-head"><div><h3>' + t('stageNow') + '</h3>' +
-          '<p class="sub">' + t('stageNowSub') + '</p></div></div>' +
-          '<div class="tbl-wrap"><table class="mini">' +
-            '<thead><tr><th>' + t('stage') + '</th><th class="num">' + t('deals') + '</th><th class="num">' + t('valueExVat') + '</th></tr></thead>' +
-            '<tbody>' + stageNowRows + '</tbody>' +
-          '</table></div>' +
-        '</section>' +
-      '</div>' +
+        '<div class="grid-2">' +
+          chartCard({
+            title: t('revByMonth'), subtitle: t('revByMonthSub'),
+            svg: columnsSVG(months.map(function (m) { return m.label; }), revByMonth, { money: true, compact: true, aria: 'Revenue by month' }),
+            table: { head: [t('month'), t('revenueSar')], rows: months.map(function (m, i) { return [m.label, fmtNum(revByMonth[i])]; }) }
+          }) +
+          '<section class="card">' +
+            '<div class="card-head"><div><h3>' + t('deptComparison') + '</h3><p class="sub">' + t('deptSub') + '</p></div></div>' +
+            '<div class="tbl-wrap"><table class="mini">' +
+              '<thead><tr><th>' + t('department') + '</th><th class="num">' + t('leads') + '</th><th class="num">' + t('won') + '</th><th class="num">' + t('revenue') + '</th></tr></thead>' +
+              '<tbody>' + deptRows.map(function (d) {
+                return '<tr><td>' + esc(trDept(d.label)) + '</td><td class="num">' + fmtNum(d.count) + '</td><td class="num">' + fmtNum(d.won) + '</td><td class="num"><b>' + fmtMoneyC(d.revenue) + '</b></td></tr>';
+              }).join('') + '</tbody>' +
+            '</table></div>' +
+          '</section>' +
+        '</div>' +
 
-      '<div class="grid-2">' +
-        '<section class="card">' +
-          '<div class="card-head"><div><h3>' + t('outcomeSplit') + '</h3><p class="sub">' + t('allToDate', { n: fmtNum(s.total) }) + '</p></div></div>' +
-          '<div class="legend">' +
-            '<span class="lg"><i class="sw good"></i>' + t('won') + '</span><span class="lg"><i class="sw critical"></i>' + t('lost') + '</span>' +
-            '<span class="lg"><i class="sw gray"></i>' + t('unqualified') + '</span><span class="lg"><i class="sw s1"></i>' + t('stillOpen') + '</span>' +
-          '</div>' +
-          stackedBarSVG([
-            { label: t('closedWon'), count: s.won, cls: 'good' },
-            { label: t('closedLost'), count: s.lost, cls: 'critical' },
-            { label: t('unqualified'), count: s.unqualified, cls: 'gray' },
-            { label: t('stillOpen'), count: s.open, cls: 's1' }
-          ]) +
-          '<div class="tbl-wrap"><table class="mini">' +
-            '<thead><tr><th>' + t('outcome') + '</th><th class="num">' + t('leads') + '</th><th class="num">' + t('amount') + '</th></tr></thead>' +
-            '<tbody>' +
-              '<tr><td>' + t('closedWon') + '</td><td class="num"><b>' + fmtNum(s.won) + '</b></td><td class="num"><b class="money-pos">' + fmtMoneyC(s.revenueNet) + '</b> ' + t('revenueWord') + '</td></tr>' +
-              '<tr><td>' + t('stillOpen') + '</td><td class="num"><b>' + fmtNum(s.open) + '</b></td><td class="num">' + t('inPlayWord', { v: fmtMoneyC(s.pipelineValue) }) + '</td></tr>' +
-              '<tr><td>' + t('closedLost') + '</td><td class="num"><b>' + fmtNum(s.lost) + '</b></td><td class="num">—</td></tr>' +
-              '<tr><td>' + t('unqualified') + '</td><td class="num"><b>' + fmtNum(s.unqualified) + '</b></td><td class="num">—</td></tr>' +
-            '</tbody>' +
-          '</table></div>' +
-        '</section>' +
-        chartCard({
-          title: t('leadsByMonth'), subtitle: t('leadsByMonthProgram'),
-          svg: columnsSVG(months.map(function (m) { return m.label; }), byMonth, { aria: 'Program leads by month' }),
-          table: { head: [t('month'), t('leads')], rows: months.map(function (m, i) { return [m.label, fmtNum(byMonth[i])]; }) }
-        }) +
-      '</div>' +
+        '<div class="grid-2">' +
+          reasonTilesCard(t('topLostReasons'), t('programWideLost', { n: fmtNum(s.everLost) }), reasonsLost, 'critical') +
+          reasonTilesCard(t('whyUnqProgram'), t('programWideUnq', { n: fmtNum(s.everUnqualified) }), reasonsUnq, 'gray') +
+        '</div>' +
 
-      '<section class="card">' +
-        '<div class="card-head"><div><h3>' + t('repPerf') + '</h3>' +
-        '<p class="sub">' + t('repPerfSub') + '</p></div></div>' +
-        '<div class="tbl-wrap"><table>' +
-          '<thead><tr><th>' + t('salesRep') + '</th><th class="num">' + t('hunterLeads') + '</th><th class="num">' + t('won') + '</th><th class="num">' + t('lost') + '</th><th class="num">' + t('unqualified') + '</th><th class="num">' + t('winRate') + '</th><th class="num">' + t('revenueWon') + '</th><th>' + t('openNow') + '</th></tr></thead>' +
-          '<tbody>' + repRows.map(function (row) {
-            var r = row.r;
-            var stageBits = Object.keys(r.stages).map(function (sid) {
-              return r.stages[sid] + ' ' + trStage(STAGE_BY_ID[sid] ? STAGE_BY_ID[sid].label : sid);
-            }).join(' · ');
-            return '<tr>' +
-              '<td><b>' + esc(row.name) + '</b></td>' +
-              '<td class="num">' + fmtNum(r.leads) + '</td>' +
-              '<td class="num"><b>' + fmtNum(r.won) + '</b></td>' +
-              '<td class="num">' + fmtNum(r.lost) + '</td>' +
-              '<td class="num">' + fmtNum(r.unq) + '</td>' +
-              '<td class="num">' + (row.winRate === null ? '—' : fmtPct(row.winRate, 0)) + '</td>' +
-              '<td class="num"><b>' + (r.revenue ? fmtMoneyC(r.revenue) : '—') + '</b></td>' +
-              '<td>' + (r.open ? '<b>' + fmtNum(r.open) + '</b><span class="cell-sub">' + esc(stageBits) + '</span>' : '—') + '</td>' +
-            '</tr>';
-          }).join('') + '</tbody>' +
-        '</table></div>' +
-      '</section>' +
+        '<div class="grid-2">' +
+          '<section class="card">' +
+            '<div class="card-head"><div><h3>' + t('sourcePerf') + '</h3><p class="sub">' + t('sourceSub') + '</p></div></div>' +
+            '<div class="tbl-wrap"><table class="mini">' +
+              '<thead><tr><th>' + t('source') + '</th><th class="num">' + t('leads') + '</th><th class="num">' + t('won') + '</th><th class="num">' + t('winRate') + '</th></tr></thead>' +
+              '<tbody>' + srcRows.map(function (r) {
+                return '<tr><td>' + esc(trSource(r.label)) + '</td><td class="num">' + fmtNum(r.total) + '</td><td class="num">' + fmtNum(r.count) + '</td><td class="num">' + (r.decided >= 3 ? fmtPct(r.count / r.decided, 0) : '—') + '</td></tr>';
+              }).join('') + '</tbody>' +
+            '</table></div>' +
+          '</section>' +
+          '<section class="card">' +
+            '<div class="card-head"><div><h3>' + t('winsFrom') + '</h3><p class="sub">' + t('winsFromSub') + '</p></div></div>' +
+            '<div class="tbl-wrap"><table class="mini">' +
+              '<thead><tr><th>' + t('category') + '</th><th class="num">' + t('stores') + '</th><th class="num">' + t('revenue') + '</th><th class="num">' + t('avgDeal') + '</th></tr></thead>' +
+              '<tbody>' + (catRows.length ? catRows.map(function (c) {
+                return '<tr><td>' + esc(trCat(c.label)) + '</td><td class="num">' + fmtNum(c.count) + '</td><td class="num"><b>' + fmtMoneyC(c.revenue) + '</b></td><td class="num">' + fmtMoneyC(c.revenue / c.count) + '</td></tr>';
+              }).join('') : '<tr><td colspan="4"><div class="empty">' + t('noWonStores') + '</div></td></tr>') + '</tbody>' +
+            '</table></div>' +
+          '</section>' +
+        '</div>' +
 
-      '<div class="grid-2">' +
-        chartCard({
-          title: t('revByMonth'), subtitle: t('revByMonthSub'),
-          svg: columnsSVG(months.map(function (m) { return m.label; }), revByMonth, { money: true, compact: true, aria: 'Revenue by month' }),
-          table: { head: [t('month'), t('revenueSar')], rows: months.map(function (m, i) { return [m.label, fmtNum(revByMonth[i])]; }) }
-        }) +
-        '<section class="card">' +
-          '<div class="card-head"><div><h3>' + t('deptComparison') + '</h3><p class="sub">' + t('deptSub') + '</p></div></div>' +
-          '<div class="tbl-wrap"><table class="mini">' +
-            '<thead><tr><th>' + t('department') + '</th><th class="num">' + t('leads') + '</th><th class="num">' + t('won') + '</th><th class="num">' + t('revenue') + '</th></tr></thead>' +
-            '<tbody>' + deptRows.map(function (d) {
-              return '<tr><td>' + esc(trDept(d.label)) + '</td><td class="num">' + fmtNum(d.count) + '</td><td class="num">' + fmtNum(d.won) + '</td><td class="num"><b>' + fmtMoneyC(d.revenue) + '</b></td></tr>';
-            }).join('') + '</tbody>' +
-          '</table></div>' +
-        '</section>' +
-      '</div>' +
+        '<div class="grid-2">' +
+          '<section class="card">' +
+            '<div class="card-head"><div><h3>' + t('payoutStatus') + '</h3><p class="sub">' + t('payoutStatusSub') + '</p></div></div>' +
+            '<div class="tbl-wrap"><table class="mini">' +
+              '<thead><tr><th>' + t('status') + '</th><th class="num">' + t('amount') + '</th></tr></thead>' +
+              '<tbody>' +
+                '<tr><td><span class="status-chip pending">' + t('pendingApproval') + '</span></td><td class="num"><b>' + fmtMoney(s.commissionPending) + '</b></td></tr>' +
+                '<tr><td><span class="status-chip approved">' + t('approvedPayroll') + '</span></td><td class="num"><b>' + fmtMoney(s.commissionApproved) + '</b></td></tr>' +
+                '<tr><td><span class="status-chip paid">' + t('paidToDate') + '</span></td><td class="num"><b>' + fmtMoney(s.commissionPaid) + '</b></td></tr>' +
+                '<tr><td>' + t('totalCommNet', { rate: ratePct() }) + '</td><td class="num"><b>' + fmtMoney(s.commission) + '</b></td></tr>' +
+              '</tbody>' +
+            '</table></div>' +
+          '</section>' +
+          '<section class="card">' +
+            '<div class="card-head"><div><h3>' + t('coaching') + '</h3>' +
+            '<p class="sub">' + t('coachingSub', { pct: fmtPct(avgConv, 0) }) + '</p></div></div>' +
+            (coach.length ? coach.map(function (r) {
+              return '<div class="coach-item">' + avatarHtml(r.emp) + '' +
+                '<span><b>' + esc(r.emp.name) + '</b><span class="cell-sub">' + esc(trDept(r.emp.dept)) + ' · ' + fmtNum(r.s.total) + ' ' + t('leadsUnit') + '</span></span>' +
+                '<span class="why">' + t('coachConv', { pct: fmtPct(r.s.conversion, 0) }) + '<br>' + t('coachUnq', { n: fmtNum(r.s.unqualified) }) + '</span></div>';
+            }).join('') : '<div class="empty">' + t('nobodyFlagged') + '</div>') +
+          '</section>' +
+        '</div>' +
 
-      '<div class="grid-2">' +
-        reasonTilesCard(t('topLostReasons'), t('programWideLost', { n: fmtNum(s.everLost) }), reasonsLost, 'critical') +
-        reasonTilesCard(t('whyUnqProgram'), t('programWideUnq', { n: fmtNum(s.everUnqualified) }), reasonsUnq, 'gray') +
-      '</div>' +
+        '<section class="card">' +
+          '<div class="card-head"><div><h3>' + t('perfStrip') + '</h3><p class="sub">' + t('perfStripSub') + '</p></div>' +
+          '<a class="ghost-btn" href="#/performance" style="text-decoration:none">' + t('openBtn') + '</a></div>' +
+        '</section>';
 
-      '<div class="grid-2">' +
-        '<section class="card">' +
-          '<div class="card-head"><div><h3>' + t('sourcePerf') + '</h3><p class="sub">' + t('sourceSub') + '</p></div></div>' +
-          '<div class="tbl-wrap"><table class="mini">' +
-            '<thead><tr><th>' + t('source') + '</th><th class="num">' + t('leads') + '</th><th class="num">' + t('won') + '</th><th class="num">' + t('winRate') + '</th></tr></thead>' +
-            '<tbody>' + srcRows.map(function (r) {
-              return '<tr><td>' + esc(trSource(r.label)) + '</td><td class="num">' + fmtNum(r.total) + '</td><td class="num">' + fmtNum(r.count) + '</td><td class="num">' + (r.decided >= 3 ? fmtPct(r.count / r.decided, 0) : '—') + '</td></tr>';
-            }).join('') + '</tbody>' +
-          '</table></div>' +
-        '</section>' +
-        '<section class="card">' +
-          '<div class="card-head"><div><h3>' + t('winsFrom') + '</h3><p class="sub">' + t('winsFromSub') + '</p></div></div>' +
-          '<div class="tbl-wrap"><table class="mini">' +
-            '<thead><tr><th>' + t('category') + '</th><th class="num">' + t('stores') + '</th><th class="num">' + t('revenue') + '</th><th class="num">' + t('avgDeal') + '</th></tr></thead>' +
-            '<tbody>' + (catRows.length ? catRows.map(function (c) {
-              return '<tr><td>' + esc(trCat(c.label)) + '</td><td class="num">' + fmtNum(c.count) + '</td><td class="num"><b>' + fmtMoneyC(c.revenue) + '</b></td><td class="num">' + fmtMoneyC(c.revenue / c.count) + '</td></tr>';
-            }).join('') : '<tr><td colspan="4"><div class="empty">' + t('noWonStores') + '</div></td></tr>') + '</tbody>' +
-          '</table></div>' +
-        '</section>' +
-      '</div>' +
+      document.getElementById('ov-range-note').textContent = rangeNote(period, all.length);
+      // These two bind listeners to the buttons themselves, which the line
+      // above just discarded, so they have to run again or every chart's
+      // "Data" toggle goes dead the first time someone applies a filter.
+      // initTooltip is deliberately NOT here: it delegates from the root it
+      // is given, the router already gave it #content (an ancestor of this
+      // node, which survives the re-render), and calling it per render
+      // would stack another mousemove listener on the same element every
+      // time the filter changed.
+      wireCardToggles(body); wirePendingToggles(body);
+    }
 
-      '<div class="grid-2">' +
-        '<section class="card">' +
-          '<div class="card-head"><div><h3>' + t('payoutStatus') + '</h3><p class="sub">' + t('payoutStatusSub') + '</p></div></div>' +
-          '<div class="tbl-wrap"><table class="mini">' +
-            '<thead><tr><th>' + t('status') + '</th><th class="num">' + t('amount') + '</th></tr></thead>' +
-            '<tbody>' +
-              '<tr><td><span class="status-chip pending">' + t('pendingApproval') + '</span></td><td class="num"><b>' + fmtMoney(s.commissionPending) + '</b></td></tr>' +
-              '<tr><td><span class="status-chip approved">' + t('approvedPayroll') + '</span></td><td class="num"><b>' + fmtMoney(s.commissionApproved) + '</b></td></tr>' +
-              '<tr><td><span class="status-chip paid">' + t('paidToDate') + '</span></td><td class="num"><b>' + fmtMoney(s.commissionPaid) + '</b></td></tr>' +
-              '<tr><td>' + t('totalCommNet', { rate: ratePct() }) + '</td><td class="num"><b>' + fmtMoney(s.commission) + '</b></td></tr>' +
-            '</tbody>' +
-          '</table></div>' +
-        '</section>' +
-        '<section class="card">' +
-          '<div class="card-head"><div><h3>' + t('coaching') + '</h3>' +
-          '<p class="sub">' + t('coachingSub', { pct: fmtPct(avgConv, 0) }) + '</p></div></div>' +
-          (coach.length ? coach.map(function (r) {
-            return '<div class="coach-item">' + avatarHtml(r.emp) + '' +
-              '<span><b>' + esc(r.emp.name) + '</b><span class="cell-sub">' + esc(trDept(r.emp.dept)) + ' · ' + fmtNum(r.s.total) + ' ' + t('leadsUnit') + '</span></span>' +
-              '<span class="why">' + t('coachConv', { pct: fmtPct(r.s.conversion, 0) }) + '<br>' + t('coachUnq', { n: fmtNum(r.s.unqualified) }) + '</span></div>';
-          }).join('') : '<div class="empty">' + t('nobodyFlagged') + '</div>') +
-        '</section>' +
-      '</div>' +
-
-      '<section class="card">' +
-        '<div class="card-head"><div><h3>' + t('perfStrip') + '</h3><p class="sub">' + t('perfStripSub') + '</p></div>' +
-        '<a class="ghost-btn" href="#/performance" style="text-decoration:none">' + t('openBtn') + '</a></div>' +
-      '</section>';
+    var body = document.getElementById('ov-body');
+    render();
   }
 
   /* ---- Finance: hunter profile drawer (full payout details) ---- */
