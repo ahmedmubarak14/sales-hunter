@@ -1806,6 +1806,9 @@
      ends up working a domain that was already gone. */
   function verdictOfRow(row) {
     if (typeof row.eligible === 'boolean') return row.eligible ? 'yes' : 'no';
+    // An explicit null means the sync read the row but could not read its
+    // wording — distinct from the field being absent altogether.
+    if (row.eligible === null && 'eligible' in row) return 'unclear';
     var v = String(row.case || '').toLowerCase();
     if (!v.trim()) return 'unclear';
     if (/\bnot eligible\b|\bineligible\b|\bnot_eligible\b/.test(v)) return 'no';
@@ -1849,14 +1852,20 @@
      'unavailable' matters as much as the other three: "not on the list"
      only means eligible when the list actually loaded, so a lookup that
      fails must say so rather than fall through to a green tick. */
+  /* Whether the sales list can be consulted at all. Demo mode always can
+     (DEAL_CHECK_ROWS stands in); live mode needs the synced card, which
+     does not exist until the Metabase side is wired. */
+  function dealListConnected() { return !window.LIVE || !!SH_API.dealCheck; }
+
   function checkDeal(domain) {
     if (window.LIVE) {
-      // The live lookup reads the synced deal-checker card. Until that
-      // sync exists this reports "could not check" rather than throwing —
-      // and a missing backend must never resolve to eligible, which is the
-      // one wrong answer that costs a hunter real work.
+      // Not connected is a different answer from a failed request, and
+      // saying "try again in a moment" about something that will never
+      // succeed on its own just sends the hunter round in circles.
+      // Either way a missing backend must never resolve to eligible —
+      // that is the one wrong answer that costs a hunter real work.
       if (!SH_API.dealCheck) {
-        return Promise.resolve({ verdict: 'unavailable', domain: domain, caseText: null, syncedAt: null });
+        return Promise.resolve({ verdict: 'notconfigured', domain: domain, caseText: null, syncedAt: null });
       }
       return SH_API.dealCheck(domain);
     }
@@ -1865,7 +1874,8 @@
     return new Promise(function (resolve) {
       setTimeout(function () {
         resolve(hit
-          ? { verdict: verdictOfRow(hit), domain: domain, caseText: hit.case, syncedAt: NOW }
+          ? { verdict: verdictOfRow(hit), domain: domain, caseText: hit.case, syncedAt: NOW,
+              packageType: hit.package, daysSinceEnded: hit.days }
           : { verdict: 'yes', domain: domain, caseText: null, syncedAt: NOW });
       }, 260);
     });
@@ -1900,6 +1910,9 @@
         '</form>' +
         '<div id="dc-result" aria-live="polite"></div>' +
       '</section>' +
+      (dealListConnected() ? '' :
+        '<section class="card dc-notice"><b>' + t('dcNotWiredBanner') + '</b>' +
+        '<p>' + t('dcNotWiredBannerSub') + '</p></section>') +
       '<section class="card">' +
         '<div class="card-head"><div><h3>' + t('dcRulesTitle') + '</h3></div></div>' +
         '<ul class="dc-rules">' +
@@ -1924,6 +1937,10 @@
       mine:        { cls: 'mine',    icon: ICONS.check, title: 'dcMine',        note: 'dcMineNote' },
       taken:       { cls: 'bad',     icon: ICONS.ban,   title: 'dcTaken',       note: 'dcTakenNote' },
       no:          { cls: 'bad',     icon: ICONS.ban,   title: 'dcNo',          note: 'dcNoNote' },
+      // Reached only when no hunter has raised the domain either — that
+      // half of the check DID run and passed, so the message says so
+      // rather than implying nothing could be determined at all.
+      notconfigured: { cls: 'warn', icon: ICONS.ban,   title: 'dcNotWired',    note: 'dcNotWiredNote' },
       unclear:     { cls: 'warn',    icon: ICONS.ban,   title: 'dcUnclear',     note: 'dcUnclearNote' },
       unavailable: { cls: 'unknown', icon: ICONS.ban,   title: 'dcUnavailable', note: 'dcUnavailableNote' }
     };
@@ -1947,6 +1964,22 @@
       return '<p class="dc-case">' + t(v.note) + '</p>';
     }
 
+    /* The card also carries the store's package and how long since its
+       subscription ended. Neither decides the verdict, but both tell a
+       hunter what they are walking into — an upgrade play on a live plan
+       reads very differently from a store that lapsed a year ago. A
+       negative day count means the subscription has not ended yet. */
+    function contextHtml(r) {
+      var bits = [];
+      if (r.packageType) bits.push(t('dcPackage', { name: esc(trPlan(r.packageType)) }));
+      if (typeof r.daysSinceEnded === 'number') {
+        bits.push(r.daysSinceEnded < 0
+          ? t('dcEndsIn', { n: fmtNum(Math.abs(r.daysSinceEnded)) })
+          : t('dcEndedAgo', { n: fmtNum(r.daysSinceEnded) }));
+      }
+      return bits.length ? '<p class="dc-context">' + bits.join(' · ') + '</p>' : '';
+    }
+
     function renderResult(r) {
       var v = VERDICT[r.verdict] || VERDICT.unavailable;
       result.innerHTML =
@@ -1956,6 +1989,7 @@
             '<b class="dc-headline">' + t(v.title) + '</b>' +
             '<span class="dc-domain">' + esc(r.domain) + '</span>' +
             reasonHtml(r, v) +
+            contextHtml(r) +
             (r.syncedAt ? '<p class="dc-fresh">' + t('dcFresh', { when: fmtDate(r.syncedAt) }) + '</p>' : '') +
           '</div>' +
           (r.verdict === 'yes'
@@ -2694,6 +2728,7 @@
               fieldRow('mb-key', t('intgMbKey'), '', mb && mb.secret_set ? t('intgSecretSaved', { hint: mbS.secret_hint || '••••' }) : 'mb_…', 'password') +
               fieldRow('mb-comm', t('intgCardComm'), mbS.card_commissions || '', 'e.g. 142') +
               fieldRow('mb-subs', t('intgCardSubs'), mbS.card_subscriptions || '', 'e.g. 143') +
+              fieldRow('mb-deal', t('intgCardDealChecker'), mbS.card_deal_checker || '', 'e.g. 18789') +
             '</div>' +
             // No top-stores card ID: the showcase is ranked from the
             // warehouse table by the sync itself. It used to point at a
@@ -2753,7 +2788,8 @@
         save('metabase', {
           base_url: document.getElementById('mb-url').value.trim(),
           card_commissions: document.getElementById('mb-comm').value.trim(),
-          card_subscriptions: document.getElementById('mb-subs').value.trim()
+          card_subscriptions: document.getElementById('mb-subs').value.trim(),
+          card_deal_checker: document.getElementById('mb-deal').value.trim()
         }, document.getElementById('mb-key').value);
       });
     }

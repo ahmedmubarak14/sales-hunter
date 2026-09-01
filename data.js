@@ -116,15 +116,19 @@ var STORE_SHOWCASE = [
    IS on the list takes its answer from that case column.
    These rows exist so the tab is usable in demo mode; live mode reads the
    synced card instead. */
+/* Demo stand-in for Metabase card 18789. Shaped like the real question —
+   domain_url / Case / store_id / package_type / days_since_subscription_ended
+   — with the case wording observed there. The card is a list of Zid STORES
+   with a status each, not a list of blocked domains: most rows are some
+   flavour of eligible, which is why the tab reads the case rather than
+   treating presence on the list as a refusal. */
 var DEAL_CHECK_ROWS = [
-  { domain: 'noorabaya.com',       eligible: false, case: 'Active merchant' },
-  { domain: 'tamrhouse.sa',        eligible: false, case: 'Open opportunity with sales' },
-  { domain: 'binsaifroastery.com', eligible: false, case: 'Existing subscription' },
-  { domain: 'volt-store.sa',       eligible: false, case: 'Inbound lead already in pipeline' },
-  { domain: 'mishkahabayas.com',   eligible: false, case: 'Duplicate of an existing account' },
-  { domain: 'wardco.sa',           eligible: true,  case: 'Churned over 12 months ago' },
-  { domain: 'qalamstudio.com',     eligible: true,  case: 'Lost deal, cooling period passed' },
-  { domain: 'pawsriyadh.com',      eligible: false, case: 'Duplicate of an existing account' }
+  { domain: 'noorabaya.zid.store',  eligible: false, case: 'Active subscription',    package: 'growth', days: -212 },
+  { domain: 'tamrhouse.zid.store',  eligible: true,  case: 'eligible for hunting',   package: null,     days: 168 },
+  { domain: '00.zid.store',         eligible: true,  case: 'Eligible for Upgrade',   package: 'rise',   days: -24 },
+  { domain: 'wardco.zid.store',     eligible: true,  case: 'eligible for hunting',   package: null,     days: 402 },
+  { domain: 'voltstore.zid.store',  eligible: false, case: 'Active subscription',    package: 'rise',   days: -90 },
+  { domain: 'qalamstudio.zid.store',eligible: null,  case: 'Pending review',         package: null,     days: null }
 ];
 
 var SALES_OWNERS = ['Fahad Al-Otaibi', 'Sara Al-Zahrani', 'Mohammed Iqbal', 'Lama Al-Harbi'];

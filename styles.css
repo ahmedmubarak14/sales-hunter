@@ -733,6 +733,7 @@ td .cell-sub { display: block; color: var(--muted); font-size: 11.5px; }
 }
 .dc-case { margin-top: 8px; font-size: 13.5px; color: var(--ink); }
 .dc-case-lbl { color: var(--muted); font-weight: 600; }
+.dc-context { margin-top: 6px; font-size: 12.5px; color: var(--ink-2); }
 .dc-fresh { margin-top: 6px; font-size: 11.5px; color: var(--muted); }
 .dc-verdict .dc-submit { flex: none; align-self: center; }
 
@@ -761,6 +762,12 @@ td .cell-sub { display: block; color: var(--muted); font-size: 11.5px; }
 .dc-chip.ok   { background: var(--brand-soft); color: var(--good-text); }
 .dc-chip.bad  { background: var(--brand-soft); color: var(--critical); }
 .dc-chip.warn { background: var(--brand-soft); color: var(--serious); }
+
+/* Standing notice, not an error: the tab still answers the duplicate
+   question, so this is amber rather than red. */
+.dc-notice { border-inline-start: 4px solid var(--warning); }
+.dc-notice b { display: block; font-size: 14px; color: var(--ink); }
+.dc-notice p { margin-top: 5px; font-size: 13px; color: var(--ink-2); line-height: 1.55; }
 
 .dc-rules { margin: 0; padding-inline-start: 20px; display: grid; gap: 7px; }
 .dc-rules li { font-size: 13.5px; color: var(--ink-2); line-height: 1.55; }
