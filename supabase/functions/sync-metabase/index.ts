@@ -10,6 +10,12 @@
 // warehouse tables directly, so neither can be narrowed by an edit to
 // someone else's saved question.
 // Runs in MOCK mode (no-op) until a Metabase connection has been saved.
+//
+// The deal-checker card lives in its own function (sync-deal-checker).
+// It covers every Zid store and exceeded this worker's memory when it ran
+// here, and that arrives as WORKER_RESOURCE_LIMIT — an isolate kill no
+// try/catch can intercept, which took the three syncs below down with it.
+// Separate functions are the only real isolation.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -42,7 +48,6 @@ type MBSettings = {
   base_url?: string;
   card_subscriptions?: string;
   card_commissions?: string;
-  card_deal_checker?: string;
 };
 
 async function loadConnection() {
@@ -389,100 +394,6 @@ function errMsg(e: unknown): string {
   return String(e);
 }
 
-/* ---- Deal checker ----
-   Card 18789 ("deal checker") returns one row per store, columns:
-   domain_url | Case | store_id | package_type | days_since_subscription_ended
-   Mirrored into deal_checker so the hunter's tab can answer from an
-   indexed lookup instead of a card run, and without the Metabase key
-   ever reaching the browser. */
-
-// Metabase returns whatever the question happens to be aliased to, and
-// "Case" is capitalised in this one while most columns are not. Pick the
-// column case-insensitively rather than hard-coding one spelling, so a
-// rename in the saved question degrades to a clear error instead of a
-// silent column of nulls.
-function pick(row: Record<string, unknown>, ...names: string[]): unknown {
-  const keys = Object.keys(row);
-  for (const want of names) {
-    const hit = keys.find((k) => k.toLowerCase() === want.toLowerCase());
-    if (hit !== undefined) return row[hit];
-  }
-  return undefined;
-}
-
-// The other half of the app's normalizeDomain(). Both sides must reduce a
-// host the same way or nothing ever matches — and a lookup that never
-// matches reads as "not on the list", which the tab reports as eligible.
-function normalizeDomain(raw: unknown): string {
-  let v = String(raw ?? "").trim().toLowerCase();
-  if (!v) return "";
-  v = v.replace(/^[a-z][a-z0-9+.-]*:\/\//, "");
-  v = v.replace(/^[^@/]*@/, "");
-  v = v.split(/[/?#]/)[0];
-  v = v.replace(/:\d+$/, "");
-  v = v.replace(/^www\./, "").replace(/\.$/, "");
-  return v;
-}
-
-/* Case is prose maintained by whoever owns the question — observed values
-   include "eligible for hunting" and "Eligible for Upgrade", mixed case.
-   "not eligible" is tested first because it contains "eligible".
-   Anything unrecognised returns null rather than a guess: the tab shows
-   it as needing a human check, which is recoverable, whereas a wrong
-   "eligible" sends a hunter after a merchant they cannot be paid for. */
-function eligibleFromCase(caseText: unknown): boolean | null {
-  const v = String(caseText ?? "").trim().toLowerCase();
-  if (!v) return null;
-  if (/\bnot\s+eligible\b|\bineligible\b|\bnot_eligible\b/.test(v)) return false;
-  if (/\beligible\b/.test(v)) return true;
-  return null;
-}
-
-async function syncDealChecker(base: string, key: string, cardId: string) {
-  const rows = await runCard(base, key, cardId);
-  if (!rows.length) throw new Error(`deal checker card ${cardId} returned no rows`);
-
-  // Last row wins on a duplicate host, matching the primary key. Dedupe
-  // here rather than letting the upsert do it, so the count reported back
-  // is the number of domains actually stored.
-  const byDomain = new Map<string, Record<string, unknown>>();
-  let unreadable = 0;
-  for (const r of rows) {
-    const domain = normalizeDomain(pick(r, "domain_url", "domain", "store_url", "url"));
-    if (!domain) continue;
-    const caseText = pick(r, "case", "case_text", "status");
-    const eligible = eligibleFromCase(caseText);
-    if (eligible === null) unreadable += 1;
-    const days = pick(r, "days_since_subscription_ended");
-    byDomain.set(domain, {
-      domain,
-      case_text: caseText == null ? null : String(caseText),
-      eligible,
-      store_id: pick(r, "store_id") == null ? null : String(pick(r, "store_id")),
-      package_type: pick(r, "package_type") == null ? null : String(pick(r, "package_type")),
-      days_since_subscription_ended:
-        days === undefined || days === null || days === "" ? null : Number(days),
-    });
-  }
-
-  const payload = [...byDomain.values()];
-  if (!payload.length) {
-    // Rows came back but none carried a usable domain — almost certainly a
-    // renamed column. Fail loudly: replacing the list with nothing would
-    // make every domain look eligible.
-    throw new Error(
-      `deal checker card ${cardId}: ${rows.length} rows but no usable domain column ` +
-      `(looked for domain_url/domain/store_url/url; saw ${Object.keys(rows[0] ?? {}).join(", ")})`,
-    );
-  }
-
-  // One call, one transaction: the RPC swaps the whole list atomically so
-  // a check can never read a half-replaced table.
-  const { data, error } = await supabase.rpc("replace_deal_checker", { p_rows: payload });
-  if (error) throw new Error(`replace_deal_checker: ${error.message}`);
-  return { stored: Number(data ?? payload.length), unreadable_case: unreadable };
-}
-
 Deno.serve(async () => {
   const started = new Date().toISOString();
   let configured = false;
@@ -500,16 +411,10 @@ Deno.serve(async () => {
       : { subscriptions: 0, commissions: 0, deals_amount_updated: 0 };
     const ownersResolved = await syncOwnerNames(conn.base, conn.key);
     const storesSeen = await syncTopStores(conn.base, conn.key);
-    const dealChecker = conn.settings.card_deal_checker
-      ? await syncDealChecker(conn.base, conn.key, conn.settings.card_deal_checker)
-      : { stored: 0, unreadable_case: 0 };
 
     await supabase.from("sync_state").upsert({ source: "metabase", last_run_at: started, last_status: "ok", last_error: null });
     await supabase.from("integration_config").update({ last_synced_at: started, last_status: "ok" }).eq("name", "metabase");
-    return Response.json({
-      ok: true, ...details, owners_resolved: ownersResolved, top_stores_seen: storesSeen,
-      deal_checker: dealChecker, mock: false,
-    });
+    return Response.json({ ok: true, ...details, owners_resolved: ownersResolved, top_stores_seen: storesSeen, mock: false });
   } catch (e) {
     await supabase.from("sync_state").upsert({
       source: "metabase", last_run_at: started, last_status: "error", last_error: errMsg(e),

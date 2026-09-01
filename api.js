@@ -570,62 +570,55 @@ window.SH_API = (function () {
      "Not on the list" is only meaningful when the list was actually read,
      and treating an error as a pass is the one mistake here that costs a
      hunter real work. */
-  /* A table that does not exist yet is a SETUP state, not a failed
-     request. PostgREST answers 404/PGRST205 for it, and reporting that as
-     "try again in a moment" sends the hunter round in circles waiting for
-     something that will never happen on its own — which is exactly what
-     shipping the code before applying migration 025 looked like. */
-  function isNotSetUp(e) {
+  /* Deal checker. Asks the deal-check edge function about ONE domain,
+     which queries the Metabase card for that domain the way a person
+     filters it in the Metabase UI.
+
+     Not a synced table: the card is a catalogue of every Zid store, three
+     attempts to mirror it were each killed on the worker's resource
+     limit, and 98.7% of a 202,000-row sample said "eligible for hunting"
+     — the same answer an absent domain already gets. See migration 026.
+
+     Every failure path resolves to a non-answer rather than to eligible.
+     "Not on the list" only means eligible when the list was actually
+     read, and treating an error as a pass is the one mistake here that
+     costs a hunter real work. */
+  function dealFnMissing(e) {
     var m = String((e && e.message) || '');
-    return /HTTP 404/.test(m) || /PGRST205/.test(m) ||
-      /Could not find the table/i.test(m) || /does not exist/i.test(m);
+    return /HTTP 404/.test(m) || /Function not found/i.test(m);
   }
 
-  /* Is the list usable at all? Cheap enough to run on view render so the
-     tab can say up front that it is not connected, instead of letting
-     every check discover it separately. */
   async function dealListStatus() {
     try {
-      const rows = await req('/rest/v1/deal_checker?select=synced_at&order=synced_at.desc&limit=1');
-      return (rows && rows.length) ? 'ready' : 'notconfigured';
+      var r = await req('/functions/v1/deal-check', { method: 'POST', body: { status: true } });
+      return r && r.status === 'ready' ? 'ready' : 'notconfigured';
     } catch (e) {
-      return isNotSetUp(e) ? 'notconfigured' : 'unavailable';
+      return dealFnMissing(e) ? 'notconfigured' : 'unavailable';
     }
   }
 
   async function dealCheck(domain) {
-    const miss = (verdict) => ({ verdict, domain, caseText: null, syncedAt: null });
-    let res;
+    var r;
     try {
-      res = await req('/rest/v1/deal_checker?select=case_text,eligible,package_type,days_since_subscription_ended,synced_at'
-        + '&domain=eq.' + encodeURIComponent(domain) + '&limit=1');
+      r = await req('/functions/v1/deal-check', { method: 'POST', body: { domain: domain } });
     } catch (e) {
-      return miss(isNotSetUp(e) ? 'notconfigured' : 'unavailable');
-    }
-    const row = Array.isArray(res) ? res[0] : null;
-    if (!row) {
-      // Absent from the list — but only trustworthy if the list has
-      // anything in it at all. An empty table would otherwise report every
-      // domain as eligible, which is exactly how this feature does damage.
-      let any = [];
-      try {
-        any = await req('/rest/v1/deal_checker?select=synced_at&order=synced_at.desc&limit=1');
-      } catch (e) {
-        return miss(isNotSetUp(e) ? 'notconfigured' : 'unavailable');
-      }
-      if (!any || !any.length) return miss('notconfigured');
       return {
-        verdict: 'yes', domain: domain, caseText: null,
-        syncedAt: any[0].synced_at ? new Date(any[0].synced_at) : null
+        verdict: dealFnMissing(e) ? 'notconfigured' : 'unavailable',
+        domain: domain, caseText: null, syncedAt: null
       };
     }
+    if (!r || !r.verdict) return { verdict: 'unavailable', domain: domain, caseText: null, syncedAt: null };
+    if (r.verdict === 'notconfigured' || r.verdict === 'unavailable') {
+      return { verdict: r.verdict, domain: domain, caseText: null, syncedAt: null };
+    }
     return {
-      verdict: row.eligible === true ? 'yes' : row.eligible === false ? 'no' : 'unclear',
-      domain: domain,
-      caseText: row.case_text || null,
-      packageType: row.package_type || null,
-      daysSinceEnded: row.days_since_subscription_ended,
-      syncedAt: row.synced_at ? new Date(row.synced_at) : null
+      verdict: r.verdict,
+      domain: r.domain || domain,
+      caseText: r.caseText || null,
+      packageType: r.packageType || null,
+      daysSinceEnded: typeof r.daysSinceEnded === 'number' ? r.daysSinceEnded : undefined,
+      // The answer is read live, so "as of" is now rather than a sync time.
+      syncedAt: new Date()
     };
   }
 
