@@ -342,6 +342,7 @@
     '/dashboard':  { titleKey: 'navDashboard',   icon: 'dash',    render: viewDashboard, who: 'emp', section: 'main' },
     '/leads':      { titleKey: 'navLeads',        icon: 'leads',   render: viewLeads,     who: 'emp', section: 'work' },
     '/submit':     { titleKey: 'navSubmit',       icon: 'plus',    render: viewSubmit,    who: 'emp', section: 'work' },
+    '/deal-checker':{ titleKey: 'navDealChecker', icon: 'check',   render: viewDealChecker, who: 'emp', section: 'work' },
     '/commission': { titleKey: 'navCommission',   icon: 'money',   render: viewCommission,who: 'emp', section: 'work' },
     '/stores':     { titleKey: 'navStores',       icon: 'store',   render: viewTopStores, who: 'all', section: 'insights' },
     '/manager':    { titleKey: 'navOverview',     icon: 'manager', render: viewManager,   who: 'mgr', section: 'main' },
@@ -1257,7 +1258,7 @@
             '<div class="full"><span class="f-label">' + t('platformLbl') + '</span>' +
               '<div class="radio-list" id="f-platform-group">' + radios + '</div></div>' +
             '<div class="full"><label class="f-label" for="f-store">' + t('storeLink') + '</label>' +
-              '<input type="url" id="f-store" placeholder="https://">' +
+              '<input type="url" id="f-store" placeholder="https://" value="' + esc(takeStorePrefill()) + '">' +
               '<p class="f-hint">' + t('storeLinkHint') + '</p></div>' +
             '<div class="full"><label class="f-label" for="f-notes">' + t('extraNotes') + '</label>' +
               '<textarea id="f-notes" rows="3"></textarea>' +
@@ -1768,6 +1769,192 @@
       var d = l.createdAt;
       return (!r.from || d >= r.from) && (!r.to || d <= r.to);
     };
+  }
+
+  /* ---- Deal checker ----
+     Answers one question before a hunter spends effort on a merchant: is
+     this domain still up for grabs? The rule comes from the Metabase
+     "deal checker" card, which lists every domain that is already spoken
+     for along with a `case` saying why. Not on the list means nobody has
+     claimed it; on the list means the case column is the answer. */
+
+  /* Hunters paste whatever they have — a full URL, a store link with a
+     path, sometimes just the bare host — so everything is reduced to a
+     comparable host before it is looked up. */
+  function normalizeDomain(raw) {
+    var v = String(raw || '').trim().toLowerCase();
+    if (!v) return '';
+    v = v.replace(/^[a-z][a-z0-9+.-]*:\/\//, '');   // scheme
+    v = v.replace(/^[^@\/]*@/, '');                 // userinfo, and bare emails
+    v = v.split(/[\/?#]/)[0];                       // path, query, fragment
+    v = v.replace(/:\d+$/, '');                     // port
+    v = v.replace(/^www\./, '').replace(/\.$/, ''); // www. and a trailing root dot
+    return v;
+  }
+  function looksLikeDomain(d) {
+    return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(d) && !/^-|-$/.test(d);
+  }
+
+  /* The case column carries the verdict in words. "Not eligible" has to be
+     tested before "eligible", since it contains it. A value that matches
+     neither is NOT quietly treated as a pass: it is reported as unclear
+     with the raw text shown, because inventing a verdict for wording we do
+     not recognise is exactly how a hunter ends up working a dead domain. */
+  function verdictFromCase(caseText) {
+    var v = String(caseText || '').toLowerCase();
+    if (!v.trim()) return 'unclear';
+    if (/\bnot eligible\b|\bineligible\b|\bnot_eligible\b/.test(v)) return 'no';
+    if (/\beligible\b/.test(v)) return 'yes';
+    return 'unclear';
+  }
+
+  /* Resolves to { verdict, domain, caseText, syncedAt }.
+     verdict: 'yes' | 'no' | 'unclear' | 'unavailable'.
+     'unavailable' matters as much as the other three: "not on the list"
+     only means eligible when the list actually loaded, so a lookup that
+     fails must say so rather than fall through to a green tick. */
+  function checkDeal(domain) {
+    if (window.LIVE) {
+      // The live lookup reads the synced deal-checker card. Until that
+      // sync exists this reports "could not check" rather than throwing —
+      // and a missing backend must never resolve to eligible, which is the
+      // one wrong answer that costs a hunter real work.
+      if (!SH_API.dealCheck) {
+        return Promise.resolve({ verdict: 'unavailable', domain: domain, caseText: null, syncedAt: null });
+      }
+      return SH_API.dealCheck(domain);
+    }
+    var hit = DEAL_CHECK_ROWS.find(function (r) { return normalizeDomain(r.domain) === domain; });
+    // Demo mode fakes the round trip so the loading state is real.
+    return new Promise(function (resolve) {
+      setTimeout(function () {
+        resolve(hit
+          ? { verdict: verdictFromCase(hit.case), domain: domain, caseText: hit.case, syncedAt: NOW }
+          : { verdict: 'yes', domain: domain, caseText: null, syncedAt: NOW });
+      }, 260);
+    });
+  }
+
+  // Set by an eligible check so the submit form can open pre-filled —
+  // the next thing a hunter wants after a green light is the form.
+  // Read once and cleared, so coming back to Submit later starts blank
+  // rather than carrying a domain the hunter checked an hour ago.
+  var prefillStoreUrl = null;
+  function takeStorePrefill() {
+    var v = prefillStoreUrl || '';
+    prefillStoreUrl = null;
+    return v;
+  }
+
+  function viewDealChecker(content) {
+    var history = [];
+
+    content.innerHTML =
+      '<section class="card">' +
+        '<div class="card-head"><div><h3>' + t('dcTitle') + '</h3>' +
+        '<p class="sub">' + t('dcSub') + '</p></div></div>' +
+        '<form class="dc-form" id="dc-form" novalidate>' +
+          '<div class="dc-field">' +
+            '<label class="f-label" for="dc-input">' + t('dcInputLabel') + '</label>' +
+            '<input type="text" id="dc-input" inputmode="url" autocomplete="off" spellcheck="false" ' +
+              'placeholder="' + esc(t('dcPlaceholder')) + '" aria-describedby="dc-hint">' +
+            '<p class="f-hint" id="dc-hint">' + t('dcHint') + '</p>' +
+          '</div>' +
+          '<button type="submit" class="btn" id="dc-go">' + t('dcCheck') + '</button>' +
+        '</form>' +
+        '<div id="dc-result" aria-live="polite"></div>' +
+      '</section>' +
+      '<section class="card">' +
+        '<div class="card-head"><div><h3>' + t('dcRulesTitle') + '</h3></div></div>' +
+        '<ul class="dc-rules">' +
+          '<li>' + t('dcRule1') + '</li>' +
+          '<li>' + t('dcRule2') + '</li>' +
+          '<li>' + t('dcRule3') + '</li>' +
+        '</ul>' +
+      '</section>' +
+      '<section class="card" id="dc-history-card" hidden>' +
+        '<div class="card-head"><div><h3>' + t('dcRecent') + '</h3>' +
+        '<p class="sub">' + t('dcRecentSub') + '</p></div></div>' +
+        '<div id="dc-history"></div>' +
+      '</section>';
+
+    var input = document.getElementById('dc-input');
+    var result = document.getElementById('dc-result');
+    var goBtn = document.getElementById('dc-go');
+
+    var VERDICT = {
+      yes:         { cls: 'ok',      icon: ICONS.check, title: 'dcYes',         note: 'dcYesNote' },
+      no:          { cls: 'bad',     icon: ICONS.ban,   title: 'dcNo',          note: 'dcNoNote' },
+      unclear:     { cls: 'warn',    icon: ICONS.ban,   title: 'dcUnclear',     note: 'dcUnclearNote' },
+      unavailable: { cls: 'unknown', icon: ICONS.ban,   title: 'dcUnavailable', note: 'dcUnavailableNote' }
+    };
+
+    function renderResult(r) {
+      var v = VERDICT[r.verdict] || VERDICT.unavailable;
+      result.innerHTML =
+        '<div class="dc-verdict ' + v.cls + '">' +
+          '<span class="dc-icon">' + v.icon + '</span>' +
+          '<div class="dc-body">' +
+            '<b class="dc-headline">' + t(v.title) + '</b>' +
+            '<span class="dc-domain">' + esc(r.domain) + '</span>' +
+            (r.caseText
+              ? '<p class="dc-case"><span class="dc-case-lbl">' + t('dcCaseLabel') + '</span>' + esc(r.caseText) + '</p>'
+              : '<p class="dc-case">' + t(v.note) + '</p>') +
+            (r.syncedAt ? '<p class="dc-fresh">' + t('dcFresh', { when: fmtDate(r.syncedAt) }) + '</p>' : '') +
+          '</div>' +
+          (r.verdict === 'yes'
+            ? '<button type="button" class="btn dc-submit" data-domain="' + esc(r.domain) + '">' + t('dcSubmitLead') + '</button>'
+            : '') +
+        '</div>';
+      var sub = result.querySelector('.dc-submit');
+      if (sub) sub.addEventListener('click', function () {
+        prefillStoreUrl = 'https://' + sub.getAttribute('data-domain');
+        location.hash = '#/submit';
+      });
+    }
+
+    function renderHistory() {
+      document.getElementById('dc-history-card').hidden = !history.length;
+      document.getElementById('dc-history').innerHTML =
+        '<div class="tbl-wrap"><table class="mini"><thead><tr>' +
+          '<th>' + t('dcDomainCol') + '</th><th>' + t('dcVerdictCol') + '</th><th>' + t('dcCaseCol') + '</th>' +
+        '</tr></thead><tbody>' +
+        history.map(function (r) {
+          var v = VERDICT[r.verdict] || VERDICT.unavailable;
+          return '<tr><td><b>' + esc(r.domain) + '</b></td>' +
+            '<td><span class="dc-chip ' + v.cls + '">' + t(v.title) + '</span></td>' +
+            '<td>' + (r.caseText ? esc(r.caseText) : '<span class="cell-sub">' + t('dcNotListed') + '</span>') + '</td></tr>';
+        }).join('') +
+        '</tbody></table></div>';
+    }
+
+    function showError(key) {
+      result.innerHTML = '<div class="dc-verdict warn"><span class="dc-icon">' + ICONS.ban + '</span>' +
+        '<div class="dc-body"><b class="dc-headline">' + t(key) + '</b></div></div>';
+    }
+
+    document.getElementById('dc-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var domain = normalizeDomain(input.value);
+      if (!domain) { showError('dcEmpty'); input.focus(); return; }
+      if (!looksLikeDomain(domain)) { showError('dcInvalid'); input.focus(); return; }
+
+      goBtn.disabled = true;
+      result.innerHTML = '<div class="dc-verdict loading"><div class="dc-body">' +
+        '<b class="dc-headline">' + t('dcChecking', { domain: esc(domain) }) + '</b></div></div>';
+
+      checkDeal(domain).then(function (r) {
+        renderResult(r);
+        // Newest first, and one row per domain so re-checking the same
+        // one corrects the entry instead of stacking duplicates.
+        history = [r].concat(history.filter(function (h) { return h.domain !== r.domain; })).slice(0, 8);
+        renderHistory();
+      }).catch(function () {
+        renderResult({ verdict: 'unavailable', domain: domain, caseText: null, syncedAt: null });
+      }).then(function () { goBtn.disabled = false; });
+    });
+
+    input.focus();
   }
 
   /* Management-only ranking (replaces the shared leaderboard — hunters

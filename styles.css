@@ -708,6 +708,63 @@ td .cell-sub { display: block; color: var(--muted); font-size: 11.5px; }
 .filter-bar .seg { flex-wrap: wrap; }
 .sub.err { color: var(--critical); font-weight: 500; }
 
+/* ---- Deal checker ---- */
+.dc-form { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+.dc-field { flex: 1 1 340px; min-width: 0; }
+.dc-field .f-hint { margin-bottom: 0; }
+.dc-form .btn { flex: none; min-height: 38px; }
+
+/* The verdict is the whole point of the page, so it gets size, a colour
+   band and an icon — three signals, not colour alone. */
+.dc-verdict {
+  display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap;
+  margin-top: 16px; padding: 16px 18px;
+  border: 1px solid var(--hairline); border-radius: 12px;
+  border-inline-start: 4px solid var(--mark-muted);
+  background: var(--surface-2);
+}
+.dc-verdict .dc-body { flex: 1 1 260px; min-width: 0; }
+.dc-icon { display: flex; flex: none; }
+.dc-icon svg { width: 26px; height: 26px; }
+.dc-headline { display: block; font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
+.dc-domain {
+  display: block; margin-top: 2px; font-size: 13px; color: var(--ink-2);
+  font-variant-numeric: tabular-nums; word-break: break-all;
+}
+.dc-case { margin-top: 8px; font-size: 13.5px; color: var(--ink); }
+.dc-case-lbl { color: var(--muted); font-weight: 600; }
+.dc-fresh { margin-top: 6px; font-size: 11.5px; color: var(--muted); }
+.dc-verdict .dc-submit { flex: none; align-self: center; }
+
+.dc-verdict.ok      { border-inline-start-color: var(--good); }
+.dc-verdict.ok .dc-icon, .dc-verdict.ok .dc-headline { color: var(--good-text); }
+.dc-verdict.bad     { border-inline-start-color: var(--critical); }
+.dc-verdict.bad .dc-icon, .dc-verdict.bad .dc-headline { color: var(--critical); }
+.dc-verdict.warn    { border-inline-start-color: var(--warning); }
+.dc-verdict.warn .dc-icon, .dc-verdict.warn .dc-headline { color: var(--serious); }
+/* "Could not check" is deliberately grey, not red: an unreachable list is
+   an unknown answer, and colouring it like a refusal would read as one. */
+.dc-verdict.unknown { border-inline-start-color: var(--mark-muted); }
+.dc-verdict.unknown .dc-icon, .dc-verdict.unknown .dc-headline { color: var(--ink-2); }
+.dc-verdict.loading { border-inline-start-color: var(--brand); color: var(--ink-2); }
+.dc-verdict.loading .dc-headline { font-weight: 600; font-size: 15px; color: var(--ink-2); }
+
+.dc-chip {
+  display: inline-block; padding: 3px 9px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 600; background: var(--surface-2); color: var(--ink-2);
+}
+.dc-chip.ok   { background: var(--brand-soft); color: var(--good-text); }
+.dc-chip.bad  { background: var(--brand-soft); color: var(--critical); }
+.dc-chip.warn { background: var(--brand-soft); color: var(--serious); }
+
+.dc-rules { margin: 0; padding-inline-start: 20px; display: grid; gap: 7px; }
+.dc-rules li { font-size: 13.5px; color: var(--ink-2); line-height: 1.55; }
+
+@media (max-width: 560px) {
+  .dc-form .btn { width: 100%; }
+  .dc-verdict .dc-submit { width: 100%; align-self: stretch; }
+}
+
 /* ---- Date range picker ----
    Trigger button + a card holding a preset rail, two months of range
    calendar, typed bounds and Cancel/Apply. */

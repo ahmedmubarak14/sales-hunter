@@ -109,6 +109,24 @@ var STORE_SHOWCASE = [
     { name: 'Paws Riyadh', ordersCount: 310, revenue: 46500 }
   ]}
 ];
+/* ---- Deal checker (demo stand-in for Metabase card 18789) ----
+   The real card lists domains that are already spoken for, one row each,
+   with a `case` column saying what the situation is. The rule the hunter
+   is given: a domain that is NOT on the list is eligible; a domain that
+   IS on the list takes its answer from that case column.
+   These rows exist so the tab is usable in demo mode; live mode reads the
+   synced card instead. */
+var DEAL_CHECK_ROWS = [
+  { domain: 'noorabaya.com',      case: 'Not eligible — active Zid merchant' },
+  { domain: 'tamrhouse.sa',       case: 'Not eligible — open opportunity with sales' },
+  { domain: 'binsaifroastery.com',case: 'Not eligible — existing subscription' },
+  { domain: 'volt-store.sa',      case: 'Not eligible — submitted by another hunter' },
+  { domain: 'mishkahabayas.com',  case: 'Not eligible — inbound lead already in pipeline' },
+  { domain: 'wardco.sa',          case: 'Eligible — churned over 12 months ago' },
+  { domain: 'qalamstudio.com',    case: 'Eligible — lost deal, cooling period passed' },
+  { domain: 'pawsriyadh.com',     case: 'Not eligible — duplicate of an existing account' }
+];
+
 var SALES_OWNERS = ['Fahad Al-Otaibi', 'Sara Al-Zahrani', 'Mohammed Iqbal', 'Lama Al-Harbi'];
 var BANKS = ['Al Rajhi Bank', 'Saudi National Bank', 'Riyad Bank', 'Alinma Bank', 'SAB',
   'Bank Albilad', 'Arab National Bank', 'Banque Saudi Fransi', 'Bank AlJazira',
