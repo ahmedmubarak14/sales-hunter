@@ -1924,13 +1924,23 @@
     /* Whether the list is usable is a question about the DATA, not about
        whether a function was deployed — the two came apart the moment the
        lookup shipped ahead of its migration. Demo mode always has rows;
-       live mode has to ask. */
+       live mode has to ask.
+
+       The two failing answers need different words. "Not connected yet"
+       sends the reader to an admin, which is right when nobody has wired
+       the list up and wrong — actively misleading — when it is wired up
+       and merely unreachable this minute: there is nothing for an admin
+       to do, and the check will work again shortly. Both used to print
+       the setup copy, so a CORS-blocked lookup told everyone the feature
+       had never been configured. */
     function paintNotice(status) {
       var slot = document.getElementById('dc-notice-slot');
       if (!slot) return;
-      slot.innerHTML = status === 'ready' ? ''
-        : '<section class="card dc-notice"><b>' + t('dcNotWiredBanner') + '</b>' +
-          '<p>' + t('dcNotWiredBannerSub') + '</p></section>';
+      if (status === 'ready') { slot.innerHTML = ''; return; }
+      var down = status === 'unavailable';
+      slot.innerHTML = '<section class="card dc-notice">' +
+        '<b>' + t(down ? 'dcListDownBanner' : 'dcNotWiredBanner') + '</b>' +
+        '<p>' + t(down ? 'dcListDownBannerSub' : 'dcNotWiredBannerSub') + '</p></section>';
     }
     if (!window.LIVE) paintNotice('ready');
     else if (!SH_API.dealListStatus) paintNotice('notconfigured');
