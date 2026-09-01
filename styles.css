@@ -706,24 +706,158 @@ td .cell-sub { display: block; color: var(--muted); font-size: 11.5px; }
   margin: 2px 0 14px;
 }
 .filter-bar .seg { flex-wrap: wrap; }
-.date-range { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-/* The UA's [hidden] rule loses to any class selector that sets display,
-   so the custom pickers need to opt out of their own flex explicitly —
-   otherwise they stay on screen under every preset. */
-.date-range[hidden] { display: none; }
-.date-range label.f-label { margin: 0; white-space: nowrap; }
-/* Not covered by the generic input rule below (which lists types
-   explicitly), and a bare date picker inherits none of the app's chrome. */
-.date-range input[type="date"] {
-  font: inherit; color: var(--ink);
-  background: var(--surface); border: 1px solid var(--hairline);
-  border-radius: 8px; padding: 6px 9px; width: auto; min-width: 148px;
-}
 .sub.err { color: var(--critical); font-weight: 500; }
+
+/* ---- Date range picker ----
+   Trigger button + a card holding a preset rail, two months of range
+   calendar, typed bounds and Cancel/Apply. */
+.drp { position: relative; display: inline-flex; }
+.drp-trigger {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--surface); border: 1px solid var(--hairline); color: var(--ink);
+  border-radius: 8px; padding: 7px 12px; font-size: 13px; font-weight: 500;
+  box-shadow: var(--shadow);
+}
+.drp-trigger:hover { background: var(--surface-2); }
+.drp-trigger svg { width: 16px; height: 16px; color: var(--ink-2); flex: none; }
+.drp-trigger-label { white-space: nowrap; }
+
+.drp-pop {
+  position: fixed; z-index: 70;
+  display: flex; overflow: auto;
+  /* Fixed positioning takes the card out of flow, so nothing else caps
+     its width — without this the horizontal preset rail on mobile sizes
+     to its own content and the card runs off the screen. */
+  max-width: calc(100vw - 16px);
+  background: var(--surface); border: 1px solid var(--hairline);
+  border-radius: 14px; box-shadow: 0 12px 40px rgba(31, 4, 51, 0.18);
+}
+/* The UA's [hidden] rule loses to any class selector that sets display,
+   so a flex popover has to opt out of its own display explicitly. */
+.drp-pop[hidden] { display: none; }
+
+.drp-rail {
+  display: flex; flex-direction: column; gap: 2px;
+  width: 152px; flex: none; padding: 12px;
+  border-inline-end: 1px solid var(--hairline);
+}
+.drp-preset {
+  background: none; border: none; color: var(--ink-2);
+  text-align: start; border-radius: 7px; padding: 7px 10px;
+  font-size: 13px; font-weight: 500; white-space: nowrap;
+}
+.drp-preset:hover { background: var(--surface-2); color: var(--ink); }
+.drp-preset.active { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+
+.drp-main { display: flex; flex-direction: column; min-width: 0; }
+.drp-cals { display: flex; gap: 22px; padding: 14px 16px 4px; }
+.drp-cal { width: 252px; flex: none; }
+.drp-cal-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 8px; }
+.drp-cal-title { font-size: 13.5px; font-weight: 650; color: var(--ink); }
+.drp-nav {
+  background: none; border: none; color: var(--ink-2);
+  border-radius: 7px; width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+}
+.drp-nav:hover { background: var(--surface-2); color: var(--ink); }
+.drp-nav svg { width: 16px; height: 16px; }
+/* "Back a month" points the way reading runs, so the chevrons mirror
+   under RTL — otherwise the previous-month arrow points forwards. */
+[dir="rtl"] .drp-nav svg { transform: scaleX(-1); }
+.drp-nav-gap { width: 28px; flex: none; }
+/* One header carries both arrows only while the second month is hidden. */
+.drp-nav.only-1up { display: none; }
+
+.drp-wk, .drp-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+.drp-wk { margin-bottom: 2px; }
+.drp-wk span {
+  text-align: center; font-size: 11px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.02em; padding: 4px 0;
+}
+.drp-grid { row-gap: 2px; }
+/* Two layers per day: the CELL paints the square connecting band, the
+   BUTTON paints the round chip on top. Trying to do both on the button
+   fails — a negative z-index child hides behind its own parent's
+   background, so the band would never show. */
+/* Blank leading/trailing cells still hold their row open — without a
+   height here an all-empty sixth row collapses and the card changes
+   height as you page between months. */
+.drp-cell { position: relative; height: 34px; }
+.drp-cell.inside::before,
+.drp-cell.cap-start::before,
+.drp-cell.cap-end::before {
+  content: ""; position: absolute; inset-block: 0; background: var(--brand-soft);
+}
+.drp-cell.inside::before { inset-inline: 0; }
+/* The end caps carry the band on their inward half only, so the strip
+   stops level with the middle of each round end chip. */
+.drp-cell.cap-start::before { inset-inline-end: 0; width: 50%; }
+.drp-cell.cap-end::before { inset-inline-start: 0; width: 50%; }
+
+.drp-day {
+  position: relative; width: 100%; background: none; border: none; color: var(--ink);
+  height: 34px; font-size: 13px; font-variant-numeric: tabular-nums;
+  border-radius: 999px;
+}
+.drp-day:hover:not(:disabled) { background: var(--surface-2); }
+.drp-day.disabled, .drp-day:disabled { color: var(--muted); opacity: 0.32; cursor: default; }
+.drp-day.in { color: var(--brand); font-weight: 600; }
+.drp-day.is-today { font-weight: 700; }
+.drp-day.is-today::after {
+  content: ""; position: absolute; inset-inline-start: 50%; bottom: 4px;
+  width: 3px; height: 3px; margin-inline-start: -1.5px;
+  border-radius: 999px; background: currentColor;
+}
+.drp-day.sel, .drp-day.sel:hover { background: var(--brand); color: var(--brand-ink); font-weight: 650; }
+
+.drp-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 16px; border-top: 1px solid var(--hairline); margin-top: 8px;
+  /* On a short viewport the card scrolls internally; pinning the footer
+     keeps Cancel/Apply reachable without scrolling to find them. */
+  position: sticky; bottom: 0; background: var(--surface);
+}
+.drp-fields { display: flex; align-items: center; gap: 8px; }
+.drp-field {
+  font: inherit; font-size: 13px; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--hairline);
+  border-radius: 8px; padding: 6px 10px; width: 112px; text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.drp-dash { color: var(--muted); }
+.drp-actions { display: flex; gap: 8px; }
+.drp-actions .btn { padding: 7px 16px; font-size: 13px; }
+
+@media (max-width: 900px) {
+  /* One month, and the presets become a scrolling row above it — hiding
+     them outright would leave a phone with no shortcuts at all. */
+  .drp-pop { flex-direction: column; }
+  .drp-rail {
+    flex-direction: row; width: auto; min-width: 0; gap: 4px;
+    padding: 10px 12px; overflow-x: auto;
+    border-inline-end: none; border-bottom: 1px solid var(--hairline);
+  }
+  .drp-cal-2 { display: none; }
+  .drp-nav.only-1up { display: inline-flex; }
+  .drp-cals { padding: 14px 16px 4px; }
+  .drp-cal { width: 100%; min-width: 238px; }
+  .drp-foot { flex-wrap: wrap; }
+  .drp-fields, .drp-actions { flex: 1 1 auto; }
+  .drp-actions { justify-content: flex-end; }
+}
+@media (max-width: 420px) {
+  .drp-field { width: 100%; }
+  .drp-fields { width: 100%; }
+}
 /* Period totals sitting above a table, rather than alone in a card:
    they need a rule of their own so the tile labels do not read as a
    second header row. */
 .tiles-strip { padding: 4px 0 16px; border-bottom: 1px solid var(--hairline); margin-bottom: 4px; }
+/* auto-FIT, not auto-fill: the shared .reason-tiles grid keeps its empty
+   tracks, which squeezed five tiles into a fraction of the row and broke
+   "SAR 227.6K" over two lines while its neighbours stayed on one. */
+.tiles-strip .reason-tiles { grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 18px 8px; }
+.tiles-strip .rt-value { white-space: nowrap; }
 input[type="text"], input[type="email"], input[type="tel"], input[type="number"], input[type="password"], input[type="search"], select, textarea {
   font: inherit; color: var(--ink);
   background: var(--surface); border: 1px solid var(--hairline);

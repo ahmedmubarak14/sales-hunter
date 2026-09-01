@@ -1694,33 +1694,55 @@
   function startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
   function endOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999); }
 
-  var PERF_RANGES = {
-    all: function () { return { from: null, to: null }; },
-    d30: function () { return { from: startOfDay(new Date(NOW.getTime() - 29 * DAY)), to: endOfDay(NOW) }; },
-    d90: function () { return { from: startOfDay(new Date(NOW.getTime() - 89 * DAY)), to: endOfDay(NOW) }; },
-    mtd: function () { return { from: new Date(NOW.getFullYear(), NOW.getMonth(), 1), to: endOfDay(NOW) }; },
-    lastMonth: function () {
-      // Day 0 of this month is the last day of the previous one.
-      return { from: new Date(NOW.getFullYear(), NOW.getMonth() - 1, 1),
-               to: endOfDay(new Date(NOW.getFullYear(), NOW.getMonth(), 0)) };
-    },
-    qtd: function () { return { from: new Date(NOW.getFullYear(), Math.floor(NOW.getMonth() / 3) * 3, 1), to: endOfDay(NOW) }; },
-    ytd: function () { return { from: new Date(NOW.getFullYear(), 0, 1), to: endOfDay(NOW) }; }
-  };
-
-  /* <input type="date"> speaks 'YYYY-MM-DD'. new Date(that) parses it as
-     UTC midnight, which lands on the previous day for anyone west of
-     Greenwich and shifts every boundary by one — so build the local date
-     from the parts instead. */
-  function parseDayInput(v) {
-    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || '');
-    if (!m) return null;
-    var d = new Date(+m[1], +m[2] - 1, +m[3]);
-    return isNaN(d.getTime()) ? null : d;
+  /* Presets are whole days; the picker stores them that way and the
+     endOfDay() nudge happens once, at query time (currentRange below).
+     Anything running to "now" is clamped to today rather than to the end
+     of the calendar period — a week-to-date figure is the honest one, and
+     no lead can be filed in the future anyway. */
+  function startOfWeek(d) {
+    var first = isAr() ? 0 : 1;                     // KSA weeks start Sunday, en-GB Monday
+    var back = (d.getDay() - first + 7) % 7;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() - back);
   }
-  function toDayInput(d) {
-    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
-      '-' + String(d.getDate()).padStart(2, '0');
+
+  function perfPresets() {
+    var td = startOfDay(NOW);
+    return [
+      { key: 'all', label: t('rangeAll'), range: function () { return { from: null, to: null }; } },
+      { key: 'today', label: t('rangeToday'), range: function () { return { from: td, to: td }; } },
+      { key: 'yesterday', label: t('rangeYesterday'), range: function () {
+        var y = startOfDay(new Date(NOW.getTime() - DAY));
+        return { from: y, to: y };
+      } },
+      { key: 'thisWeek', label: t('rangeThisWeek'), range: function () {
+        return { from: startOfWeek(td), to: td };
+      } },
+      { key: 'lastWeek', label: t('rangeLastWeek'), range: function () {
+        var s = startOfWeek(td);
+        var prev = new Date(s.getFullYear(), s.getMonth(), s.getDate() - 7);
+        return { from: prev, to: new Date(s.getFullYear(), s.getMonth(), s.getDate() - 1) };
+      } },
+      { key: 'mtd', label: t('rangeMtd'), range: function () {
+        return { from: new Date(NOW.getFullYear(), NOW.getMonth(), 1), to: td };
+      } },
+      { key: 'lastMonth', label: t('rangeLastMonth'), range: function () {
+        // Day 0 of this month is the last day of the previous one.
+        return { from: new Date(NOW.getFullYear(), NOW.getMonth() - 1, 1),
+                 to: new Date(NOW.getFullYear(), NOW.getMonth(), 0) };
+      } },
+      { key: 'd30', label: t('range30'), range: function () {
+        return { from: startOfDay(new Date(NOW.getTime() - 29 * DAY)), to: td };
+      } },
+      { key: 'd90', label: t('range90'), range: function () {
+        return { from: startOfDay(new Date(NOW.getTime() - 89 * DAY)), to: td };
+      } },
+      { key: 'qtd', label: t('rangeQtd'), range: function () {
+        return { from: new Date(NOW.getFullYear(), Math.floor(NOW.getMonth() / 3) * 3, 1), to: td };
+      } },
+      { key: 'ytd', label: t('rangeYtd'), range: function () {
+        return { from: new Date(NOW.getFullYear(), 0, 1), to: td };
+      } }
+    ];
   }
 
   /* A lead belongs to the window by when it was SUBMITTED, not by when it
@@ -1741,24 +1763,13 @@
      see only their own numbers, for privacy) */
   function viewPerformance(content) {
     var regFilter = 'all';
-    var rangeKey = 'all';
-    // Custom bounds live outside the preset table so switching away to a
-    // preset and back does not lose what was typed.
-    var custom = { from: null, to: null };
-
-    var RANGE_OPTS = [
-      ['all', 'rangeAll'], ['mtd', 'rangeMtd'], ['lastMonth', 'rangeLastMonth'],
-      ['d30', 'range30'], ['d90', 'range90'], ['qtd', 'rangeQtd'],
-      ['ytd', 'rangeYtd'], ['custom', 'rangeCustom']
-    ];
+    // The picker owns the range and hands back whole days; the endOfDay
+    // nudge on the upper bound happens here, once, so a lead filed at
+    // 16:00 on the last day of the window is inside it.
+    var range = { key: 'all', from: null, to: null };
 
     function currentRange() {
-      if (rangeKey !== 'custom') return PERF_RANGES[rangeKey]();
-      return { from: custom.from, to: custom.to ? endOfDay(custom.to) : null };
-    }
-    // Only a custom window can be nonsense; the presets are built from NOW.
-    function rangeInvalid() {
-      return rangeKey === 'custom' && custom.from && custom.to && custom.from > custom.to;
+      return { from: range.from, to: range.to ? endOfDay(range.to) : null };
     }
 
     function model() {
@@ -1778,9 +1789,9 @@
 
       var totals = rows.reduce(function (a, r) {
         a.leads += r.s.total; a.sql += r.s.reachedSql; a.won += r.s.reachedWon;
-        a.revenueNet += r.s.revenueNet;
+        a.revenueNet += r.s.revenueNet; a.commission += r.s.commission;
         return a;
-      }, { leads: 0, sql: 0, won: 0, revenueNet: 0 });
+      }, { leads: 0, sql: 0, won: 0, revenueNet: 0, commission: 0 });
 
       return { rows: rows, totals: totals, range: range, topId: data.topThisMonthId };
     }
@@ -1809,7 +1820,10 @@
           hint: t('ofTotal', { n: fmtNum(tot.sql), total: fmtNum(tot.leads) }) },
         { v: tot.leads ? fmtPct(tot.won / tot.leads, 0) : '—', label: t('newToWon'),
           hint: t('ofTotal', { n: fmtNum(tot.won), total: fmtNum(tot.leads) }) },
-        { v: fmtMoneyC(tot.revenueNet), label: t('revenue') }
+        { v: fmtMoneyC(tot.revenueNet), label: t('revenue'), hint: fmtMoney(tot.revenueNet) },
+        // The exact figure in the tooltip: the tiles are compact ("SAR
+        // 293.1K"), and a commission total is money someone is owed.
+        { v: fmtMoneyC(tot.commission), label: t('commissionCol'), hint: fmtMoney(tot.commission) }
       ];
       document.getElementById('perf-summary').innerHTML =
         '<div class="tiles-strip"><div class="reason-tiles">' + tiles.map(function (x) {
@@ -1844,7 +1858,7 @@
         '</tr>';
       }).join('');
 
-      var empty = rangeKey === 'all' ? t('noHuntersFilter') : t('noHuntersPeriod');
+      var empty = range.key === 'all' ? t('noHuntersFilter') : t('noHuntersPeriod');
 
       document.getElementById('perf-table').innerHTML =
         '<div class="tbl-wrap"><table>' +
@@ -1859,29 +1873,15 @@
     }
 
     function renderAll() {
-      var custWrap = document.getElementById('range-custom');
-      custWrap.hidden = rangeKey !== 'custom';
-
-      var note = document.getElementById('perf-range-note');
-      if (rangeInvalid()) {
-        note.className = 'sub err';
-        note.textContent = t('rangeInvalid');
-        document.getElementById('perf-summary').innerHTML = '';
-        document.getElementById('perf-table').innerHTML =
-          '<div class="empty">' + t('rangeInvalid') + '</div>';
-        return;
-      }
       var m = model();
-      note.className = 'sub';
-      note.textContent = rangeNote(m);
+      document.getElementById('perf-range-note').textContent = rangeNote(m);
       document.getElementById('perf-title').textContent =
-        rangeKey === 'all' ? t('allTimeRanking') : t('periodRanking');
+        range.key === 'all' ? t('allTimeRanking') : t('periodRanking');
       renderSummary(m);
       renderTable(m);
     }
 
     var segOpts = [['all', t('all')], ['reg', t('registered')], ['unreg', t('notRegistered')]];
-    var today = toDayInput(NOW);
     content.innerHTML =
       '<section class="card">' +
         '<div class="card-head"><div><h3 id="perf-title">' + t('allTimeRanking') + '</h3>' +
@@ -1891,17 +1891,7 @@
           return '<button data-seg="' + s[0] + '" class="' + (i === 0 ? 'active' : '') + '">' + s[1] + '</button>';
         }).join('') + '</div>' +
         '</div>' +
-        '<div class="filter-bar">' +
-          '<div class="seg" id="range-seg">' + RANGE_OPTS.map(function (o, i) {
-            return '<button data-range="' + o[0] + '" class="' + (i === 0 ? 'active' : '') + '">' + t(o[1]) + '</button>';
-          }).join('') + '</div>' +
-          '<div class="date-range" id="range-custom" hidden>' +
-            '<label class="f-label" for="range-from">' + t('dateFrom') + '</label>' +
-            '<input type="date" id="range-from" max="' + today + '">' +
-            '<label class="f-label" for="range-to">' + t('dateTo') + '</label>' +
-            '<input type="date" id="range-to" max="' + today + '">' +
-          '</div>' +
-        '</div>' +
+        '<div class="filter-bar" id="perf-filter-bar"></div>' +
         '<div id="perf-summary"></div>' +
         '<div id="perf-table"></div>' +
       '</section>';
@@ -1915,32 +1905,15 @@
       });
     });
 
-    var fromInput = document.getElementById('range-from');
-    var toInput = document.getElementById('range-to');
-    document.querySelectorAll('#range-seg button').forEach(function (b) {
-      b.addEventListener('click', function () {
-        document.querySelectorAll('#range-seg button').forEach(function (x) { x.classList.remove('active'); });
-        b.classList.add('active');
-        rangeKey = b.getAttribute('data-range');
-        // Opening Custom on empty inputs would show "all time" under a
-        // label that says otherwise; seed it from the last 30 days so the
-        // pickers start somewhere the user can adjust rather than fill in.
-        if (rangeKey === 'custom' && !custom.from && !custom.to) {
-          var seed = PERF_RANGES.d30();
-          custom.from = seed.from; custom.to = startOfDay(seed.to);
-          fromInput.value = toDayInput(custom.from);
-          toInput.value = toDayInput(custom.to);
-        }
-        renderAll();
-      });
+    // Presets live inside the picker's rail, so the filter bar is just
+    // the one control. Nothing re-renders until Apply.
+    var picker = createDateRangePicker({
+      presets: perfPresets(),
+      value: range,
+      max: NOW,
+      onApply: function (v) { range = v; renderAll(); }
     });
-    [fromInput, toInput].forEach(function (input) {
-      input.addEventListener('change', function () {
-        custom.from = parseDayInput(fromInput.value);
-        custom.to = parseDayInput(toInput.value);
-        renderAll();
-      });
-    });
+    document.getElementById('perf-filter-bar').appendChild(picker.el);
 
     renderAll();
   }
