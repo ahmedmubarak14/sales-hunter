@@ -310,6 +310,13 @@ en: {
   drpFieldHint: 'DD/MM/YYYY', drpCancel: 'Cancel', drpApply: 'Apply',
   drpPrevMonth: 'Previous month', drpNextMonth: 'Next month',
   drpFromOnly: 'From {from}', drpToOnly: 'Up to {to}',
+  /* Program Overview under a date window: the tiles that describe the
+     pipeline as it stands, rather than what happened, need to say so. */
+  submittedInPeriod: 'submitted a lead in this period',
+  ofThoseOpen: '{n} of those still open',
+  openExVatScoped: 'still open, of this period’s leads · excl. VAT',
+  forecastSubScoped: 'this period’s open deals × stage probability',
+  commPeriodTile: 'Commission in period',
   periodRanking: 'Ranking for the selected period',
   rangeNoteAll: 'Every lead ever submitted · {n} leads',
   rangeNote: 'Leads submitted {from} – {to} · {n} leads',
@@ -645,6 +652,12 @@ ar: {
   drpFieldHint: 'يوم/شهر/سنة', drpCancel: 'إلغاء', drpApply: 'تطبيق',
   drpPrevMonth: 'الشهر السابق', drpNextMonth: 'الشهر التالي',
   drpFromOnly: 'من {from}', drpToOnly: 'حتى {to}',
+  /* نظرة عامة على البرنامج ضمن فترة محددة */
+  submittedInPeriod: 'سجّلوا عملاء في هذه الفترة',
+  ofThoseOpen: '{n} منها ما زالت مفتوحة',
+  openExVatScoped: 'ما زالت مفتوحة، من عملاء هذه الفترة · دون الضريبة',
+  forecastSubScoped: 'صفقات هذه الفترة المفتوحة × احتمال المرحلة',
+  commPeriodTile: 'عمولات الفترة',
   periodRanking: 'ترتيب الفترة المحددة',
   rangeNoteAll: 'كل العملاء المحتملين المسجّلين · {n} عميل',
   rangeNote: 'العملاء المسجّلون من {from} إلى {to} · {n} عميل',
