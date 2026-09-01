@@ -117,14 +117,14 @@ var STORE_SHOWCASE = [
    These rows exist so the tab is usable in demo mode; live mode reads the
    synced card instead. */
 var DEAL_CHECK_ROWS = [
-  { domain: 'noorabaya.com',      case: 'Not eligible — active Zid merchant' },
-  { domain: 'tamrhouse.sa',       case: 'Not eligible — open opportunity with sales' },
-  { domain: 'binsaifroastery.com',case: 'Not eligible — existing subscription' },
-  { domain: 'volt-store.sa',      case: 'Not eligible — submitted by another hunter' },
-  { domain: 'mishkahabayas.com',  case: 'Not eligible — inbound lead already in pipeline' },
-  { domain: 'wardco.sa',          case: 'Eligible — churned over 12 months ago' },
-  { domain: 'qalamstudio.com',    case: 'Eligible — lost deal, cooling period passed' },
-  { domain: 'pawsriyadh.com',     case: 'Not eligible — duplicate of an existing account' }
+  { domain: 'noorabaya.com',       eligible: false, case: 'Active merchant' },
+  { domain: 'tamrhouse.sa',        eligible: false, case: 'Open opportunity with sales' },
+  { domain: 'binsaifroastery.com', eligible: false, case: 'Existing subscription' },
+  { domain: 'volt-store.sa',       eligible: false, case: 'Inbound lead already in pipeline' },
+  { domain: 'mishkahabayas.com',   eligible: false, case: 'Duplicate of an existing account' },
+  { domain: 'wardco.sa',           eligible: true,  case: 'Churned over 12 months ago' },
+  { domain: 'qalamstudio.com',     eligible: true,  case: 'Lost deal, cooling period passed' },
+  { domain: 'pawsriyadh.com',      eligible: false, case: 'Duplicate of an existing account' }
 ];
 
 var SALES_OWNERS = ['Fahad Al-Otaibi', 'Sara Al-Zahrani', 'Mohammed Iqbal', 'Lama Al-Harbi'];
@@ -297,6 +297,14 @@ EMPLOYEES.forEach(function (emp) {
   for (var i = 0; i < n; i++) LEADS.push(makeLead(emp.id));
 });
 LEADS.sort(function (a, b) { return b.createdAt - a.createdAt; });
+/* Demo leads carry no store link of their own, but the deal checker matches
+   on domain — so derive a stable one per merchant. Live leads already have
+   store_url from the submitted form (see toLead in api.js). */
+LEADS.forEach(function (l) {
+  if (!l.storeUrl) {
+    l.storeUrl = 'https://' + l.company.toLowerCase().replace(/[^a-z0-9]+/g, '') + '.sa';
+  }
+});
 
 /* ---- Derived helpers (single source of truth for all views) ---- */
 

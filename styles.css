@@ -746,6 +746,11 @@ td .cell-sub { display: block; color: var(--muted); font-size: 11.5px; }
    an unknown answer, and colouring it like a refusal would read as one. */
 .dc-verdict.unknown { border-inline-start-color: var(--mark-muted); }
 .dc-verdict.unknown .dc-icon, .dc-verdict.unknown .dc-headline { color: var(--ink-2); }
+/* "Already yours" is neither a pass nor a refusal — it is the hunter's own
+   lead looking back at them, so it takes the brand colour rather than the
+   green that means "go and work this". */
+.dc-verdict.mine { border-inline-start-color: var(--brand); }
+.dc-verdict.mine .dc-icon, .dc-verdict.mine .dc-headline { color: var(--brand); }
 .dc-verdict.loading { border-inline-start-color: var(--brand); color: var(--ink-2); }
 .dc-verdict.loading .dc-headline { font-weight: 600; font-size: 15px; color: var(--ink-2); }
 

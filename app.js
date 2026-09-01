@@ -1795,17 +1795,53 @@
     return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(d) && !/^-|-$/.test(d);
   }
 
-  /* The case column carries the verdict in words. "Not eligible" has to be
-     tested before "eligible", since it contains it. A value that matches
-     neither is NOT quietly treated as a pass: it is reported as unclear
-     with the raw text shown, because inventing a verdict for wording we do
-     not recognise is exactly how a hunter ends up working a dead domain. */
-  function verdictFromCase(caseText) {
-    var v = String(caseText || '').toLowerCase();
+  /* A row's verdict. Preferred form is an explicit `eligible` boolean
+     decided where the card is read, which keeps the yes/no separate from
+     the human-readable reason — that separation is what lets the reason be
+     translated while the verdict stays machine-readable.
+     The text fallback exists for a row that carries only prose. It tests
+     "not eligible" before "eligible" because the first contains the second,
+     and anything it cannot read becomes 'unclear' rather than a pass:
+     inventing a verdict from unfamiliar wording is exactly how a hunter
+     ends up working a domain that was already gone. */
+  function verdictOfRow(row) {
+    if (typeof row.eligible === 'boolean') return row.eligible ? 'yes' : 'no';
+    var v = String(row.case || '').toLowerCase();
     if (!v.trim()) return 'unclear';
     if (/\bnot eligible\b|\bineligible\b|\bnot_eligible\b/.test(v)) return 'no';
     if (/\beligible\b/.test(v)) return 'yes';
     return 'unclear';
+  }
+
+  /* A lead already in the program for this domain. Matched on the store
+     link the hunter submitted, normalised the same way as the input. */
+  function leadForDomain(domain) {
+    return allLeads().find(function (l) {
+      return l.storeUrl && normalizeDomain(l.storeUrl) === domain;
+    });
+  }
+
+  /* The full answer, in precedence order:
+       1. the signed-in hunter already raised it — theirs, nothing to do
+       2. another hunter raised it first — the earlier claim stands, so no
+          list verdict can give it back
+       3. otherwise the sales list decides
+     Step 2 outranks the list deliberately: a domain the list calls eligible
+     (a merchant who churned, say) is still gone if a colleague got there
+     first, and telling this hunter "eligible" would send them to work a
+     lead they cannot be paid for. */
+  function resolveEligibility(domain) {
+    var lead = leadForDomain(domain);
+    if (lead) {
+      var me = currentUser();
+      var mine = !!me && lead.hunterId === me.id;
+      return Promise.resolve({
+        verdict: mine ? 'mine' : 'taken',
+        domain: domain, caseText: null, syncedAt: null,
+        company: lead.company, raisedAt: lead.createdAt, stage: lead.stage
+      });
+    }
+    return checkDeal(domain);
   }
 
   /* Resolves to { verdict, domain, caseText, syncedAt }.
@@ -1829,7 +1865,7 @@
     return new Promise(function (resolve) {
       setTimeout(function () {
         resolve(hit
-          ? { verdict: verdictFromCase(hit.case), domain: domain, caseText: hit.case, syncedAt: NOW }
+          ? { verdict: verdictOfRow(hit), domain: domain, caseText: hit.case, syncedAt: NOW }
           : { verdict: 'yes', domain: domain, caseText: null, syncedAt: NOW });
       }, 260);
     });
@@ -1870,6 +1906,7 @@
           '<li>' + t('dcRule1') + '</li>' +
           '<li>' + t('dcRule2') + '</li>' +
           '<li>' + t('dcRule3') + '</li>' +
+          '<li>' + t('dcRule4') + '</li>' +
         '</ul>' +
       '</section>' +
       '<section class="card" id="dc-history-card" hidden>' +
@@ -1884,10 +1921,31 @@
 
     var VERDICT = {
       yes:         { cls: 'ok',      icon: ICONS.check, title: 'dcYes',         note: 'dcYesNote' },
+      mine:        { cls: 'mine',    icon: ICONS.check, title: 'dcMine',        note: 'dcMineNote' },
+      taken:       { cls: 'bad',     icon: ICONS.ban,   title: 'dcTaken',       note: 'dcTakenNote' },
       no:          { cls: 'bad',     icon: ICONS.ban,   title: 'dcNo',          note: 'dcNoNote' },
       unclear:     { cls: 'warn',    icon: ICONS.ban,   title: 'dcUnclear',     note: 'dcUnclearNote' },
       unavailable: { cls: 'unknown', icon: ICONS.ban,   title: 'dcUnavailable', note: 'dcUnavailableNote' }
     };
+
+    // The reason line. A case value from Metabase is a data label, so it
+    // goes through trCase() the way stages and lost reasons do — otherwise
+    // an Arabic user reads Arabic chrome wrapped around an English reason.
+    function reasonHtml(r, v) {
+      if (r.caseText) {
+        return '<p class="dc-case"><span class="dc-case-lbl">' + t('dcCaseLabel') + '</span>' +
+          esc(trCase(r.caseText)) + '</p>';
+      }
+      if (r.verdict === 'mine' || r.verdict === 'taken') {
+        // Deliberately no hunter name: the app shows a hunter only their
+        // own numbers, and "someone else got here first" is the whole of
+        // what this one needs to know.
+        return '<p class="dc-case">' + t(v.note, {
+          company: esc(r.company || ''), date: esc(fmtDate(r.raisedAt))
+        }) + '</p>';
+      }
+      return '<p class="dc-case">' + t(v.note) + '</p>';
+    }
 
     function renderResult(r) {
       var v = VERDICT[r.verdict] || VERDICT.unavailable;
@@ -1897,14 +1955,14 @@
           '<div class="dc-body">' +
             '<b class="dc-headline">' + t(v.title) + '</b>' +
             '<span class="dc-domain">' + esc(r.domain) + '</span>' +
-            (r.caseText
-              ? '<p class="dc-case"><span class="dc-case-lbl">' + t('dcCaseLabel') + '</span>' + esc(r.caseText) + '</p>'
-              : '<p class="dc-case">' + t(v.note) + '</p>') +
+            reasonHtml(r, v) +
             (r.syncedAt ? '<p class="dc-fresh">' + t('dcFresh', { when: fmtDate(r.syncedAt) }) + '</p>' : '') +
           '</div>' +
           (r.verdict === 'yes'
             ? '<button type="button" class="btn dc-submit" data-domain="' + esc(r.domain) + '">' + t('dcSubmitLead') + '</button>'
-            : '') +
+            : r.verdict === 'mine'
+              ? '<a class="btn secondary dc-mine-link" href="#/leads">' + t('dcViewLeads') + '</a>'
+              : '') +
         '</div>';
       var sub = result.querySelector('.dc-submit');
       if (sub) sub.addEventListener('click', function () {
@@ -1923,7 +1981,10 @@
           var v = VERDICT[r.verdict] || VERDICT.unavailable;
           return '<tr><td><b>' + esc(r.domain) + '</b></td>' +
             '<td><span class="dc-chip ' + v.cls + '">' + t(v.title) + '</span></td>' +
-            '<td>' + (r.caseText ? esc(r.caseText) : '<span class="cell-sub">' + t('dcNotListed') + '</span>') + '</td></tr>';
+            '<td>' + (r.caseText ? esc(trCase(r.caseText))
+              : r.verdict === 'mine' || r.verdict === 'taken'
+                ? esc(t(r.verdict === 'mine' ? 'dcMineShort' : 'dcTakenShort'))
+                : '<span class="cell-sub">' + t('dcNotListed') + '</span>') + '</td></tr>';
         }).join('') +
         '</tbody></table></div>';
     }
@@ -1943,7 +2004,7 @@
       result.innerHTML = '<div class="dc-verdict loading"><div class="dc-body">' +
         '<b class="dc-headline">' + t('dcChecking', { domain: esc(domain) }) + '</b></div></div>';
 
-      checkDeal(domain).then(function (r) {
+      resolveEligibility(domain).then(function (r) {
         renderResult(r);
         // Newest first, and one row per domain so re-checking the same
         // one corrects the entry instead of stacking duplicates.
