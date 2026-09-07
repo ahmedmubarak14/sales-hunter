@@ -225,7 +225,16 @@ window.SH_API = (function () {
     return PLAN_ALIASES[base] || base;
   }
 
-  function toLead(d, eventsByDeal, subsByDeal) {
+  /* Someone with two @zid.sa addresses raises deals under both, and
+     HubSpot records whichever they were using at the time. app_users
+     already carries the second address in email_aliases; folding it to
+     the primary here is what makes the rest of the app treat the two as
+     one person, because every per-hunter path — leadsOf, statsFor, the
+     performance table, the duplicate check — keys on this id.
+     Doing it at the mapping layer rather than in each of those is the
+     whole point: it is one line, and nothing downstream has to know
+     aliases exist. */
+  function toLead(d, eventsByDeal, subsByDeal, ownerOfEmail) {
     var created = d.hs_created_at ? new Date(d.hs_created_at) : new Date(d.synced_at);
     var evs = (eventsByDeal[d.hubspot_deal_id] || []).map(function (e) {
       return { stage: normStage(e.to_stage), date: new Date(e.occurred_at) };
@@ -264,7 +273,10 @@ window.SH_API = (function () {
     }
     return {
       id: d.hubspot_deal_id,
-      hunterId: (d.hunter_email || 'unassigned').toLowerCase(),
+      hunterId: (function () {
+        var e = (d.hunter_email || 'unassigned').toLowerCase();
+        return (ownerOfEmail && ownerOfEmail[e]) || e;
+      })(),
       company: d.company || d.hubspot_deal_id,
       contact: '',
       contactEmail: d.merchant_email || '',
@@ -359,7 +371,13 @@ window.SH_API = (function () {
     (results[9] || []).forEach(function (sub) {
       if (sub.hubspot_deal_id) subsByDeal[sub.hubspot_deal_id] = sub;
     });
-    var leads = results[1].map(function (d) { return toLead(d, eventsByDeal, subsByDeal); });
+    /* alias address -> the primary address of the account that owns it.
+       Built from users, which is why that mapping happens above this. */
+    var ownerOfEmail = {};
+    users.forEach(function (u) {
+      (u.aliases || []).forEach(function (a) { ownerOfEmail[a] = u.id; });
+    });
+    var leads = results[1].map(function (d) { return toLead(d, eventsByDeal, subsByDeal, ownerOfEmail); });
 
     // A deal can carry more than one commissions row — sync-metabase
     // writes one per (deal, hunter, period), e.g. a store that invoices

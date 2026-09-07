@@ -3878,6 +3878,16 @@
               field('p-dept', t('deptLbl'), 'text', p.dept === 'General' ? '' : p.dept, '', 'placeholder="' + t('deptPh') + '"') +
               field('p-phone', t('mobile'), 'tel', p.phone, '', 'placeholder="+966555555928"') +
               field('p-cemail', t('companyEmail'), 'email', p.companyEmail, t('emailHint'), 'readonly style="opacity:.7"') +
+              /* A second work address the same person also uses. Shown
+                 read-only, and only when there is one, because it is not
+                 self-service: management sets it, and deals raised under
+                 it already count on this account (api.js folds it to the
+                 primary). Saying so here is the point — otherwise the
+                 numbers on this page look like they are missing deals. */
+              ((user.aliases && user.aliases.length)
+                ? field('p-alias', t('otherWorkEmail'), 'text', user.aliases.join(', '),
+                        t('otherWorkEmailHint'), 'readonly style="opacity:.7"')
+                : '') +
               field('p-pemail', t('personalEmail'), 'email', p.personalEmail, '', 'placeholder="personal@gmail.com"') +
             '</div>' +
           '</section>' +
