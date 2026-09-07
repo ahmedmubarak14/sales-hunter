@@ -435,6 +435,8 @@ en: {
   rulesSaved: 'Rules saved — commission is now {rate} everywhere.', resetToast: 'Demo reset to original mock data.',
 
   profileManager: 'manager: {name}', contactInfo: 'Contact information', contactInfoSub: 'How the program reaches you.',
+  otherWorkEmail: 'Other work email',
+  otherWorkEmailHint: 'A second Zid address for the same person. Sign-in works with either, and deals raised under it count here.',
   emailHint: 'Used for sign-in and lead notifications', optional: 'Optional',
   payoutDetails: 'Payout details', ibanLbl: 'IBAN',
   ibanCurrent: 'Current: ···· {last4} — leave blank to keep it.',
@@ -826,6 +828,8 @@ ar: {
   rulesSaved: 'حُفظت القواعد — العمولة الآن {rate} في كل مكان.', resetToast: 'أُعيد ضبط البيانات التجريبية.',
 
   profileManager: 'المدير: {name}', contactInfo: 'معلومات التواصل', contactInfoSub: 'كيف يصل إليك البرنامج.',
+  otherWorkEmail: 'بريد عمل آخر',
+  otherWorkEmailHint: 'عنوان زد ثانٍ للشخص نفسه. الدخول متاح بأي منهما، والعملاء المسجّلون به محتسبون هنا.',
   emailHint: 'يُستخدم للدخول وإشعارات العملاء', optional: 'اختياري',
   payoutDetails: 'تفاصيل الصرف', ibanLbl: 'الآيبان',
   ibanCurrent: 'الحالي: ···· {last4} — اتركه فارغاً للإبقاء عليه.',
