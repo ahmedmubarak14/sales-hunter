@@ -1706,6 +1706,55 @@
     return new Date(d.getFullYear(), d.getMonth(), d.getDate() - back);
   }
 
+  /* ---- Filter state that outlives a render ----
+     In live mode the app re-pulls its data every minute (and whenever the
+     tab regains focus, and on a language switch) and re-renders the page
+     with route(). Each view used to keep its date range in a local
+     variable, so every one of those re-renders put it back to "All time":
+     the filter cleared itself a minute after it was set.
+     Kept here instead, per view, and mirrored to sessionStorage so a
+     browser reload in the same tab keeps it too; a new tab starts clean.
+     A preset is stored by KEY and re-resolved on every read, so "Last 30
+     days" keeps meaning the last thirty days as the clock moves (NOW
+     advances on each refresh) rather than freezing at the dates it had
+     when picked. Only a hand-picked range keeps fixed dates. */
+  var viewFilters = {};
+  function readFilter(k) {
+    if (k in viewFilters) return viewFilters[k];
+    try { return JSON.parse(sessionStorage.getItem('sh.filter.' + k)); } catch (e) { return null; }
+  }
+  function writeFilter(k, v) {
+    viewFilters[k] = v;
+    try { sessionStorage.setItem('sh.filter.' + k, JSON.stringify(v)); } catch (e) { /* in-memory still holds it */ }
+  }
+  // Local calendar days as Y-M-D, never ISO: toISOString() is UTC and
+  // would shift a Riyadh midnight back to the previous day.
+  function dayKey(d) { return d ? d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate() : null; }
+  function keyDay(s) {
+    var p = String(s || '').split('-').map(Number);
+    return (p.length === 3 && !p.some(isNaN)) ? new Date(p[0], p[1] - 1, p[2]) : null;
+  }
+  function loadRange(view) {
+    var all = { key: 'all', from: null, to: null };
+    var s = readFilter(view + '.range');
+    if (!s || !s.key || s.key === 'all') return all;
+    if (s.key === 'custom') {
+      var from = keyDay(s.from), to = keyDay(s.to);
+      return (from || to) ? { key: 'custom', from: from, to: to } : all;
+    }
+    var p = datePresets().filter(function (x) { return x.key === s.key; })[0];
+    if (!p) return all; // a preset that no longer exists
+    var r = p.range();
+    return { key: s.key, from: r.from, to: r.to };
+  }
+  function saveRange(view, v) {
+    writeFilter(view + '.range', { key: v.key, from: dayKey(v.from), to: dayKey(v.to) });
+  }
+  function loadChoice(k, dflt, allowed) {
+    var v = readFilter(k);
+    return allowed.indexOf(v) >= 0 ? v : dflt;
+  }
+
   function datePresets() {
     var td = startOfDay(NOW);
     return [
@@ -2091,11 +2140,14 @@
   /* Management-only ranking (replaces the shared leaderboard — hunters
      see only their own numbers, for privacy) */
   function viewPerformance(content) {
-    var regFilter = 'all';
+    // Both filters are read back from loadRange/loadChoice rather than
+    // starting fresh, because this function runs again on every
+    // auto-refresh — see "Filter state that outlives a render".
+    var regFilter = loadChoice('perf.reg', 'all', ['all', 'reg', 'unreg']);
     // The picker owns the range and hands back whole days; the endOfDay
     // nudge on the upper bound happens here, once, so a lead filed at
     // 16:00 on the last day of the window is inside it.
-    var range = { key: 'all', from: null, to: null };
+    var range = loadRange('perf');
 
     function currentRange() {
       return { from: range.from, to: range.to ? endOfDay(range.to) : null };
@@ -2209,8 +2261,8 @@
         '<div class="card-head"><div><h3 id="perf-title">' + t('allTimeRanking') + '</h3>' +
         '<p class="sub">' + t('rankingSub') + '</p>' +
         '<p class="sub" id="perf-range-note"></p></div>' +
-        '<div class="seg" id="reg-seg">' + segOpts.map(function (s, i) {
-          return '<button data-seg="' + s[0] + '" class="' + (i === 0 ? 'active' : '') + '">' + s[1] + '</button>';
+        '<div class="seg" id="reg-seg">' + segOpts.map(function (s) {
+          return '<button data-seg="' + s[0] + '" class="' + (s[0] === regFilter ? 'active' : '') + '">' + s[1] + '</button>';
         }).join('') + '</div>' +
         '</div>' +
         '<div class="filter-bar" id="perf-filter-bar"></div>' +
@@ -2223,6 +2275,7 @@
         document.querySelectorAll('#reg-seg button').forEach(function (x) { x.classList.remove('active'); });
         b.classList.add('active');
         regFilter = b.getAttribute('data-seg');
+        writeFilter('perf.reg', regFilter);
         renderAll();
       });
     });
@@ -2233,7 +2286,7 @@
       presets: datePresets(),
       value: range,
       max: NOW,
-      onApply: function (v) { range = v; renderAll(); }
+      onApply: function (v) { range = v; saveRange('perf', v); renderAll(); }
     });
     document.getElementById('perf-filter-bar').appendChild(picker.el);
 
@@ -3063,7 +3116,7 @@
 
   /* ---- Manager dashboard ---- */
   function viewManager(content) {
-    var range = { key: 'all', from: null, to: null };
+    var range = loadRange('overview'); // survives the auto-refresh re-render
 
     content.innerHTML =
       '<div class="filter-bar"><div id="ov-picker"></div>' +
@@ -3074,7 +3127,7 @@
       presets: datePresets(),
       value: range,
       max: NOW,
-      onApply: function (v) { range = v; render(); }
+      onApply: function (v) { range = v; saveRange('overview', v); render(); }
     });
     document.getElementById('ov-picker').appendChild(picker.el);
 
